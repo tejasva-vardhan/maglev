@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
@@ -10,9 +11,5 @@ func TestBlankKeyIsInvalid(t *testing.T) {
 			apiKeys: []string{"key"},
 		},
 	}
-	result := app.isInvalidAPIKey("")
-
-	if result == false {
-		t.Error("isInvalidAPIKey('') = false")
-	}
+	assert.True(t, app.isInvalidAPIKey(""))
 }
