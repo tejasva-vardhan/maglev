@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"github.com/stretchr/testify/assert"
 	"maglev.onebusaway.org/internal/models"
 	"net/http"
 	"net/http/httptest"
@@ -20,9 +21,7 @@ func TestCurrentTimeHandler(t *testing.T) {
 
 	// Create a new HTTP request with the correct URL path
 	req, err := http.NewRequest("GET", "/api/where/current-time.json?key=testkey", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.Nil(t, err)
 
 	// Create a ResponseRecorder to record the response
 	rr := httptest.NewRecorder()
@@ -31,45 +30,27 @@ func TestCurrentTimeHandler(t *testing.T) {
 	app.currentTimeHandler(rr, req)
 
 	// Check the status code
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v", status, http.StatusOK)
-	}
+	assert.Equal(t, http.StatusOK, rr.Code)
 
 	// Check the content type
-	contentType := rr.Header().Get("Content-Type")
-	expectedContentType := "application/json"
-	if contentType != expectedContentType {
-		t.Errorf("handler returned wrong content type: got %v want %v", contentType, expectedContentType)
-	}
+	assert.Equal(t, rr.Header().Get("Content-Type"), "application/json")
 
 	// Decode the JSON response
 	var response models.ResponseModel
 	err = json.Unmarshal(rr.Body.Bytes(), &response)
-	if err != nil {
-		t.Errorf("error decoding response: %v", err)
-	}
+	assert.Nil(t, err)
 
 	// Check basic response structure
-	if response.Code != http.StatusOK {
-		t.Errorf("wrong status code in response: got %v want %v", response.Code, http.StatusOK)
-	}
-
-	if response.Text != "OK" {
-		t.Errorf("wrong text in response: got %v want %v", response.Text, "OK")
-	}
-
-	if response.Version != 2 {
-		t.Errorf("wrong version in response: got %v want %v", response.Version, 2)
-	}
+	assert.Equal(t, http.StatusOK, response.Code)
+	assert.Equal(t, "OK", response.Text)
+	assert.Equal(t, 2, response.Version)
 
 	// Get the current time to compare with response time
 	now := time.Now().UnixNano() / int64(time.Millisecond)
 
 	// The response time should be within a reasonable range of the current time
 	// Let's say 5 seconds (5000 milliseconds)
-	if response.CurrentTime < now-5000 || response.CurrentTime > now+5000 {
-		t.Errorf("response time is outside of reasonable range: got %v, current time: %v", response.CurrentTime, now)
-	}
+	assert.False(t, response.CurrentTime < now-5000 || response.CurrentTime > now+5000)
 
 	// Test the data structure
 	// First, we need to cast the interface{} to the expected type
