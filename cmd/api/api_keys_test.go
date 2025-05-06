@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func testBlankKeyIsInvalid(t *testing.T) {
+func TestBlankKeyIsInvalid(t *testing.T) {
 	app := &application{
 		config: config{
 			apiKeys: []string{"key"},
@@ -12,7 +12,7 @@ func testBlankKeyIsInvalid(t *testing.T) {
 	}
 	result := app.isInvalidAPIKey("")
 
-	if result != false {
-		t.Error("isInvalidAPIKey('') = true")
+	if result == false {
+		t.Error("isInvalidAPIKey('') = false")
 	}
 }

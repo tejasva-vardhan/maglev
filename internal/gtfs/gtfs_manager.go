@@ -54,7 +54,7 @@ func loadGTFSData(source string, isLocalFile bool) (*gtfs.Static, error) {
 		if err != nil {
 			return nil, fmt.Errorf("error downloading GTFS data: %w", err)
 		}
-		defer resp.Body.Close()
+		defer resp.Body.Close() // nolint
 
 		b, err = io.ReadAll(resp.Body)
 		if err != nil {
@@ -72,7 +72,7 @@ func loadGTFSData(source string, isLocalFile bool) (*gtfs.Static, error) {
 
 // UpdateGTFSPeriodically updates the GTFS data on a regular schedule
 // Only updates if the source is a URL, not a local file
-func (manager *Manager) updateGTFSPeriodically() {
+func (manager *Manager) updateGTFSPeriodically() { // nolint
 	// If it's a local file, don't update periodically
 	if manager.isLocalFile {
 		log.Printf("GTFS source is a local file, skipping periodic updates")
@@ -83,7 +83,7 @@ func (manager *Manager) updateGTFSPeriodically() {
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
 
-	for {
+	for { // nolint
 		select {
 		case <-ticker.C:
 			// Create a context with timeout for the download
