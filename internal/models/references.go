@@ -29,6 +29,23 @@ func NewOKResponse(data interface{}) ResponseModel {
 	return NewResponse(200, data, "OK")
 }
 
+func NewListResponse(list interface{}, references ReferencesModel) ResponseModel {
+	data := map[string]interface{}{
+		"limitExceeded": false,
+		"list":          list,
+		"references":    references,
+	}
+	return NewOKResponse(data)
+}
+
+func NewEntryResponse(entry interface{}, references ReferencesModel) ResponseModel {
+	data := map[string]interface{}{
+		"entry":      entry,
+		"references": references,
+	}
+	return NewOKResponse(data)
+}
+
 // NewResponse Helper function to create a standard response
 func NewResponse(code int, data interface{}, text string) ResponseModel {
 	return ResponseModel{

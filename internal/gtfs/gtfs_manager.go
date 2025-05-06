@@ -3,13 +3,14 @@ package gtfs
 import (
 	"context"
 	"fmt"
-	"github.com/jamespfennell/gtfs"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/jamespfennell/gtfs"
 )
 
 // Manager manages the GTFS data and provides methods to access it
@@ -107,10 +108,6 @@ func (manager *Manager) updateGTFSPeriodically() {
 	}
 }
 
-func (manager *Manager) GetAgencies() []gtfs.Agency {
-	return manager.gtfsData.Agencies
-}
-
 func (manager *Manager) GetRegionBounds() (lat, lon, latSpan, lonSpan float64) {
 	var minLat, maxLat, minLon, maxLon float64
 	first := true
@@ -146,6 +143,19 @@ func (manager *Manager) GetRegionBounds() (lat, lon, latSpan, lonSpan float64) {
 	lonSpan = maxLon - minLon
 
 	return lat, lon, latSpan, lonSpan
+}
+
+func (manager *Manager) GetAgencies() []gtfs.Agency {
+	return manager.gtfsData.Agencies
+}
+
+func (manager *Manager) FindAgency(id string) *gtfs.Agency {
+	for _, agency := range manager.gtfsData.Agencies {
+		if agency.Id == id {
+			return &agency
+		}
+	}
+	return nil
 }
 
 func (manager *Manager) PrintStatistics() {

@@ -15,6 +15,7 @@ func (app *application) routes() http.Handler {
 	// http.MethodPost are constants which equate to the strings "GET" and "POST"
 	// respectively.
 	router.HandlerFunc(http.MethodGet, "/api/where/agencies-with-coverage.json", app.agenciesWithCoverageHandler)
+	router.HandlerFunc(http.MethodGet, "/api/where/agency/:id.json", app.agencyHandler)
 	router.HandlerFunc(http.MethodGet, "/api/where/current-time.json", app.currentTimeHandler)
 
 	return router

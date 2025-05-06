@@ -44,15 +44,6 @@ func (app *application) agenciesWithCoverageHandler(w http.ResponseWriter, r *ht
 		Trips:      []interface{}{},
 	}
 
-	// Create the data structure
-	data := map[string]interface{}{
-		"limitExceeded": false,
-		"list":          agenciesWithCoverage,
-		"references":    references,
-	}
-
-	// Create the response
-	response := models.NewOKResponse(data)
-
+	response := models.NewListResponse(agenciesWithCoverage, references)
 	app.sendResponse(w, r, response)
 }
