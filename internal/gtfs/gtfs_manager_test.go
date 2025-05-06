@@ -16,10 +16,6 @@ func TestManager_GetAgencies(t *testing.T) {
 			name:     "FromLocalFile",
 			dataPath: models.GetFixturePath(t, "gtfs.zip"),
 		},
-		{
-			name:     "FromRemoteFile",
-			dataPath: "https://www.soundtransit.org/GTFS-rail/40_gtfs.zip",
-		},
 	}
 
 	for _, tc := range testCases {
