@@ -7,14 +7,14 @@ import (
 
 func (app *application) agenciesWithCoverageHandler(w http.ResponseWriter, r *http.Request) {
 	agencies := app.gtfsManager.GetAgencies()
-
-	agenciesWithCoverage := make([]models.AgencyCoverage, len(agencies))
-	agencyReferences := make([]models.AgencyReference, len(agencies))
+	lat, lon, latSpan, lonSpan := app.gtfsManager.GetRegionBounds()
+	agenciesWithCoverage := make([]models.AgencyCoverage, 0, len(agencies))
+	agencyReferences := make([]models.AgencyReference, 0, len(agencies))
 
 	for _, a := range agencies {
 		agenciesWithCoverage = append(
 			agenciesWithCoverage,
-			models.NewAgencyCoverage(a.Id, 0.0, 0.0, 0.0, 0.0),
+			models.NewAgencyCoverage(a.Id, lat, latSpan, lon, lonSpan),
 		)
 
 		agencyReferences = append(
@@ -27,7 +27,7 @@ func (app *application) agenciesWithCoverageHandler(w http.ResponseWriter, r *ht
 				a.Language,
 				a.Phone,
 				a.Email,
-				"",
+				a.FareUrl,
 				"",
 				false,
 			),
