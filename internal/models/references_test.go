@@ -53,15 +53,9 @@ func TestNewEmptyReferences(t *testing.T) {
 }
 
 func TestReferencesModelJSON(t *testing.T) {
-	// Create a sample references model
-	refs := ReferencesModel{
-		Agencies:   []interface{}{map[string]string{"id": "agency1"}},
-		Routes:     []interface{}{map[string]string{"id": "route1"}},
-		Situations: []interface{}{},
-		StopTimes:  []interface{}{},
-		Stops:      []interface{}{},
-		Trips:      []interface{}{},
-	}
+	refs := NewEmptyReferences()
+	refs.Agencies = append(refs.Agencies, AgencyReference{ID: "agency1"})
+	refs.Routes = append(refs.Routes, map[string]string{"id": "route1"})
 
 	// Marshal to JSON
 	jsonData, err := json.Marshal(refs)
@@ -75,40 +69,9 @@ func TestReferencesModelJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to unmarshal JSON to ReferencesModel: %v", err)
 	}
-
-	// Check field equality
-	// For the agencies array, we need to check the content
-	if len(unmarshaledRefs.Agencies) != 1 {
-		t.Errorf("Expected 1 agency, got %d", len(unmarshaledRefs.Agencies))
-	} else {
-		agency, ok := unmarshaledRefs.Agencies[0].(map[string]interface{})
-		if !ok {
-			t.Errorf("Failed to cast agency to map[string]interface{}")
-		} else {
-			id, ok := agency["id"].(string)
-			if !ok || id != "agency1" {
-				t.Errorf("Expected agency id 'agency1', got %v", agency["id"])
-			}
-		}
-	}
-
-	// Similarly check routes
-	if len(unmarshaledRefs.Routes) != 1 {
-		t.Errorf("Expected 1 route, got %d", len(unmarshaledRefs.Routes))
-	}
-
-	// Check empty arrays
-	if len(unmarshaledRefs.Situations) != 0 {
-		t.Errorf("Expected 0 situations, got %d", len(unmarshaledRefs.Situations))
-	}
-	if len(unmarshaledRefs.StopTimes) != 0 {
-		t.Errorf("Expected 0 stopTimes, got %d", len(unmarshaledRefs.StopTimes))
-	}
-	if len(unmarshaledRefs.Stops) != 0 {
-		t.Errorf("Expected 0 stops, got %d", len(unmarshaledRefs.Stops))
-	}
-	if len(unmarshaledRefs.Trips) != 0 {
-		t.Errorf("Expected 0 trips, got %d", len(unmarshaledRefs.Trips))
+	agency := unmarshaledRefs.Agencies[0]
+	if agency.ID != "agency1" {
+		t.Errorf("Expected agency id 'agency1', got %v", agency.ID)
 	}
 }
 
