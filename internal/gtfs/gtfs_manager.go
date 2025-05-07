@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jamespfennell/gtfs"
@@ -15,28 +16,50 @@ import (
 
 // Manager manages the GTFS data and provides methods to access it
 type Manager struct {
-	gtfsSource  string
-	gtfsData    *gtfs.Static
-	lastUpdated time.Time
-	isLocalFile bool
+	gtfsSource       string
+	gtfsData         *gtfs.Static
+	lastUpdated      time.Time
+	isLocalFile      bool
+	realTimeTrips    []gtfs.Trip
+	realTimeVehicles []gtfs.Vehicle
+	realTimeMutex    sync.RWMutex
+}
+
+type Config struct {
+	GtfsURL             string
+	TripUpdatesURL      string
+	VehiclePositionsURL string
 }
 
 // InitGTFSManager initializes the Manager with the GTFS data from the given source
 // The source can be either a URL or a local file path
-func InitGTFSManager(gtfsSource string) (*Manager, error) {
-	isLocalFile := !strings.HasPrefix(gtfsSource, "http://") && !strings.HasPrefix(gtfsSource, "https://")
+func InitGTFSManager(config Config) (*Manager, error) {
+	isLocalFile := !strings.HasPrefix(config.GtfsURL, "http://") && !strings.HasPrefix(config.GtfsURL, "https://")
 
-	staticData, err := loadGTFSData(gtfsSource, isLocalFile)
+	staticData, err := loadGTFSData(config.GtfsURL, isLocalFile)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Manager{
-		gtfsSource:  gtfsSource,
+	manager := &Manager{
+		gtfsSource:  config.GtfsURL,
 		gtfsData:    staticData,
 		lastUpdated: time.Now(),
 		isLocalFile: isLocalFile,
-	}, nil
+	}
+
+	if !isLocalFile {
+		go manager.updateStaticGTFS()
+	}
+
+	if config.TripUpdatesURL != "" && config.VehiclePositionsURL != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel() // Ensure the context is canceled when done
+		manager.updateGTFSRealtime(ctx, config.TripUpdatesURL, config.VehiclePositionsURL)
+		go manager.updateGTFSRealtimePeriodically(config.TripUpdatesURL, config.VehiclePositionsURL)
+	}
+
+	return manager, nil
 }
 
 // loadGTFSData loads and parses GTFS data from either a URL or a local file
@@ -72,7 +95,7 @@ func loadGTFSData(source string, isLocalFile bool) (*gtfs.Static, error) {
 
 // UpdateGTFSPeriodically updates the GTFS data on a regular schedule
 // Only updates if the source is a URL, not a local file
-func (manager *Manager) updateGTFSPeriodically() { // nolint
+func (manager *Manager) updateStaticGTFS() { // nolint
 	// If it's a local file, don't update periodically
 	if manager.isLocalFile {
 		log.Printf("GTFS source is a local file, skipping periodic updates")

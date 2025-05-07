@@ -14,8 +14,10 @@ import (
 )
 
 func TestRoutesForAgencyHandlerEndToEnd(t *testing.T) {
-	gtfsPath := filepath.Join("../../testdata", "gtfs.zip")
-	gtfsManager, err := gtfs.InitGTFSManager(gtfsPath)
+	gtfsConfig := gtfs.Config{
+		GtfsURL: filepath.Join("../../testdata", "gtfs.zip"),
+	}
+	gtfsManager, err := gtfs.InitGTFSManager(gtfsConfig)
 	require.NoError(t, err)
 
 	agencies := gtfsManager.GetAgencies()
