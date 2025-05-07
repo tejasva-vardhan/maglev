@@ -31,13 +31,13 @@ func TestAgenciesWithCoverageHandlerEndToEnd(t *testing.T) {
 
 	resp, err := http.Get(server.URL + "/api/where/agencies-with-coverage.json?key=TEST")
 	require.NoError(t, err)
+	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var response models.ResponseModel
 	err = json.NewDecoder(resp.Body).Decode(&response)
 	require.NoError(t, err)
-	defer resp.Body.Close()
 
 	assert.Equal(t, 200, response.Code)
 	assert.Equal(t, "OK", response.Text)
