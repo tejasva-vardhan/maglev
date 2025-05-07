@@ -31,12 +31,18 @@ func InitGTFSManager(gtfsSource string) (*Manager, error) {
 		return nil, err
 	}
 
-	return &Manager{
+	manager := &Manager{
 		gtfsSource:  gtfsSource,
 		gtfsData:    staticData,
 		lastUpdated: time.Now(),
 		isLocalFile: isLocalFile,
-	}, nil
+	}
+
+	if !isLocalFile {
+		go manager.updateGTFSPeriodically()
+	}
+
+	return manager, nil
 }
 
 // loadGTFSData loads and parses GTFS data from either a URL or a local file
