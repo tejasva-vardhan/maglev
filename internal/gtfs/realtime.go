@@ -23,11 +23,17 @@ func (manager *Manager) GetRealTimeVehicles() []gtfs.Vehicle {
 	return manager.realTimeVehicles
 }
 
-func loadRealtimeData(source string) (*gtfs.Realtime, error) {
-	resp, err := http.Get(source)
+func loadRealtimeData(ctx context.Context, source string) (*gtfs.Realtime, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", source, nil)
 	if err != nil {
 		return nil, err
 	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close() // nolint: errcheck
 
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -37,12 +43,23 @@ func loadRealtimeData(source string) (*gtfs.Realtime, error) {
 	return gtfs.ParseRealtime(b, &gtfs.ParseRealtimeOptions{})
 }
 
-func (manager *Manager) updateGTFSRealtime(tripUpdatesURL string, vehiclePositionsURL string) {
-	tripData, tripErr := loadRealtimeData(tripUpdatesURL)
-	vehicleData, vehicleErr := loadRealtimeData(vehiclePositionsURL)
+func (manager *Manager) updateGTFSRealtime(ctx context.Context, tripUpdatesURL string, vehiclePositionsURL string) {
+	tripData, tripErr := loadRealtimeData(ctx, tripUpdatesURL)
 
-	if tripErr != nil || vehicleErr != nil {
-		log.Printf("Error loading GTFS-RT data: %v, %v", tripErr, vehicleErr)
+	if ctx.Err() != nil {
+		return
+	}
+
+	vehicleData, vehicleErr := loadRealtimeData(ctx, vehiclePositionsURL)
+
+	if tripErr != nil {
+		log.Printf("Error loading GTFS-RT trip updates data from %s: %v", tripUpdatesURL, tripErr)
+	}
+	if vehicleErr != nil {
+		log.Printf("Error loading GTFS-RT vehicle positions data from %s: %v", vehiclePositionsURL, vehicleErr)
+	}
+
+	if tripErr != nil || vehicleErr != nil || ctx.Err() != nil {
 		return
 	}
 
@@ -62,12 +79,12 @@ func (manager *Manager) updateGTFSRealtimePeriodically(tripUpdatesURL string, ve
 		select {
 		case <-ticker.C:
 			// Create a context with timeout for the download
-			_, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 
 			// Download realtime data
 			log.Println("Updating GTFS-RT data")
-			manager.updateGTFSRealtime(tripUpdatesURL, vehiclePositionsURL)
-			cancel() // Always cancel the context when done
+			manager.updateGTFSRealtime(ctx, tripUpdatesURL, vehiclePositionsURL)
+			cancel() // Ensure the context is canceled when done
 		}
 	}
 }

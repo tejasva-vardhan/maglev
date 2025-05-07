@@ -53,7 +53,9 @@ func InitGTFSManager(config Config) (*Manager, error) {
 	}
 
 	if config.TripUpdatesURL != "" && config.VehiclePositionsURL != "" {
-		manager.updateGTFSRealtime(config.TripUpdatesURL, config.VehiclePositionsURL)
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel() // Ensure the context is canceled when done
+		manager.updateGTFSRealtime(ctx, config.TripUpdatesURL, config.VehiclePositionsURL)
 		go manager.updateGTFSRealtimePeriodically(config.TripUpdatesURL, config.VehiclePositionsURL)
 	}
 
