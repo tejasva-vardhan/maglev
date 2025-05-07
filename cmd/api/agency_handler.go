@@ -2,15 +2,14 @@ package main
 
 import (
 	"maglev.onebusaway.org/internal/models"
+	"maglev.onebusaway.org/internal/utils"
 	"net/http"
-	"strings"
 )
 
 func (app *application) agencyHandler(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	id = strings.Split(id, ".json")[0]
+	id := utils.ExtractIDFromParams(r)
 	agency := app.gtfsManager.FindAgency(id)
-	
+
 	if agency == nil {
 		app.sendNull(w, r)
 		return
