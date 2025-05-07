@@ -12,6 +12,12 @@ func (app *application) agencyHandler(w http.ResponseWriter, r *http.Request) {
 	id := params.ByName("id.json")
 	id = strings.Split(id, ".json")[0]
 	agency := app.gtfsManager.FindAgency(id)
+
+	if agency == nil {
+		app.sendNull(w, r)
+		return
+	}
+
 	agencyData := models.NewAgencyReference(
 		agency.Id,
 		agency.Name,

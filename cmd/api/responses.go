@@ -15,3 +15,12 @@ func (app *application) sendResponse(w http.ResponseWriter, r *http.Request, res
 		return
 	}
 }
+
+func (app *application) sendNull(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_, err := w.Write([]byte("null"))
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+}
