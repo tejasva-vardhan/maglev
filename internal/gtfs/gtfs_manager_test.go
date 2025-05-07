@@ -20,7 +20,10 @@ func TestManager_GetAgencies(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			manager, err := InitGTFSManager(tc.dataPath)
+			gtfsConfig := Config{
+				GtfsURL: tc.dataPath,
+			}
+			manager, err := InitGTFSManager(gtfsConfig)
 			assert.Nil(t, err)
 
 			agencies := manager.GetAgencies()
@@ -138,10 +141,10 @@ func TestGetRegionBounds(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-
-			testDataPath := models.GetFixturePath(t, "gtfs.zip")
-
-			manager, err := InitGTFSManager(testDataPath)
+			gtfsConfig := Config{
+				GtfsURL: models.GetFixturePath(t, "gtfs.zip"),
+			}
+			manager, err := InitGTFSManager(gtfsConfig)
 
 			// Set custom shapes
 			manager.gtfsData.Shapes = tc.shapes

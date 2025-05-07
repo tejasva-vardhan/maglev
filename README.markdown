@@ -25,3 +25,18 @@ All basic commands are managed by our Makefile:
 * `remote` contains the configuration files and setup scripts for our production server.
 * `go.mod` declares our project dependencies, versions and module path.
 * `Makefile` contains recipes for automating common administrative tasks — like auditing our Go code, building binaries, and executing database migrations.
+
+## Debugging
+
+```bash
+# Install Delve
+go install github.com/go-delve/delve/cmd/dlv@latest
+
+# Build the app
+make build
+
+# Start the debugger
+dlv --listen=:2345 --headless=true --api-version=2 --accept-multiclient exec ./bin/maglev
+```
+
+And then you'll be able to debug in the GoLand IDE.

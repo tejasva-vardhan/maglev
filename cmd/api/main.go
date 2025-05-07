@@ -20,7 +20,6 @@ type config struct {
 	port    int
 	env     string
 	apiKeys []string
-	gtfsURL string
 }
 
 // Define an application struct to hold the dependencies for our HTTP handlers, helpers,
@@ -28,18 +27,22 @@ type config struct {
 // logger, but it will grow to include a lot more as our build progresses.
 type application struct {
 	config      config
+	gtfsConfig  gtfs.Config
 	logger      *slog.Logger
 	gtfsManager *gtfs.Manager
 }
 
 func main() {
 	var cfg config
+	var gtfsCfg gtfs.Config
 	var apiKeysFlag string
 
 	flag.IntVar(&cfg.port, "port", 4000, "API server port")
 	flag.StringVar(&cfg.env, "env", "development", "Environment (development|staging|production)")
 	flag.StringVar(&apiKeysFlag, "api-keys", "test", "Comma Separated API Keys (test, etc)")
-	flag.StringVar(&cfg.gtfsURL, "gtfs-url", "https://www.soundtransit.org/GTFS-rail/40_gtfs.zip", "URL for a static GTFS zip file")
+	flag.StringVar(&gtfsCfg.GtfsURL, "gtfs-url", "https://www.soundtransit.org/GTFS-rail/40_gtfs.zip", "URL for a static GTFS zip file")
+	flag.StringVar(&gtfsCfg.TripUpdatesURL, "trip-updates-url", "https://api.pugetsound.onebusaway.org/api/gtfs_realtime/trip-updates-for-agency/40.pb?key=org.onebusaway.iphone", "URL for a GTFS-RT trip updates feed")
+	flag.StringVar(&gtfsCfg.VehiclePositionsURL, "vehicle-positions-url", "https://api.pugetsound.onebusaway.org/api/gtfs_realtime/vehicle-positions-for-agency/40.pb?key=org.onebusaway.iphone", "URL for a GTFS-RT vehicle positions feed")
 	flag.Parse()
 
 	if apiKeysFlag != "" {
@@ -51,7 +54,7 @@ func main() {
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	gtfsManager, err := gtfs.InitGTFSManager(cfg.gtfsURL)
+	gtfsManager, err := gtfs.InitGTFSManager(gtfsCfg)
 	if err != nil {
 		logger.Error("failed to initialize GTFS manager", "error", err)
 	}
@@ -60,6 +63,7 @@ func main() {
 
 	app := &application{
 		config:      cfg,
+		gtfsConfig:  gtfsCfg,
 		logger:      logger,
 		gtfsManager: gtfsManager,
 	}
