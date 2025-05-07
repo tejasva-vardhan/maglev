@@ -162,9 +162,9 @@ func (manager *Manager) FindAgency(id string) *gtfs.Agency {
 func (manager *Manager) GetRoutesByAgencyID(agencyID string) []*gtfs.Route {
 	var agencyRoutes []*gtfs.Route
 
-	for _, route := range manager.gtfsData.Routes {
-		if route.Agency.Id == agencyID {
-			agencyRoutes = append(agencyRoutes, &route)
+	for i := range manager.gtfsData.Routes {
+		if manager.gtfsData.Routes[i].Agency.Id == agencyID {
+			agencyRoutes = append(agencyRoutes, &manager.gtfsData.Routes[i])
 		}
 	}
 
