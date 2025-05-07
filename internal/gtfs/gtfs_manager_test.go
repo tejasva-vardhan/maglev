@@ -21,9 +21,7 @@ func TestManager_GetAgencies(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			manager, err := InitGTFSManager(tc.dataPath)
-			if err != nil {
-				t.Fatalf("Failed to initialize GTFS manager: %v", err)
-			}
+			assert.Nil(t, err)
 
 			agencies := manager.GetAgencies()
 			assert.Equal(t, 1, len(agencies))

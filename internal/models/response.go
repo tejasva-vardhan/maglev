@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 // ResponseModel Base response structure that can be reused
 type ResponseModel struct {
 	Code        int         `json:"code"`
@@ -7,4 +9,37 @@ type ResponseModel struct {
 	Data        interface{} `json:"data"`
 	Text        string      `json:"text"`
 	Version     int         `json:"version"`
+}
+
+// NewOKResponse is a helper function that returns a successful response.
+func NewOKResponse(data interface{}) ResponseModel {
+	return NewResponse(200, data, "OK")
+}
+
+func NewListResponse(list interface{}, references ReferencesModel) ResponseModel {
+	data := map[string]interface{}{
+		"limitExceeded": false,
+		"list":          list,
+		"references":    references,
+	}
+	return NewOKResponse(data)
+}
+
+func NewEntryResponse(entry interface{}, references ReferencesModel) ResponseModel {
+	data := map[string]interface{}{
+		"entry":      entry,
+		"references": references,
+	}
+	return NewOKResponse(data)
+}
+
+// NewResponse Helper function to create a standard response
+func NewResponse(code int, data interface{}, text string) ResponseModel {
+	return ResponseModel{
+		Code:        code,
+		CurrentTime: time.Now().UnixNano() / int64(time.Millisecond),
+		Data:        data,
+		Text:        text,
+		Version:     2,
+	}
 }

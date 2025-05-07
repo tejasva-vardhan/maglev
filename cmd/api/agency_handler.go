@@ -1,17 +1,21 @@
 package main
 
 import (
-	"github.com/julienschmidt/httprouter"
 	"maglev.onebusaway.org/internal/models"
 	"net/http"
 	"strings"
 )
 
 func (app *application) agencyHandler(w http.ResponseWriter, r *http.Request) {
-	params := httprouter.ParamsFromContext(r.Context())
-	id := params.ByName("id.json")
+	id := r.PathValue("id")
 	id = strings.Split(id, ".json")[0]
 	agency := app.gtfsManager.FindAgency(id)
+	
+	if agency == nil {
+		app.sendNull(w, r)
+		return
+	}
+
 	agencyData := models.NewAgencyReference(
 		agency.Id,
 		agency.Name,
