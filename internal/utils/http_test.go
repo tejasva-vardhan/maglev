@@ -1,25 +1,58 @@
 package utils
 
 import (
-	"context"
-	"github.com/julienschmidt/httprouter"
 	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestExtractIDFromParams(t *testing.T) {
-	req, _ := http.NewRequest("GET", "/agency/40.json", nil)
-
-	params := httprouter.Params{
-		{Key: "id.json", Value: "40.json"},
+	// Define test cases
+	testCases := []struct {
+		name string
+		id   string
+		want string
+	}{
+		{
+			name: "Basic ID",
+			id:   "123",
+			want: "123",
+		},
+		{
+			name: "ID with JSON extension",
+			id:   "456.json",
+			want: "456",
+		},
+		{
+			name: "ID with multiple dots",
+			id:   "789.data.json",
+			want: "789.data",
+		},
 	}
-	ctx := context.WithValue(context.Background(), httprouter.ParamsKey, params)
-	req = req.WithContext(ctx)
 
-	id := ExtractIDFromParams(req, "id.json")
-	expected := "40"
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create a test handler that will set up our path params
+			mux := http.NewServeMux()
 
-	if id != expected {
-		t.Errorf("expected %s, got %s", expected, id)
+			var result string
+			mux.HandleFunc("GET /api/test/{id}", func(w http.ResponseWriter, r *http.Request) {
+				// This is where PathValue works correctly
+				result = ExtractIDFromParams(r)
+				w.WriteHeader(http.StatusOK)
+			})
+
+			// Create a request to test with
+			req := httptest.NewRequest(http.MethodGet, "/api/test/"+tc.id, nil)
+			rr := httptest.NewRecorder()
+
+			// Process the request through our mux to set up path params
+			mux.ServeHTTP(rr, req)
+
+			// Assert the result
+			assert.Equal(t, tc.want, result, "ExtractIDFromParams should correctly extract and clean the ID")
+		})
 	}
 }
