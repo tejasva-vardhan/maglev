@@ -158,6 +158,19 @@ func (manager *Manager) FindAgency(id string) *gtfs.Agency {
 	return nil
 }
 
+// GetRoutesByAgencyID retrieves all routes associated with the specified agency ID from the GTFS data.
+func (manager *Manager) GetRoutesByAgencyID(agencyID string) []*gtfs.Route {
+	var agencyRoutes []*gtfs.Route
+
+	for _, route := range manager.gtfsData.Routes {
+		if route.Agency.Id == agencyID {
+			agencyRoutes = append(agencyRoutes, &route)
+		}
+	}
+
+	return agencyRoutes
+}
+
 func (manager *Manager) PrintStatistics() {
 	fmt.Printf("Source: %s (Local File: %v)\n", manager.gtfsSource, manager.isLocalFile)
 	fmt.Printf("Last Updated: %s\n", manager.lastUpdated)
