@@ -55,42 +55,29 @@ func TestCurrentTimeHandler(t *testing.T) {
 	// Test the data structure
 	// First, we need to cast the interface{} to the expected type
 	responseData, ok := response.Data.(map[string]interface{})
-	if !ok {
-		t.Fatalf("could not cast data to expected type")
-	}
+	assert.True(t, ok, "could not cast data to expected type")
 
 	// Check that entry exists
 	entry, ok := responseData["entry"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("could not find entry in response data")
-	}
+	assert.True(t, ok, "could not find entry in response data")
 
 	// Check that time and readableTime exist in entry
 	_, ok = entry["time"].(float64)
-	if !ok {
-		t.Errorf("could not find time in entry")
-	}
+	assert.True(t, ok, "could not find time in entry")
 
 	_, ok = entry["readableTime"].(string)
-	if !ok {
-		t.Errorf("could not find readableTime in entry")
-	}
+	assert.True(t, ok, "could not find readableTime in entry")
 
-	// Check that references exists and has the expected structure
+	// Check that references exist and have the expected structure
 	references, ok := responseData["references"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("could not find references in response data")
-	}
+	assert.True(t, ok, "could not find references in response data")
 
 	// Check that all expected arrays exist in references
 	referencesFields := []string{"agencies", "routes", "situations", "stopTimes", "stops", "trips"}
 	for _, field := range referencesFields {
 		array, ok := references[field].([]interface{})
-		if !ok {
-			t.Errorf("could not find %s array in references", field)
-		} else if len(array) != 0 {
-			t.Errorf("expected empty %s array, got length %d", field, len(array))
-		}
+		assert.True(t, ok, "could not find %s array in references", field)
+		assert.Equal(t, 0, len(array), "expected empty %s array, got length %d", field, len(array))
 	}
 }
 
