@@ -14,8 +14,10 @@ import (
 )
 
 func TestAgenciesWithCoverageHandlerEndToEnd(t *testing.T) {
-	gtfsPath := filepath.Join("../../testdata", "gtfs.zip")
-	gtfsManager, err := gtfs.InitGTFSManager(gtfsPath)
+	gtfsConfig := gtfs.Config{
+		GtfsURL: filepath.Join("../../testdata", "gtfs.zip"),
+	}
+	gtfsManager, err := gtfs.InitGTFSManager(gtfsConfig)
 	require.NoError(t, err)
 
 	app := &application{
@@ -31,7 +33,7 @@ func TestAgenciesWithCoverageHandlerEndToEnd(t *testing.T) {
 
 	resp, err := http.Get(server.URL + "/api/where/agencies-with-coverage.json?key=TEST")
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer resp.Body.Close() // nolint:errcheck
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
