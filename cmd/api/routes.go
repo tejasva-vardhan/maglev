@@ -13,6 +13,9 @@ func (app *application) routes() http.Handler {
 
 	// Register pprof handlers - https://medium.com/@rahul.fiem/application-performance-optimization-how-to-effectively-analyze-and-optimize-pprof-cpu-profiles-95280b2f5bfb
 	// 	"net/http/pprof"
+	// Register pprof handlers
+	// tutorial: https://medium.com/@rahul.fiem/application-performance-optimization-how-to-effectively-analyze-and-optimize-pprof-cpu-profiles-95280b2f5bfb
+	// import "net/http/pprof"
 	//mux.HandleFunc("/debug/pprof/", pprof.Index)
 	//mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
 	//mux.HandleFunc("/debug/pprof/profile", pprof.Profile)

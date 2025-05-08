@@ -37,9 +37,13 @@ func NewEntryResponse(entry interface{}, references ReferencesModel) ResponseMod
 func NewResponse(code int, data interface{}, text string) ResponseModel {
 	return ResponseModel{
 		Code:        code,
-		CurrentTime: time.Now().UnixNano() / int64(time.Millisecond),
+		CurrentTime: ResponseCurrentTime(),
 		Data:        data,
 		Text:        text,
 		Version:     2,
 	}
+}
+
+func ResponseCurrentTime() int64 {
+	return time.Now().UnixNano() / int64(time.Millisecond)
 }
