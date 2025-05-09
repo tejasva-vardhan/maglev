@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"maglev.onebusaway.org/internal/models"
 	"net/http"
 	"net/http/httptest"
@@ -92,18 +93,12 @@ func TestCurrentTimeHandlerInvalidKey(t *testing.T) {
 
 	// Test with invalid key
 	req, err := http.NewRequest("GET", "/api/where/current-time.json?key=invalid_key", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()
 	app.currentTimeHandler(rr, req)
 
-	// Check status code
-	if status := rr.Code; status != http.StatusUnauthorized {
-		t.Errorf("handler returned wrong status code for invalid key: got %v want %v",
-			status, http.StatusUnauthorized)
-	}
+	assert.Equal(t, http.StatusUnauthorized, rr.Code)
 
 	// Parse response
 	var response struct {
@@ -114,20 +109,9 @@ func TestCurrentTimeHandlerInvalidKey(t *testing.T) {
 	}
 
 	err = json.Unmarshal(rr.Body.Bytes(), &response)
-	if err != nil {
-		t.Errorf("error parsing response: %v", err)
-	}
+	require.NoError(t, err)
 
-	// Check response structure
-	if response.Code != http.StatusUnauthorized {
-		t.Errorf("expected code 401, got %d", response.Code)
-	}
-
-	if response.Text != "permission denied" {
-		t.Errorf("expected text 'permission denied', got %s", response.Text)
-	}
-
-	if response.Version != 1 {
-		t.Errorf("expected version 1, got %d", response.Version)
-	}
+	assert.Equal(t, http.StatusUnauthorized, response.Code)
+	assert.Equal(t, response.Text, "permission denied")
+	assert.Equal(t, 1, response.Version)
 }
