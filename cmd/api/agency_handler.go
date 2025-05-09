@@ -7,11 +7,16 @@ import (
 )
 
 func (app *application) agencyHandler(w http.ResponseWriter, r *http.Request) {
+	if app.requestHasInvalidAPIKey(r) {
+		app.invalidAPIKeyResponse(w, r)
+		return
+	}
+
 	id := utils.ExtractIDFromParams(r)
 	agency := app.gtfsManager.FindAgency(id)
 
 	if agency == nil {
-		app.sendNull(w, r)
+		app.sendNotFound(w, r)
 		return
 	}
 

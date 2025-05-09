@@ -1,48 +1,28 @@
 package main
 
 import (
-	"encoding/json"
 	"net/http"
-	"net/http/httptest"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"maglev.onebusaway.org/internal/gtfs"
-	"maglev.onebusaway.org/internal/models"
 )
 
+func TestAgenciesWithCoverageHandlerRequiresValidApiKey(t *testing.T) {
+	_, resp, model := serveAndRetrieveEndpoint(t, "/api/where/agencies-with-coverage.json?key=invalid")
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	assert.Equal(t, http.StatusUnauthorized, model.Code)
+	assert.Equal(t, "permission denied", model.Text)
+}
+
 func TestAgenciesWithCoverageHandlerEndToEnd(t *testing.T) {
-	gtfsPath := filepath.Join("../../testdata", "gtfs.zip")
-	gtfsManager, err := gtfs.InitGTFSManager(gtfsPath)
-	require.NoError(t, err)
-
-	app := &application{
-		config: config{
-			env:     "test",
-			apiKeys: []string{"TEST"},
-		},
-		gtfsManager: gtfsManager,
-	}
-
-	server := httptest.NewServer(app.routes())
-	defer server.Close()
-
-	resp, err := http.Get(server.URL + "/api/where/agencies-with-coverage.json?key=TEST")
-	require.NoError(t, err)
-	defer resp.Body.Close()
+	_, resp, model := serveAndRetrieveEndpoint(t, "/api/where/agencies-with-coverage.json?key=TEST")
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, http.StatusOK, model.Code)
+	assert.Equal(t, "OK", model.Text)
 
-	var response models.ResponseModel
-	err = json.NewDecoder(resp.Body).Decode(&response)
-	require.NoError(t, err)
-
-	assert.Equal(t, 200, response.Code)
-	assert.Equal(t, "OK", response.Text)
-
-	data, ok := response.Data.(map[string]interface{})
+	data, ok := model.Data.(map[string]interface{})
 	require.True(t, ok)
 
 	list, ok := data["list"].([]interface{})

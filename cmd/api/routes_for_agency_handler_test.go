@@ -1,54 +1,40 @@
 package main
 
 import (
-	"encoding/json"
 	"net/http"
-	"net/http/httptest"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"maglev.onebusaway.org/internal/gtfs"
-	"maglev.onebusaway.org/internal/models"
 )
 
-func TestRoutesForAgencyHandlerEndToEnd(t *testing.T) {
-	gtfsConfig := gtfs.Config{
-		GtfsURL: filepath.Join("../../testdata", "gtfs.zip"),
-	}
-	gtfsManager, err := gtfs.InitGTFSManager(gtfsConfig)
-	require.NoError(t, err)
-
-	agencies := gtfsManager.GetAgencies()
+func TestRoutesForAgencyHandlerRequiresValidApiKey(t *testing.T) {
+	app := createTestApp(t)
+	agencies := app.gtfsManager.GetAgencies()
 	require.NotEmpty(t, agencies)
 	agencyId := agencies[0].Id
 
-	app := &application{
-		config: config{
-			env:     "test",
-			apiKeys: []string{"TEST"},
-		},
-		gtfsManager: gtfsManager,
-	}
+	resp, model := serveAppAndRetrieveEndpoint(t, app, "/api/where/routes-for-agency/"+agencyId+".json?key=invalid")
 
-	server := httptest.NewServer(app.routes())
-	defer server.Close()
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	assert.Equal(t, http.StatusUnauthorized, model.Code)
+	assert.Equal(t, "permission denied", model.Text)
+}
 
-	resp, err := http.Get(server.URL + "/api/where/routes-for-agency/" + agencyId + ".json?key=TEST")
-	require.NoError(t, err)
+func TestRoutesForAgencyHandlerEndToEnd(t *testing.T) {
+	app := createTestApp(t)
+	agencies := app.gtfsManager.GetAgencies()
+	require.NotEmpty(t, agencies)
+	agencyId := agencies[0].Id
+
+	resp, model := serveAppAndRetrieveEndpoint(t, app, "/api/where/routes-for-agency/"+agencyId+".json?key=TEST")
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var response models.ResponseModel
-	err = json.NewDecoder(resp.Body).Decode(&response)
-	require.NoError(t, err)
-	defer resp.Body.Close() // nolint:errcheck
+	assert.Equal(t, 200, model.Code)
+	assert.Equal(t, "OK", model.Text)
 
-	assert.Equal(t, 200, response.Code)
-	assert.Equal(t, "OK", response.Text)
-
-	data, ok := response.Data.(map[string]interface{})
+	data, ok := model.Data.(map[string]interface{})
 	require.True(t, ok)
 
 	// Check that we have a list of routes
