@@ -2,8 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"maglev.onebusaway.org/internal/models"
 	"net/http"
-	"time"
 )
 
 // invalidAPIKeyResponse sends a 401 Unauthorized response with the required format
@@ -16,8 +16,8 @@ func (app *application) invalidAPIKeyResponse(w http.ResponseWriter, r *http.Req
 		Text        string `json:"text"`
 		Version     int    `json:"version"`
 	}{
-		Code:        http.StatusUnauthorized, // 401
-		CurrentTime: time.Now().UnixNano() / int64(time.Millisecond),
+		Code:        http.StatusUnauthorized,
+		CurrentTime: models.ResponseCurrentTime(),
 		Text:        "permission denied",
 		Version:     1, // Note: This is version 1, not 2 as in a successful response. Probably a mistake, but back-compat.
 	}
@@ -39,7 +39,7 @@ func (app *application) serverErrorResponse(w http.ResponseWriter, r *http.Reque
 		Version     int    `json:"version"`
 	}{
 		Code:        http.StatusInternalServerError,
-		CurrentTime: time.Now().UnixNano() / int64(time.Millisecond),
+		CurrentTime: models.ResponseCurrentTime(),
 		Text:        "internal server error",
 		Version:     1,
 	}

@@ -1,61 +1,41 @@
 package main
 
 import (
-	"encoding/json"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"maglev.onebusaway.org/internal/models"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 )
 
+func TestCurrentTimeHandlerRequiresValidApiKey(t *testing.T) {
+	_, resp, model := serveAndRetrieveEndpoint(t, "/api/where/current-time.json?key=invalid")
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	assert.Equal(t, http.StatusUnauthorized, model.Code)
+	assert.Equal(t, "permission denied", model.Text)
+}
+
 func TestCurrentTimeHandler(t *testing.T) {
-	// Create a new application instance with any configuration needed
-	app := &application{
-		config: config{
-			env:     "test",
-			apiKeys: []string{"testkey"},
-		},
-	}
-
-	// Create a new HTTP request with the correct URL path
-	req, err := http.NewRequest("GET", "/api/where/current-time.json?key=testkey", nil)
-	assert.Nil(t, err)
-
-	// Create a ResponseRecorder to record the response
-	rr := httptest.NewRecorder()
-
-	// Call the handler function directly, passing in the ResponseRecorder and Request
-	app.currentTimeHandler(rr, req)
-
-	// Check the status code
-	assert.Equal(t, http.StatusOK, rr.Code)
+	_, resp, model := serveAndRetrieveEndpoint(t, "/api/where/current-time.json?key=TEST")
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	// Check the content type
-	assert.Equal(t, rr.Header().Get("Content-Type"), "application/json")
-
-	// Decode the JSON response
-	var response models.ResponseModel
-	err = json.Unmarshal(rr.Body.Bytes(), &response)
-	assert.Nil(t, err)
+	assert.Equal(t, resp.Header.Get("Content-Type"), "application/json")
 
 	// Check basic response structure
-	assert.Equal(t, http.StatusOK, response.Code)
-	assert.Equal(t, "OK", response.Text)
-	assert.Equal(t, 2, response.Version)
+	assert.Equal(t, http.StatusOK, model.Code)
+	assert.Equal(t, "OK", model.Text)
+	assert.Equal(t, 2, model.Version)
 
 	// Get the current time to compare with response time
 	now := time.Now().UnixNano() / int64(time.Millisecond)
 
 	// The response time should be within a reasonable range of the current time
 	// Let's say 5 seconds (5000 milliseconds)
-	assert.False(t, response.CurrentTime < now-5000 || response.CurrentTime > now+5000)
+	assert.False(t, model.CurrentTime < now-5000 || model.CurrentTime > now+5000)
 
 	// Test the data structure
 	// First, we need to cast the interface{} to the expected type
-	responseData, ok := response.Data.(map[string]interface{})
+	responseData, ok := model.Data.(map[string]interface{})
 	assert.True(t, ok, "could not cast data to expected type")
 
 	// Check that entry exists
@@ -80,38 +60,4 @@ func TestCurrentTimeHandler(t *testing.T) {
 		assert.True(t, ok, "could not find %s array in references", field)
 		assert.Equal(t, 0, len(array), "expected empty %s array, got length %d", field, len(array))
 	}
-}
-
-func TestCurrentTimeHandlerInvalidKey(t *testing.T) {
-	// Create a new application instance
-	app := &application{
-		config: config{
-			env:     "test",
-			apiKeys: []string{"valid_key"},
-		},
-	}
-
-	// Test with invalid key
-	req, err := http.NewRequest("GET", "/api/where/current-time.json?key=invalid_key", nil)
-	require.NoError(t, err)
-
-	rr := httptest.NewRecorder()
-	app.currentTimeHandler(rr, req)
-
-	assert.Equal(t, http.StatusUnauthorized, rr.Code)
-
-	// Parse response
-	var response struct {
-		Code        int    `json:"code"`
-		CurrentTime int64  `json:"currentTime"`
-		Text        string `json:"text"`
-		Version     int    `json:"version"`
-	}
-
-	err = json.Unmarshal(rr.Body.Bytes(), &response)
-	require.NoError(t, err)
-
-	assert.Equal(t, http.StatusUnauthorized, response.Code)
-	assert.Equal(t, response.Text, "permission denied")
-	assert.Equal(t, 1, response.Version)
 }
