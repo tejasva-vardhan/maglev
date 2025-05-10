@@ -11,21 +11,21 @@ import (
 	"time"
 )
 
-// Define a config struct to hold all the configuration settings for our application.
+// Define a config struct to hold all the configuration settings for our Application.
 // For now, the only configuration settings will be the network port that we want the
 // server to listen on, and the name of the current operating environment for the
-// application (development, staging, production, etc.). We will read in these
-// configuration settings from command-line flags when the application starts.
+// Application (development, staging, production, etc.). We will read in these
+// configuration settings from command-line flags when the Application starts.
 type config struct {
 	port    int
 	env     string
 	apiKeys []string
 }
 
-// Define an application struct to hold the dependencies for our HTTP handlers, helpers,
+// Define an Application struct to hold the dependencies for our HTTP handlers, helpers,
 // and middleware. At the moment this only contains a copy of the config struct and a
 // logger, but it will grow to include a lot more as our build progresses.
-type application struct {
+type Application struct {
 	config      config
 	gtfsConfig  gtfs.Config
 	logger      *slog.Logger
@@ -63,7 +63,7 @@ func main() {
 
 	gtfsManager.PrintStatistics()
 
-	app := &application{
+	app := &Application{
 		config:      cfg,
 		gtfsConfig:  gtfsCfg,
 		logger:      logger,

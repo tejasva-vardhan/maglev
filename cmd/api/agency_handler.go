@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-func (app *application) agencyHandler(w http.ResponseWriter, r *http.Request) {
+func (app *Application) agencyHandler(w http.ResponseWriter, r *http.Request) {
 	id := utils.ExtractIDFromParams(r)
 	agency := app.gtfsManager.FindAgency(id)
 

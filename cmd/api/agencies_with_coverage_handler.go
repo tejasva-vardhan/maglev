@@ -5,7 +5,7 @@ import (
 	"net/http"
 )
 
-func (app *application) agenciesWithCoverageHandler(w http.ResponseWriter, r *http.Request) {
+func (app *Application) agenciesWithCoverageHandler(w http.ResponseWriter, r *http.Request) {
 	agencies := app.gtfsManager.GetAgencies()
 	lat, lon, latSpan, lonSpan := app.gtfsManager.GetRegionBounds()
 	agenciesWithCoverage := make([]models.AgencyCoverage, 0, len(agencies))

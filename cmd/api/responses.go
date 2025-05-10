@@ -6,8 +6,8 @@ import (
 	"net/http"
 )
 
-func (app *application) sendResponse(w http.ResponseWriter, r *http.Request, response models.ResponseModel) {
-	w.Header().Set("Content-Type", "application/json")
+func (app *Application) sendResponse(w http.ResponseWriter, r *http.Request, response models.ResponseModel) {
+	w.Header().Set("Content-Type", "Application/json")
 
 	err := json.NewEncoder(w).Encode(response)
 	if err != nil {
@@ -16,8 +16,8 @@ func (app *application) sendResponse(w http.ResponseWriter, r *http.Request, res
 	}
 }
 
-func (app *application) sendNull(w http.ResponseWriter, r *http.Request) { // nolint:unused
-	w.Header().Set("Content-Type", "application/json")
+func (app *Application) sendNull(w http.ResponseWriter, r *http.Request) { // nolint:unused
+	w.Header().Set("Content-Type", "Application/json")
 	_, err := w.Write([]byte("null"))
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
@@ -25,8 +25,8 @@ func (app *application) sendNull(w http.ResponseWriter, r *http.Request) { // no
 	}
 }
 
-func (app *application) sendNotFound(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+func (app *Application) sendNotFound(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "Application/json")
 	w.WriteHeader(http.StatusNotFound)
 
 	response := models.ResponseModel{
@@ -43,8 +43,8 @@ func (app *application) sendNotFound(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (app *application) sendUnauthorized(w http.ResponseWriter, r *http.Request) { // nolint:unused
-	w.Header().Set("Content-Type", "application/json")
+func (app *Application) sendUnauthorized(w http.ResponseWriter, r *http.Request) { // nolint:unused
+	w.Header().Set("Content-Type", "Application/json")
 	w.WriteHeader(http.StatusUnauthorized)
 
 	response := models.ResponseModel{

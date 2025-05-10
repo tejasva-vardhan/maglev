@@ -11,15 +11,15 @@ import (
 	"testing"
 )
 
-// createTestApp creates a new application instance with a GTFS manager initialized for use in tests.
-func createTestApp(t *testing.T) *application {
+// createTestApp creates a new Application instance with a GTFS manager initialized for use in tests.
+func createTestApp(t *testing.T) *Application {
 	gtfsConfig := gtfs.Config{
 		GtfsURL: filepath.Join("../../testdata", "gtfs.zip"),
 	}
 	gtfsManager, err := gtfs.InitGTFSManager(gtfsConfig)
 	require.NoError(t, err)
 
-	app := &application{
+	app := &Application{
 		config: config{
 			env:     "test",
 			apiKeys: []string{"TEST"},
@@ -32,13 +32,13 @@ func createTestApp(t *testing.T) *application {
 
 // serveAndRetrieveEndpoint sets up a test server, makes a request to the specified endpoint, and returns the response
 // and decoded model.
-func serveAndRetrieveEndpoint(t *testing.T, endpoint string) (*application, *http.Response, models.ResponseModel) {
+func serveAndRetrieveEndpoint(t *testing.T, endpoint string) (*Application, *http.Response, models.ResponseModel) {
 	app := createTestApp(t)
 	resp, model := serveAppAndRetrieveEndpoint(t, app, endpoint)
 	return app, resp, model
 }
 
-func serveAppAndRetrieveEndpoint(t *testing.T, app *application, endpoint string) (*http.Response, models.ResponseModel) {
+func serveAppAndRetrieveEndpoint(t *testing.T, app *Application, endpoint string) (*http.Response, models.ResponseModel) {
 	server := httptest.NewServer(app.routes())
 	defer server.Close()
 	resp, err := http.Get(server.URL + endpoint)

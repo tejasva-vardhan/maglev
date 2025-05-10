@@ -10,8 +10,8 @@ import (
 )
 
 func TestServerErrorResponse(t *testing.T) {
-	// Create a mock application
-	app := &application{
+	// Create a mock Application
+	app := &Application{
 		// If you have a logger in your app struct, you can mock it here
 		// errorLog: log.New(ioutil.Discard, "", 0), // Silent logger
 	}

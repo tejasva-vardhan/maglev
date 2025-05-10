@@ -2,13 +2,13 @@ package main
 
 import "net/http"
 
-func (app *application) requestHasInvalidAPIKey(r *http.Request) bool {
+func (app *Application) requestHasInvalidAPIKey(r *http.Request) bool {
 	key := r.URL.Query().Get("key")
 	return app.isInvalidAPIKey(key)
 }
 
-func (app *application) isInvalidAPIKey(key string) bool {
-	// This is a placeholder. In a real application, you would:
+func (app *Application) isInvalidAPIKey(key string) bool {
+	// This is a placeholder. In a real Application, you would:
 	// - Check against keys stored in a database
 	// - Check against keys in your configuration
 	// - Potentially validate expiration, permissions, etc.

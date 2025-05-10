@@ -7,7 +7,7 @@ import (
 
 type handlerFunc func(w http.ResponseWriter, r *http.Request)
 
-func validateAPIKey(app *application, finalHandler handlerFunc) http.Handler {
+func validateAPIKey(app *Application, finalHandler handlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if app.requestHasInvalidAPIKey(r) {
 			app.invalidAPIKeyResponse(w, r)
@@ -28,7 +28,7 @@ func registerPprofHandlers(mux *http.ServeMux) { // nolint:unused
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 }
 
-func (app *application) routes() http.Handler {
+func (app *Application) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("GET /api/where/agencies-with-coverage.json", validateAPIKey(app, app.agenciesWithCoverageHandler))
 	mux.Handle("GET /api/where/agency/{id}", validateAPIKey(app, app.agencyHandler))

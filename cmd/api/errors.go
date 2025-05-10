@@ -8,7 +8,7 @@ import (
 
 // invalidAPIKeyResponse sends a 401 Unauthorized response with the required format
 // for invalid API key errors
-func (app *application) invalidAPIKeyResponse(w http.ResponseWriter, r *http.Request) {
+func (app *Application) invalidAPIKeyResponse(w http.ResponseWriter, r *http.Request) {
 	// Create response with the specific format required
 	response := struct {
 		Code        int    `json:"code"`
@@ -30,7 +30,7 @@ func (app *application) invalidAPIKeyResponse(w http.ResponseWriter, r *http.Req
 	}
 }
 
-func (app *application) serverErrorResponse(w http.ResponseWriter, r *http.Request, err error) {
+func (app *Application) serverErrorResponse(w http.ResponseWriter, r *http.Request, err error) {
 	// Send a 500 Internal Server Error response
 	response := struct {
 		Code        int    `json:"code"`
