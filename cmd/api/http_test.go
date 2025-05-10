@@ -20,7 +20,7 @@ func createTestApp(t *testing.T) *Application {
 	require.NoError(t, err)
 
 	app := &Application{
-		config: config{
+		config: Config{
 			env:     "test",
 			apiKeys: []string{"TEST"},
 		},

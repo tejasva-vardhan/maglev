@@ -17,7 +17,7 @@ func (app *Application) isInvalidAPIKey(key string) bool {
 		return true
 	}
 
-	// For example, checking against keys stored in your app config:
+	// For example, checking against keys stored in your app Config:
 	validKeys := app.config.apiKeys
 	for _, validKey := range validKeys {
 		if key == validKey {

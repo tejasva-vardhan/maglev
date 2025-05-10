@@ -7,7 +7,7 @@ import (
 
 func TestBlankKeyIsInvalid(t *testing.T) {
 	app := &Application{
-		config: config{
+		config: Config{
 			apiKeys: []string{"key"},
 		},
 	}
