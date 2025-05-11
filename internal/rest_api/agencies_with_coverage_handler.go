@@ -6,8 +6,8 @@ import (
 )
 
 func (api *RestAPI) agenciesWithCoverageHandler(w http.ResponseWriter, r *http.Request) {
-	agencies := api.App.GtfsManager.GetAgencies()
-	lat, lon, latSpan, lonSpan := api.App.GtfsManager.GetRegionBounds()
+	agencies := api.GtfsManager.GetAgencies()
+	lat, lon, latSpan, lonSpan := api.GtfsManager.GetRegionBounds()
 	agenciesWithCoverage := make([]models.AgencyCoverage, 0, len(agencies))
 	agencyReferences := make([]models.AgencyReference, 0, len(agencies))
 

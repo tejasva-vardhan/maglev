@@ -26,7 +26,7 @@ func (api *RestAPI) invalidAPIKeyResponse(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusUnauthorized)
 	err := json.NewEncoder(w).Encode(response)
 	if err != nil {
-		api.App.Logger.Error("failed to encode invalid API key response", "error", err)
+		api.Logger.Error("failed to encode invalid API key response", "error", err)
 	}
 }
 
@@ -48,6 +48,6 @@ func (api *RestAPI) serverErrorResponse(w http.ResponseWriter, r *http.Request, 
 	w.WriteHeader(http.StatusInternalServerError)
 	encoderErr := json.NewEncoder(w).Encode(response)
 	if encoderErr != nil {
-		api.App.Logger.Error("failed to encode server error response", "error", encoderErr)
+		api.Logger.Error("failed to encode server error response", "error", encoderErr)
 	}
 }

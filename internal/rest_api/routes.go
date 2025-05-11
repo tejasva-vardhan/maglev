@@ -9,7 +9,7 @@ type handlerFunc func(w http.ResponseWriter, r *http.Request)
 
 func validateAPIKey(api *RestAPI, finalHandler handlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if api.App.RequestHasInvalidAPIKey(r) {
+		if api.RequestHasInvalidAPIKey(r) {
 			api.invalidAPIKeyResponse(w, r)
 			return
 		}

@@ -17,7 +17,7 @@ func TestServerErrorResponse(t *testing.T) {
 		// errorLog: log.New(ioutil.Discard, "", 0), // Silent logger
 	}
 
-	api := &RestAPI{App: app}
+	api := &RestAPI{Application: app}
 
 	// Create a mock request and response recorder
 	r, err := http.NewRequest("GET", "/test", nil)

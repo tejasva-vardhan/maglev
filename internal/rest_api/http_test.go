@@ -28,7 +28,7 @@ func createTestApi(t *testing.T) *RestAPI {
 		GtfsManager: gtfsManager,
 	}
 
-	api := &RestAPI{App: app}
+	api := &RestAPI{Application: app}
 
 	return api
 }

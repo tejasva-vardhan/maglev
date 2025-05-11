@@ -44,14 +44,14 @@ func main() {
 
 	gtfsManager.PrintStatistics()
 
-	coreApp := &app.Application{
-		Config:      cfg,
-		GtfsConfig:  gtfsCfg,
-		Logger:      logger,
-		GtfsManager: gtfsManager,
+	api := restapi.RestAPI{
+		Application: &app.Application{
+			Config:      cfg,
+			GtfsConfig:  gtfsCfg,
+			Logger:      logger,
+			GtfsManager: gtfsManager,
+		},
 	}
-
-	api := restapi.RestAPI{App: coreApp}
 
 	mux := http.NewServeMux()
 	api.SetRoutes(mux)

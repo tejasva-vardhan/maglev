@@ -8,7 +8,7 @@ import (
 
 func (api *RestAPI) agencyHandler(w http.ResponseWriter, r *http.Request) {
 	id := utils.ExtractIDFromParams(r)
-	agency := api.App.GtfsManager.FindAgency(id)
+	agency := api.GtfsManager.FindAgency(id)
 
 	if agency == nil {
 		api.sendNotFound(w, r)
