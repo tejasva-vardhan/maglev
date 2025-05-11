@@ -28,12 +28,9 @@ func registerPprofHandlers(mux *http.ServeMux) { // nolint:unused
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 }
 
-func (api *restAPI) routes() http.Handler {
-	mux := http.NewServeMux()
+func (api *restAPI) setRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/where/agencies-with-coverage.json", validateAPIKey(api, api.agenciesWithCoverageHandler))
 	mux.Handle("GET /api/where/agency/{id}", validateAPIKey(api, api.agencyHandler))
 	mux.Handle("GET /api/where/current-time.json", validateAPIKey(api, api.currentTimeHandler))
 	mux.Handle("GET /api/where/routes-for-agency/{id}", validateAPIKey(api, api.routesForAgencyHandler))
-
-	return mux
 }

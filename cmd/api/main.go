@@ -56,9 +56,12 @@ func main() {
 
 	api := restAPI{app: coreApp}
 
+	mux := http.NewServeMux()
+	api.setRoutes(mux)
+
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
-		Handler:      api.routes(),
+		Handler:      mux,
 		IdleTimeout:  time.Minute,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,

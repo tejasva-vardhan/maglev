@@ -42,7 +42,9 @@ func serveAndRetrieveEndpoint(t *testing.T, endpoint string) (*restAPI, *http.Re
 }
 
 func serveApiAndRetrieveEndpoint(t *testing.T, api *restAPI, endpoint string) (*http.Response, models.ResponseModel) {
-	server := httptest.NewServer(api.routes())
+	mux := http.NewServeMux()
+	api.setRoutes(mux)
+	server := httptest.NewServer(mux)
 	defer server.Close()
 	resp, err := http.Get(server.URL + endpoint)
 	require.NoError(t, err)
