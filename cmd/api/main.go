@@ -47,14 +47,14 @@ func main() {
 
 	gtfsManager.PrintStatistics()
 
-	app := &app.Application{
+	coreApp := &app.Application{
 		Config:      cfg,
 		GtfsConfig:  gtfsCfg,
 		Logger:      logger,
 		GtfsManager: gtfsManager,
 	}
 
-	api := restAPI{app: app}
+	api := restAPI{app: coreApp}
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
