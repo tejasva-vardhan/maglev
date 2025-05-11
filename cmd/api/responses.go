@@ -6,25 +6,25 @@ import (
 	"net/http"
 )
 
-func (app *Application) sendResponse(w http.ResponseWriter, r *http.Request, response models.ResponseModel) {
+func (api *restAPI) sendResponse(w http.ResponseWriter, r *http.Request, response models.ResponseModel) {
 	setJSONResponseType(&w)
 	err := json.NewEncoder(w).Encode(response)
 	if err != nil {
-		app.serverErrorResponse(w, r, err)
+		api.serverErrorResponse(w, r, err)
 		return
 	}
 }
 
-func (app *Application) sendNull(w http.ResponseWriter, r *http.Request) { // nolint:unused
+func (api *restAPI) sendNull(w http.ResponseWriter, r *http.Request) { // nolint:unused
 	setJSONResponseType(&w)
 	_, err := w.Write([]byte("null"))
 	if err != nil {
-		app.serverErrorResponse(w, r, err)
+		api.serverErrorResponse(w, r, err)
 		return
 	}
 }
 
-func (app *Application) sendNotFound(w http.ResponseWriter, r *http.Request) {
+func (api *restAPI) sendNotFound(w http.ResponseWriter, r *http.Request) {
 	setJSONResponseType(&w)
 	w.WriteHeader(http.StatusNotFound)
 
@@ -37,12 +37,12 @@ func (app *Application) sendNotFound(w http.ResponseWriter, r *http.Request) {
 
 	err := json.NewEncoder(w).Encode(response)
 	if err != nil {
-		app.serverErrorResponse(w, r, err)
+		api.serverErrorResponse(w, r, err)
 		return
 	}
 }
 
-func (app *Application) sendUnauthorized(w http.ResponseWriter, r *http.Request) { // nolint:unused
+func (api *restAPI) sendUnauthorized(w http.ResponseWriter, r *http.Request) { // nolint:unused
 	setJSONResponseType(&w)
 	w.WriteHeader(http.StatusUnauthorized)
 
@@ -55,7 +55,7 @@ func (app *Application) sendUnauthorized(w http.ResponseWriter, r *http.Request)
 
 	err := json.NewEncoder(w).Encode(response)
 	if err != nil {
-		app.serverErrorResponse(w, r, err)
+		api.serverErrorResponse(w, r, err)
 		return
 	}
 }

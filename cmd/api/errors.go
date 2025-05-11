@@ -8,7 +8,7 @@ import (
 
 // invalidAPIKeyResponse sends a 401 Unauthorized response with the required format
 // for invalid API key errors
-func (app *Application) invalidAPIKeyResponse(w http.ResponseWriter, r *http.Request) {
+func (api *restAPI) invalidAPIKeyResponse(w http.ResponseWriter, r *http.Request) {
 	// Create response with the specific format required
 	response := struct {
 		Code        int    `json:"code"`
@@ -26,11 +26,11 @@ func (app *Application) invalidAPIKeyResponse(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusUnauthorized)
 	err := json.NewEncoder(w).Encode(response)
 	if err != nil {
-		app.logger.Error("failed to encode invalid API key response", "error", err)
+		api.app.Logger.Error("failed to encode invalid API key response", "error", err)
 	}
 }
 
-func (app *Application) serverErrorResponse(w http.ResponseWriter, r *http.Request, err error) {
+func (api *restAPI) serverErrorResponse(w http.ResponseWriter, r *http.Request, err error) {
 	// Send a 500 Internal Server Error response
 	response := struct {
 		Code        int    `json:"code"`
@@ -48,6 +48,6 @@ func (app *Application) serverErrorResponse(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusInternalServerError)
 	encoderErr := json.NewEncoder(w).Encode(response)
 	if encoderErr != nil {
-		app.logger.Error("failed to encode server error response", "error", encoderErr)
+		api.app.Logger.Error("failed to encode server error response", "error", encoderErr)
 	}
 }

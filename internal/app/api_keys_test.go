@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"github.com/stretchr/testify/assert"
@@ -7,9 +7,9 @@ import (
 
 func TestBlankKeyIsInvalid(t *testing.T) {
 	app := &Application{
-		config: Config{
-			apiKeys: []string{"key"},
+		Config: Config{
+			ApiKeys: []string{"key"},
 		},
 	}
-	assert.True(t, app.isInvalidAPIKey(""))
+	assert.True(t, app.IsInvalidAPIKey(""))
 }

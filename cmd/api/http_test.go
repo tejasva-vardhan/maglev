@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"github.com/stretchr/testify/require"
+	"maglev.onebusaway.org/internal/app"
 	"maglev.onebusaway.org/internal/gtfs"
 	"maglev.onebusaway.org/internal/models"
 	"net/http"
@@ -11,35 +12,37 @@ import (
 	"testing"
 )
 
-// createTestApp creates a new Application instance with a GTFS manager initialized for use in tests.
-func createTestApp(t *testing.T) *Application {
+// createTestApi creates a new restAPI instance with a GTFS manager initialized for use in tests.
+func createTestApi(t *testing.T) *restAPI {
 	gtfsConfig := gtfs.Config{
 		GtfsURL: filepath.Join("../../testdata", "gtfs.zip"),
 	}
 	gtfsManager, err := gtfs.InitGTFSManager(gtfsConfig)
 	require.NoError(t, err)
 
-	app := &Application{
-		config: Config{
-			env:     "test",
-			apiKeys: []string{"TEST"},
+	app := &app.Application{
+		Config: app.Config{
+			Env:     "test",
+			ApiKeys: []string{"TEST"},
 		},
-		gtfsManager: gtfsManager,
+		GtfsManager: gtfsManager,
 	}
 
-	return app
+	api := &restAPI{app: app}
+
+	return api
 }
 
 // serveAndRetrieveEndpoint sets up a test server, makes a request to the specified endpoint, and returns the response
 // and decoded model.
-func serveAndRetrieveEndpoint(t *testing.T, endpoint string) (*Application, *http.Response, models.ResponseModel) {
-	app := createTestApp(t)
-	resp, model := serveAppAndRetrieveEndpoint(t, app, endpoint)
-	return app, resp, model
+func serveAndRetrieveEndpoint(t *testing.T, endpoint string) (*restAPI, *http.Response, models.ResponseModel) {
+	api := createTestApi(t)
+	resp, model := serveApiAndRetrieveEndpoint(t, api, endpoint)
+	return api, resp, model
 }
 
-func serveAppAndRetrieveEndpoint(t *testing.T, app *Application, endpoint string) (*http.Response, models.ResponseModel) {
-	server := httptest.NewServer(app.routes())
+func serveApiAndRetrieveEndpoint(t *testing.T, api *restAPI, endpoint string) (*http.Response, models.ResponseModel) {
+	server := httptest.NewServer(api.routes())
 	defer server.Close()
 	resp, err := http.Get(server.URL + endpoint)
 	require.NoError(t, err)

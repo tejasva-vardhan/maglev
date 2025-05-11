@@ -6,16 +6,16 @@ import (
 	"net/http"
 )
 
-func (app *Application) routesForAgencyHandler(w http.ResponseWriter, r *http.Request) {
+func (api *restAPI) routesForAgencyHandler(w http.ResponseWriter, r *http.Request) {
 	id := utils.ExtractIDFromParams(r)
 
-	agency := app.gtfsManager.FindAgency(id)
+	agency := api.app.GtfsManager.FindAgency(id)
 	if agency == nil {
 		http.Error(w, "null", http.StatusNotFound)
 		return
 	}
 
-	routesForAgency := app.gtfsManager.GetRoutesByAgencyID(id)
+	routesForAgency := api.app.GtfsManager.GetRoutesByAgencyID(id)
 	routesList := make([]models.Route, 0, len(routesForAgency))
 	for _, route := range routesForAgency {
 		routesList = append(routesList, models.NewRoute(
@@ -41,5 +41,5 @@ func (app *Application) routesForAgencyHandler(w http.ResponseWriter, r *http.Re
 	}
 
 	response := models.NewListResponse(routesList, references)
-	app.sendResponse(w, r, response)
+	api.sendResponse(w, r, response)
 }

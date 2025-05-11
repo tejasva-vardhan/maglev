@@ -9,11 +9,11 @@ import (
 )
 
 func TestAgencyHandlerReturnsAgencyWhenItExists(t *testing.T) {
-	app := createTestApp(t)
-	agencies := app.gtfsManager.GetAgencies()
+	api := createTestApi(t)
+	agencies := api.app.GtfsManager.GetAgencies()
 	require.NotEmpty(t, agencies)
 	agencyID := agencies[0].Id
-	resp, model := serveAppAndRetrieveEndpoint(t, app, "/api/where/agency/"+agencyID+".json?key=TEST")
+	resp, model := serveApiAndRetrieveEndpoint(t, api, "/api/where/agency/"+agencyID+".json?key=TEST")
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, http.StatusOK, model.Code)
@@ -40,11 +40,11 @@ func TestAgencyHandlerReturnsNullWhenAgencyDoesNotExist(t *testing.T) {
 }
 
 func TestAgencyHandlerRequiresValidApiKey(t *testing.T) {
-	app := createTestApp(t)
-	agencies := app.gtfsManager.GetAgencies()
+	api := createTestApi(t)
+	agencies := api.app.GtfsManager.GetAgencies()
 	require.NotEmpty(t, agencies)
 	agencyID := agencies[0].Id
-	resp, model := serveAppAndRetrieveEndpoint(t, app, "/api/where/agency/"+agencyID+".json?key=INVALID")
+	resp, model := serveApiAndRetrieveEndpoint(t, api, "/api/where/agency/"+agencyID+".json?key=INVALID")
 
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	assert.Equal(t, http.StatusUnauthorized, model.Code)

@@ -6,12 +6,12 @@ import (
 	"net/http"
 )
 
-func (app *Application) agencyHandler(w http.ResponseWriter, r *http.Request) {
+func (api *restAPI) agencyHandler(w http.ResponseWriter, r *http.Request) {
 	id := utils.ExtractIDFromParams(r)
-	agency := app.gtfsManager.FindAgency(id)
+	agency := api.app.GtfsManager.FindAgency(id)
 
 	if agency == nil {
-		app.sendNotFound(w, r)
+		api.sendNotFound(w, r)
 		return
 	}
 
@@ -29,5 +29,5 @@ func (app *Application) agencyHandler(w http.ResponseWriter, r *http.Request) {
 	)
 
 	response := models.NewEntryResponse(agencyData, models.NewEmptyReferences())
-	app.sendResponse(w, r, response)
+	api.sendResponse(w, r, response)
 }

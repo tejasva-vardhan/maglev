@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"maglev.onebusaway.org/internal/app"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,10 +12,12 @@ import (
 
 func TestServerErrorResponse(t *testing.T) {
 	// Create a mock Application
-	app := &Application{
+	app := &app.Application{
 		// If you have a logger in your app struct, you can mock it here
 		// errorLog: log.New(ioutil.Discard, "", 0), // Silent logger
 	}
+
+	api := &restAPI{app: app}
 
 	// Create a mock request and response recorder
 	r, err := http.NewRequest("GET", "/test", nil)
@@ -27,7 +30,7 @@ func TestServerErrorResponse(t *testing.T) {
 	testErr := errors.New("test server error")
 
 	// Call serverErrorResponse
-	app.serverErrorResponse(rr, r, testErr)
+	api.serverErrorResponse(rr, r, testErr)
 
 	// Check the status code
 	if status := rr.Code; status != http.StatusInternalServerError {
