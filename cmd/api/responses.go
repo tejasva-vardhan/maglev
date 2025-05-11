@@ -7,8 +7,7 @@ import (
 )
 
 func (app *Application) sendResponse(w http.ResponseWriter, r *http.Request, response models.ResponseModel) {
-	w.Header().Set("Content-Type", "Application/json")
-
+	setJSONResponseType(&w)
 	err := json.NewEncoder(w).Encode(response)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
@@ -17,7 +16,7 @@ func (app *Application) sendResponse(w http.ResponseWriter, r *http.Request, res
 }
 
 func (app *Application) sendNull(w http.ResponseWriter, r *http.Request) { // nolint:unused
-	w.Header().Set("Content-Type", "Application/json")
+	setJSONResponseType(&w)
 	_, err := w.Write([]byte("null"))
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
@@ -26,7 +25,7 @@ func (app *Application) sendNull(w http.ResponseWriter, r *http.Request) { // no
 }
 
 func (app *Application) sendNotFound(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "Application/json")
+	setJSONResponseType(&w)
 	w.WriteHeader(http.StatusNotFound)
 
 	response := models.ResponseModel{
@@ -44,7 +43,7 @@ func (app *Application) sendNotFound(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *Application) sendUnauthorized(w http.ResponseWriter, r *http.Request) { // nolint:unused
-	w.Header().Set("Content-Type", "Application/json")
+	setJSONResponseType(&w)
 	w.WriteHeader(http.StatusUnauthorized)
 
 	response := models.ResponseModel{
@@ -59,4 +58,8 @@ func (app *Application) sendUnauthorized(w http.ResponseWriter, r *http.Request)
 		app.serverErrorResponse(w, r, err)
 		return
 	}
+}
+
+func setJSONResponseType(w *http.ResponseWriter) {
+	(*w).Header().Set("Content-Type", "application/json")
 }
