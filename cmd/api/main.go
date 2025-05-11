@@ -6,15 +6,12 @@ import (
 	"log/slog"
 	"maglev.onebusaway.org/internal/app"
 	"maglev.onebusaway.org/internal/gtfs"
+	"maglev.onebusaway.org/internal/rest_api"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 )
-
-type restAPI struct {
-	app *app.Application
-}
 
 func main() {
 	var cfg app.Config
@@ -54,10 +51,10 @@ func main() {
 		GtfsManager: gtfsManager,
 	}
 
-	api := restAPI{app: coreApp}
+	api := restapi.RestAPI{App: coreApp}
 
 	mux := http.NewServeMux()
-	api.setRoutes(mux)
+	api.SetRoutes(mux)
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),

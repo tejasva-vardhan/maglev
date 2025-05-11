@@ -1,4 +1,4 @@
-package main
+package restapi
 
 import (
 	"encoding/json"
@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-func (api *restAPI) sendResponse(w http.ResponseWriter, r *http.Request, response models.ResponseModel) {
+func (api *RestAPI) sendResponse(w http.ResponseWriter, r *http.Request, response models.ResponseModel) {
 	setJSONResponseType(&w)
 	err := json.NewEncoder(w).Encode(response)
 	if err != nil {
@@ -15,7 +15,7 @@ func (api *restAPI) sendResponse(w http.ResponseWriter, r *http.Request, respons
 	}
 }
 
-func (api *restAPI) sendNull(w http.ResponseWriter, r *http.Request) { // nolint:unused
+func (api *RestAPI) sendNull(w http.ResponseWriter, r *http.Request) { // nolint:unused
 	setJSONResponseType(&w)
 	_, err := w.Write([]byte("null"))
 	if err != nil {
@@ -24,7 +24,7 @@ func (api *restAPI) sendNull(w http.ResponseWriter, r *http.Request) { // nolint
 	}
 }
 
-func (api *restAPI) sendNotFound(w http.ResponseWriter, r *http.Request) {
+func (api *RestAPI) sendNotFound(w http.ResponseWriter, r *http.Request) {
 	setJSONResponseType(&w)
 	w.WriteHeader(http.StatusNotFound)
 
@@ -42,7 +42,7 @@ func (api *restAPI) sendNotFound(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (api *restAPI) sendUnauthorized(w http.ResponseWriter, r *http.Request) { // nolint:unused
+func (api *RestAPI) sendUnauthorized(w http.ResponseWriter, r *http.Request) { // nolint:unused
 	setJSONResponseType(&w)
 	w.WriteHeader(http.StatusUnauthorized)
 

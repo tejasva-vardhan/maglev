@@ -1,4 +1,4 @@
-package main
+package restapi
 
 import (
 	"maglev.onebusaway.org/internal/models"
@@ -6,16 +6,16 @@ import (
 	"net/http"
 )
 
-func (api *restAPI) routesForAgencyHandler(w http.ResponseWriter, r *http.Request) {
+func (api *RestAPI) routesForAgencyHandler(w http.ResponseWriter, r *http.Request) {
 	id := utils.ExtractIDFromParams(r)
 
-	agency := api.app.GtfsManager.FindAgency(id)
+	agency := api.App.GtfsManager.FindAgency(id)
 	if agency == nil {
 		http.Error(w, "null", http.StatusNotFound)
 		return
 	}
 
-	routesForAgency := api.app.GtfsManager.GetRoutesByAgencyID(id)
+	routesForAgency := api.App.GtfsManager.GetRoutesByAgencyID(id)
 	routesList := make([]models.Route, 0, len(routesForAgency))
 	for _, route := range routesForAgency {
 		routesList = append(routesList, models.NewRoute(

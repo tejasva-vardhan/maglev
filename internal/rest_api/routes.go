@@ -1,4 +1,4 @@
-package main
+package restapi
 
 import (
 	"net/http"
@@ -7,9 +7,9 @@ import (
 
 type handlerFunc func(w http.ResponseWriter, r *http.Request)
 
-func validateAPIKey(api *restAPI, finalHandler handlerFunc) http.Handler {
+func validateAPIKey(api *RestAPI, finalHandler handlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if api.app.RequestHasInvalidAPIKey(r) {
+		if api.App.RequestHasInvalidAPIKey(r) {
 			api.invalidAPIKeyResponse(w, r)
 			return
 		}
@@ -28,7 +28,7 @@ func registerPprofHandlers(mux *http.ServeMux) { // nolint:unused
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 }
 
-func (api *restAPI) setRoutes(mux *http.ServeMux) {
+func (api *RestAPI) SetRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/where/agencies-with-coverage.json", validateAPIKey(api, api.agenciesWithCoverageHandler))
 	mux.Handle("GET /api/where/agency/{id}", validateAPIKey(api, api.agencyHandler))
 	mux.Handle("GET /api/where/current-time.json", validateAPIKey(api, api.currentTimeHandler))

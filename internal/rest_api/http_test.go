@@ -1,4 +1,4 @@
-package main
+package restapi
 
 import (
 	"encoding/json"
@@ -13,7 +13,7 @@ import (
 )
 
 // createTestApi creates a new restAPI instance with a GTFS manager initialized for use in tests.
-func createTestApi(t *testing.T) *restAPI {
+func createTestApi(t *testing.T) *RestAPI {
 	gtfsConfig := gtfs.Config{
 		GtfsURL: filepath.Join("../../testdata", "gtfs.zip"),
 	}
@@ -28,22 +28,22 @@ func createTestApi(t *testing.T) *restAPI {
 		GtfsManager: gtfsManager,
 	}
 
-	api := &restAPI{app: app}
+	api := &RestAPI{App: app}
 
 	return api
 }
 
 // serveAndRetrieveEndpoint sets up a test server, makes a request to the specified endpoint, and returns the response
 // and decoded model.
-func serveAndRetrieveEndpoint(t *testing.T, endpoint string) (*restAPI, *http.Response, models.ResponseModel) {
+func serveAndRetrieveEndpoint(t *testing.T, endpoint string) (*RestAPI, *http.Response, models.ResponseModel) {
 	api := createTestApi(t)
 	resp, model := serveApiAndRetrieveEndpoint(t, api, endpoint)
 	return api, resp, model
 }
 
-func serveApiAndRetrieveEndpoint(t *testing.T, api *restAPI, endpoint string) (*http.Response, models.ResponseModel) {
+func serveApiAndRetrieveEndpoint(t *testing.T, api *RestAPI, endpoint string) (*http.Response, models.ResponseModel) {
 	mux := http.NewServeMux()
-	api.setRoutes(mux)
+	api.SetRoutes(mux)
 	server := httptest.NewServer(mux)
 	defer server.Close()
 	resp, err := http.Get(server.URL + endpoint)

@@ -1,4 +1,4 @@
-package main
+package restapi
 
 import (
 	"encoding/json"
@@ -17,7 +17,7 @@ func TestServerErrorResponse(t *testing.T) {
 		// errorLog: log.New(ioutil.Discard, "", 0), // Silent logger
 	}
 
-	api := &restAPI{app: app}
+	api := &RestAPI{App: app}
 
 	// Create a mock request and response recorder
 	r, err := http.NewRequest("GET", "/test", nil)

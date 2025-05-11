@@ -1,4 +1,4 @@
-package main
+package restapi
 
 import (
 	"net/http"
@@ -10,7 +10,7 @@ import (
 
 func TestRoutesForAgencyHandlerRequiresValidApiKey(t *testing.T) {
 	api := createTestApi(t)
-	agencies := api.app.GtfsManager.GetAgencies()
+	agencies := api.App.GtfsManager.GetAgencies()
 	require.NotEmpty(t, agencies)
 	agencyId := agencies[0].Id
 
@@ -23,7 +23,7 @@ func TestRoutesForAgencyHandlerRequiresValidApiKey(t *testing.T) {
 
 func TestRoutesForAgencyHandlerEndToEnd(t *testing.T) {
 	api := createTestApi(t)
-	agencies := api.app.GtfsManager.GetAgencies()
+	agencies := api.App.GtfsManager.GetAgencies()
 	require.NotEmpty(t, agencies)
 	agencyId := agencies[0].Id
 

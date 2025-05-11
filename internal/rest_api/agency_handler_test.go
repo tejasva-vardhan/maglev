@@ -1,4 +1,4 @@
-package main
+package restapi
 
 import (
 	"net/http"
@@ -10,7 +10,7 @@ import (
 
 func TestAgencyHandlerReturnsAgencyWhenItExists(t *testing.T) {
 	api := createTestApi(t)
-	agencies := api.app.GtfsManager.GetAgencies()
+	agencies := api.App.GtfsManager.GetAgencies()
 	require.NotEmpty(t, agencies)
 	agencyID := agencies[0].Id
 	resp, model := serveApiAndRetrieveEndpoint(t, api, "/api/where/agency/"+agencyID+".json?key=TEST")
@@ -41,7 +41,7 @@ func TestAgencyHandlerReturnsNullWhenAgencyDoesNotExist(t *testing.T) {
 
 func TestAgencyHandlerRequiresValidApiKey(t *testing.T) {
 	api := createTestApi(t)
-	agencies := api.app.GtfsManager.GetAgencies()
+	agencies := api.App.GtfsManager.GetAgencies()
 	require.NotEmpty(t, agencies)
 	agencyID := agencies[0].Id
 	resp, model := serveApiAndRetrieveEndpoint(t, api, "/api/where/agency/"+agencyID+".json?key=INVALID")
