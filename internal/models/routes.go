@@ -3,30 +3,30 @@ package models
 type RouteType int
 
 type Route struct {
-	ID                string    `json:"id"`
 	AgencyID          string    `json:"agencyId"`
-	ShortName         string    `json:"shortName"`
-	LongName          string    `json:"longName"`
+	Color             string    `json:"color"`
 	Description       string    `json:"description"`
+	ID                string    `json:"id"`
+	LongName          string    `json:"longName"`
+	NullSafeShortName string    `json:"nullSafeShortName"`
+	ShortName         string    `json:"shortName"`
+	TextColor         string    `json:"textColor"`
 	Type              RouteType `json:"type"`
 	URL               string    `json:"url"`
-	Color             string    `json:"color"`
-	TextColor         string    `json:"textColor"`
-	NullSafeShortName string    `json:"nullSafeShortName"`
 }
 
 func NewRoute(id, agencyID, shortName, longName, description string, routeType RouteType, url, color, textColor, nullSafeShortName string) Route {
 	return Route{
-		ID:                id,
 		AgencyID:          agencyID,
-		ShortName:         shortName,
-		LongName:          longName,
+		Color:             color,
 		Description:       description,
+		ID:                id,
+		LongName:          longName,
+		NullSafeShortName: nullSafeShortName,
+		ShortName:         shortName,
+		TextColor:         textColor,
 		Type:              routeType,
 		URL:               url,
-		Color:             color,
-		TextColor:         textColor,
-		NullSafeShortName: nullSafeShortName,
 	}
 }
 
