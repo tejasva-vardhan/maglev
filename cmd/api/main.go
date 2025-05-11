@@ -7,6 +7,7 @@ import (
 	"maglev.onebusaway.org/internal/app"
 	"maglev.onebusaway.org/internal/gtfs"
 	"maglev.onebusaway.org/internal/rest_api"
+	"maglev.onebusaway.org/internal/webui"
 	"net/http"
 	"os"
 	"strings"
@@ -44,17 +45,25 @@ func main() {
 
 	gtfsManager.PrintStatistics()
 
-	api := restapi.RestAPI{
-		Application: &app.Application{
-			Config:      cfg,
-			GtfsConfig:  gtfsCfg,
-			Logger:      logger,
-			GtfsManager: gtfsManager,
-		},
+	coreApp := &app.Application{
+		Config:      cfg,
+		GtfsConfig:  gtfsCfg,
+		Logger:      logger,
+		GtfsManager: gtfsManager,
+	}
+
+	api := &restapi.RestAPI{
+		Application: coreApp,
+	}
+
+	webUI := &webui.WebUI{
+		Application: coreApp,
 	}
 
 	mux := http.NewServeMux()
+
 	api.SetRoutes(mux)
+	webUI.SetWebUIRoutes(mux)
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),

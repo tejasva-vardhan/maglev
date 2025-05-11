@@ -178,6 +178,10 @@ func (manager *Manager) GetAgencies() []gtfs.Agency {
 	return manager.gtfsData.Agencies
 }
 
+func (manager *Manager) GetStaticData() *gtfs.Static {
+	return manager.gtfsData
+}
+
 func (manager *Manager) FindAgency(id string) *gtfs.Agency {
 	for _, agency := range manager.gtfsData.Agencies {
 		if agency.Id == id {
