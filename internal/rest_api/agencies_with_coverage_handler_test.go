@@ -1,4 +1,4 @@
-package main
+package restapi
 
 import (
 	"net/http"

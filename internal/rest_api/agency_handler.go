@@ -1,4 +1,4 @@
-package main
+package restapi
 
 import (
 	"maglev.onebusaway.org/internal/models"
@@ -6,17 +6,12 @@ import (
 	"net/http"
 )
 
-func (app *application) agencyHandler(w http.ResponseWriter, r *http.Request) {
-	if app.requestHasInvalidAPIKey(r) {
-		app.invalidAPIKeyResponse(w, r)
-		return
-	}
-
+func (api *RestAPI) agencyHandler(w http.ResponseWriter, r *http.Request) {
 	id := utils.ExtractIDFromParams(r)
-	agency := app.gtfsManager.FindAgency(id)
+	agency := api.GtfsManager.FindAgency(id)
 
 	if agency == nil {
-		app.sendNotFound(w, r)
+		api.sendNotFound(w, r)
 		return
 	}
 
@@ -34,5 +29,5 @@ func (app *application) agencyHandler(w http.ResponseWriter, r *http.Request) {
 	)
 
 	response := models.NewEntryResponse(agencyData, models.NewEmptyReferences())
-	app.sendResponse(w, r, response)
+	api.sendResponse(w, r, response)
 }

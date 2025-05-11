@@ -26,9 +26,15 @@ type Manager struct {
 }
 
 type Config struct {
-	GtfsURL             string
-	TripUpdatesURL      string
-	VehiclePositionsURL string
+	GtfsURL                 string
+	TripUpdatesURL          string
+	VehiclePositionsURL     string
+	RealTimeAuthHeaderKey   string
+	RealTimeAuthHeaderValue string
+}
+
+func (config Config) realTimeDataEnabled() bool {
+	return config.TripUpdatesURL != "" && config.VehiclePositionsURL != ""
 }
 
 // InitGTFSManager initializes the Manager with the GTFS data from the given source
@@ -52,11 +58,11 @@ func InitGTFSManager(config Config) (*Manager, error) {
 		go manager.updateStaticGTFS()
 	}
 
-	if config.TripUpdatesURL != "" && config.VehiclePositionsURL != "" {
+	if config.realTimeDataEnabled() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel() // Ensure the context is canceled when done
-		manager.updateGTFSRealtime(ctx, config.TripUpdatesURL, config.VehiclePositionsURL)
-		go manager.updateGTFSRealtimePeriodically(config.TripUpdatesURL, config.VehiclePositionsURL)
+		manager.updateGTFSRealtime(ctx, config)
+		go manager.updateGTFSRealtimePeriodically(config)
 	}
 
 	return manager, nil

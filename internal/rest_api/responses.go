@@ -1,4 +1,4 @@
-package main
+package restapi
 
 import (
 	"encoding/json"
@@ -6,27 +6,26 @@ import (
 	"net/http"
 )
 
-func (app *application) sendResponse(w http.ResponseWriter, r *http.Request, response models.ResponseModel) {
-	w.Header().Set("Content-Type", "application/json")
-
+func (api *RestAPI) sendResponse(w http.ResponseWriter, r *http.Request, response models.ResponseModel) {
+	setJSONResponseType(&w)
 	err := json.NewEncoder(w).Encode(response)
 	if err != nil {
-		app.serverErrorResponse(w, r, err)
+		api.serverErrorResponse(w, r, err)
 		return
 	}
 }
 
-func (app *application) sendNull(w http.ResponseWriter, r *http.Request) { // nolint:unused
-	w.Header().Set("Content-Type", "application/json")
+func (api *RestAPI) sendNull(w http.ResponseWriter, r *http.Request) { // nolint:unused
+	setJSONResponseType(&w)
 	_, err := w.Write([]byte("null"))
 	if err != nil {
-		app.serverErrorResponse(w, r, err)
+		api.serverErrorResponse(w, r, err)
 		return
 	}
 }
 
-func (app *application) sendNotFound(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+func (api *RestAPI) sendNotFound(w http.ResponseWriter, r *http.Request) {
+	setJSONResponseType(&w)
 	w.WriteHeader(http.StatusNotFound)
 
 	response := models.ResponseModel{
@@ -38,13 +37,13 @@ func (app *application) sendNotFound(w http.ResponseWriter, r *http.Request) {
 
 	err := json.NewEncoder(w).Encode(response)
 	if err != nil {
-		app.serverErrorResponse(w, r, err)
+		api.serverErrorResponse(w, r, err)
 		return
 	}
 }
 
-func (app *application) sendUnauthorized(w http.ResponseWriter, r *http.Request) { // nolint:unused
-	w.Header().Set("Content-Type", "application/json")
+func (api *RestAPI) sendUnauthorized(w http.ResponseWriter, r *http.Request) { // nolint:unused
+	setJSONResponseType(&w)
 	w.WriteHeader(http.StatusUnauthorized)
 
 	response := models.ResponseModel{
@@ -56,7 +55,11 @@ func (app *application) sendUnauthorized(w http.ResponseWriter, r *http.Request)
 
 	err := json.NewEncoder(w).Encode(response)
 	if err != nil {
-		app.serverErrorResponse(w, r, err)
+		api.serverErrorResponse(w, r, err)
 		return
 	}
+}
+
+func setJSONResponseType(w *http.ResponseWriter) {
+	(*w).Header().Set("Content-Type", "application/json")
 }

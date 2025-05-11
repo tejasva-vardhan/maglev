@@ -1,4 +1,4 @@
-package main
+package restapi
 
 import (
 	"net/http"
@@ -9,12 +9,12 @@ import (
 )
 
 func TestRoutesForAgencyHandlerRequiresValidApiKey(t *testing.T) {
-	app := createTestApp(t)
-	agencies := app.gtfsManager.GetAgencies()
+	api := createTestApi(t)
+	agencies := api.GtfsManager.GetAgencies()
 	require.NotEmpty(t, agencies)
 	agencyId := agencies[0].Id
 
-	resp, model := serveAppAndRetrieveEndpoint(t, app, "/api/where/routes-for-agency/"+agencyId+".json?key=invalid")
+	resp, model := serveApiAndRetrieveEndpoint(t, api, "/api/where/routes-for-agency/"+agencyId+".json?key=invalid")
 
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	assert.Equal(t, http.StatusUnauthorized, model.Code)
@@ -22,12 +22,12 @@ func TestRoutesForAgencyHandlerRequiresValidApiKey(t *testing.T) {
 }
 
 func TestRoutesForAgencyHandlerEndToEnd(t *testing.T) {
-	app := createTestApp(t)
-	agencies := app.gtfsManager.GetAgencies()
+	api := createTestApi(t)
+	agencies := api.GtfsManager.GetAgencies()
 	require.NotEmpty(t, agencies)
 	agencyId := agencies[0].Id
 
-	resp, model := serveAppAndRetrieveEndpoint(t, app, "/api/where/routes-for-agency/"+agencyId+".json?key=TEST")
+	resp, model := serveApiAndRetrieveEndpoint(t, api, "/api/where/routes-for-agency/"+agencyId+".json?key=TEST")
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 

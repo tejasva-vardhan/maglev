@@ -1,4 +1,4 @@
-package main
+package restapi
 
 import (
 	"net/http"
@@ -7,10 +7,10 @@ import (
 
 type handlerFunc func(w http.ResponseWriter, r *http.Request)
 
-func validateAPIKey(app *application, finalHandler handlerFunc) http.Handler {
+func validateAPIKey(api *RestAPI, finalHandler handlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if app.requestHasInvalidAPIKey(r) {
-			app.invalidAPIKeyResponse(w, r)
+		if api.RequestHasInvalidAPIKey(r) {
+			api.invalidAPIKeyResponse(w, r)
 			return
 		}
 		finalHandler(w, r)
@@ -28,12 +28,9 @@ func registerPprofHandlers(mux *http.ServeMux) { // nolint:unused
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 }
 
-func (app *application) routes() http.Handler {
-	mux := http.NewServeMux()
-	mux.Handle("GET /api/where/agencies-with-coverage.json", validateAPIKey(app, app.agenciesWithCoverageHandler))
-	mux.Handle("GET /api/where/agency/{id}", validateAPIKey(app, app.agencyHandler))
-	mux.Handle("GET /api/where/current-time.json", validateAPIKey(app, app.currentTimeHandler))
-	mux.Handle("GET /api/where/routes-for-agency/{id}", validateAPIKey(app, app.routesForAgencyHandler))
-
-	return mux
+func (api *RestAPI) SetRoutes(mux *http.ServeMux) {
+	mux.Handle("GET /api/where/agencies-with-coverage.json", validateAPIKey(api, api.agenciesWithCoverageHandler))
+	mux.Handle("GET /api/where/agency/{id}", validateAPIKey(api, api.agencyHandler))
+	mux.Handle("GET /api/where/current-time.json", validateAPIKey(api, api.currentTimeHandler))
+	mux.Handle("GET /api/where/routes-for-agency/{id}", validateAPIKey(api, api.routesForAgencyHandler))
 }

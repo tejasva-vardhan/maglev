@@ -1,4 +1,4 @@
-package main
+package restapi
 
 import (
 	"encoding/json"
@@ -8,7 +8,7 @@ import (
 
 // invalidAPIKeyResponse sends a 401 Unauthorized response with the required format
 // for invalid API key errors
-func (app *application) invalidAPIKeyResponse(w http.ResponseWriter, r *http.Request) {
+func (api *RestAPI) invalidAPIKeyResponse(w http.ResponseWriter, r *http.Request) {
 	// Create response with the specific format required
 	response := struct {
 		Code        int    `json:"code"`
@@ -26,11 +26,11 @@ func (app *application) invalidAPIKeyResponse(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusUnauthorized)
 	err := json.NewEncoder(w).Encode(response)
 	if err != nil {
-		app.logger.Error("failed to encode invalid API key response", "error", err)
+		api.Logger.Error("failed to encode invalid API key response", "error", err)
 	}
 }
 
-func (app *application) serverErrorResponse(w http.ResponseWriter, r *http.Request, err error) {
+func (api *RestAPI) serverErrorResponse(w http.ResponseWriter, r *http.Request, err error) {
 	// Send a 500 Internal Server Error response
 	response := struct {
 		Code        int    `json:"code"`
@@ -48,6 +48,6 @@ func (app *application) serverErrorResponse(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusInternalServerError)
 	encoderErr := json.NewEncoder(w).Encode(response)
 	if encoderErr != nil {
-		app.logger.Error("failed to encode server error response", "error", encoderErr)
+		api.Logger.Error("failed to encode server error response", "error", encoderErr)
 	}
 }

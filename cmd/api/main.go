@@ -4,51 +4,34 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"maglev.onebusaway.org/internal/app"
 	"maglev.onebusaway.org/internal/gtfs"
+	"maglev.onebusaway.org/internal/rest_api"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 )
 
-// Define a config struct to hold all the configuration settings for our application.
-// For now, the only configuration settings will be the network port that we want the
-// server to listen on, and the name of the current operating environment for the
-// application (development, staging, production, etc.). We will read in these
-// configuration settings from command-line flags when the application starts.
-type config struct {
-	port    int
-	env     string
-	apiKeys []string
-}
-
-// Define an application struct to hold the dependencies for our HTTP handlers, helpers,
-// and middleware. At the moment this only contains a copy of the config struct and a
-// logger, but it will grow to include a lot more as our build progresses.
-type application struct {
-	config      config
-	gtfsConfig  gtfs.Config
-	logger      *slog.Logger
-	gtfsManager *gtfs.Manager
-}
-
 func main() {
-	var cfg config
+	var cfg app.Config
 	var gtfsCfg gtfs.Config
 	var apiKeysFlag string
 
-	flag.IntVar(&cfg.port, "port", 4000, "API server port")
-	flag.StringVar(&cfg.env, "env", "development", "Environment (development|staging|production)")
+	flag.IntVar(&cfg.Port, "port", 4000, "API server port")
+	flag.StringVar(&cfg.Env, "env", "development", "Environment (development|staging|production)")
 	flag.StringVar(&apiKeysFlag, "api-keys", "test", "Comma Separated API Keys (test, etc)")
 	flag.StringVar(&gtfsCfg.GtfsURL, "gtfs-url", "https://www.soundtransit.org/GTFS-rail/40_gtfs.zip", "URL for a static GTFS zip file")
 	flag.StringVar(&gtfsCfg.TripUpdatesURL, "trip-updates-url", "https://api.pugetsound.onebusaway.org/api/gtfs_realtime/trip-updates-for-agency/40.pb?key=org.onebusaway.iphone", "URL for a GTFS-RT trip updates feed")
 	flag.StringVar(&gtfsCfg.VehiclePositionsURL, "vehicle-positions-url", "https://api.pugetsound.onebusaway.org/api/gtfs_realtime/vehicle-positions-for-agency/40.pb?key=org.onebusaway.iphone", "URL for a GTFS-RT vehicle positions feed")
+	flag.StringVar(&gtfsCfg.RealTimeAuthHeaderKey, "realtime-auth-header-name", "", "Optional header name for GTFS-RT auth")
+	flag.StringVar(&gtfsCfg.RealTimeAuthHeaderValue, "realtime-auth-header-value", "", "Optional header value for GTFS-RT auth")
 	flag.Parse()
 
 	if apiKeysFlag != "" {
-		cfg.apiKeys = strings.Split(apiKeysFlag, ",")
-		for i := range cfg.apiKeys {
-			cfg.apiKeys[i] = strings.TrimSpace(cfg.apiKeys[i])
+		cfg.ApiKeys = strings.Split(apiKeysFlag, ",")
+		for i := range cfg.ApiKeys {
+			cfg.ApiKeys[i] = strings.TrimSpace(cfg.ApiKeys[i])
 		}
 	}
 
@@ -61,23 +44,28 @@ func main() {
 
 	gtfsManager.PrintStatistics()
 
-	app := &application{
-		config:      cfg,
-		gtfsConfig:  gtfsCfg,
-		logger:      logger,
-		gtfsManager: gtfsManager,
+	api := restapi.RestAPI{
+		Application: &app.Application{
+			Config:      cfg,
+			GtfsConfig:  gtfsCfg,
+			Logger:      logger,
+			GtfsManager: gtfsManager,
+		},
 	}
 
+	mux := http.NewServeMux()
+	api.SetRoutes(mux)
+
 	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.port),
-		Handler:      app.routes(),
+		Addr:         fmt.Sprintf(":%d", cfg.Port),
+		Handler:      mux,
 		IdleTimeout:  time.Minute,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		ErrorLog:     slog.NewLogLogger(logger.Handler(), slog.LevelError),
 	}
 
-	logger.Info("starting server", "addr", srv.Addr, "env", cfg.env)
+	logger.Info("starting server", "addr", srv.Addr, "env", cfg.Env)
 	err = srv.ListenAndServe()
 	logger.Error(err.Error())
 	os.Exit(1)

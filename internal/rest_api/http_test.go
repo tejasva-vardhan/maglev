@@ -1,8 +1,9 @@
-package main
+package restapi
 
 import (
 	"encoding/json"
 	"github.com/stretchr/testify/require"
+	"maglev.onebusaway.org/internal/app"
 	"maglev.onebusaway.org/internal/gtfs"
 	"maglev.onebusaway.org/internal/models"
 	"net/http"
@@ -11,35 +12,39 @@ import (
 	"testing"
 )
 
-// createTestApp creates a new application instance with a GTFS manager initialized for use in tests.
-func createTestApp(t *testing.T) *application {
+// createTestApi creates a new restAPI instance with a GTFS manager initialized for use in tests.
+func createTestApi(t *testing.T) *RestAPI {
 	gtfsConfig := gtfs.Config{
 		GtfsURL: filepath.Join("../../testdata", "gtfs.zip"),
 	}
 	gtfsManager, err := gtfs.InitGTFSManager(gtfsConfig)
 	require.NoError(t, err)
 
-	app := &application{
-		config: config{
-			env:     "test",
-			apiKeys: []string{"TEST"},
+	app := &app.Application{
+		Config: app.Config{
+			Env:     "test",
+			ApiKeys: []string{"TEST"},
 		},
-		gtfsManager: gtfsManager,
+		GtfsManager: gtfsManager,
 	}
 
-	return app
+	api := &RestAPI{Application: app}
+
+	return api
 }
 
 // serveAndRetrieveEndpoint sets up a test server, makes a request to the specified endpoint, and returns the response
 // and decoded model.
-func serveAndRetrieveEndpoint(t *testing.T, endpoint string) (*application, *http.Response, models.ResponseModel) {
-	app := createTestApp(t)
-	resp, model := serveAppAndRetrieveEndpoint(t, app, endpoint)
-	return app, resp, model
+func serveAndRetrieveEndpoint(t *testing.T, endpoint string) (*RestAPI, *http.Response, models.ResponseModel) {
+	api := createTestApi(t)
+	resp, model := serveApiAndRetrieveEndpoint(t, api, endpoint)
+	return api, resp, model
 }
 
-func serveAppAndRetrieveEndpoint(t *testing.T, app *application, endpoint string) (*http.Response, models.ResponseModel) {
-	server := httptest.NewServer(app.routes())
+func serveApiAndRetrieveEndpoint(t *testing.T, api *RestAPI, endpoint string) (*http.Response, models.ResponseModel) {
+	mux := http.NewServeMux()
+	api.SetRoutes(mux)
+	server := httptest.NewServer(mux)
 	defer server.Close()
 	resp, err := http.Get(server.URL + endpoint)
 	require.NoError(t, err)
