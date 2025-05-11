@@ -7,6 +7,7 @@ import (
 	"maglev.onebusaway.org/internal/app"
 	"maglev.onebusaway.org/internal/gtfs"
 	"maglev.onebusaway.org/internal/rest_api"
+	"maglev.onebusaway.org/internal/webui"
 	"net/http"
 	"os"
 	"strings"
@@ -55,6 +56,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	api.SetRoutes(mux)
+	webui.SetWebUIRoutes(mux)
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
