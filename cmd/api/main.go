@@ -45,18 +45,25 @@ func main() {
 
 	gtfsManager.PrintStatistics()
 
-	api := restapi.RestAPI{
-		Application: &app.Application{
-			Config:      cfg,
-			GtfsConfig:  gtfsCfg,
-			Logger:      logger,
-			GtfsManager: gtfsManager,
-		},
+	coreApp := &app.Application{
+		Config:      cfg,
+		GtfsConfig:  gtfsCfg,
+		Logger:      logger,
+		GtfsManager: gtfsManager,
+	}
+
+	api := &restapi.RestAPI{
+		Application: coreApp,
+	}
+
+	webUI := &webui.WebUI{
+		Application: coreApp,
 	}
 
 	mux := http.NewServeMux()
+
 	api.SetRoutes(mux)
-	webui.SetWebUIRoutes(mux)
+	webUI.SetWebUIRoutes(mux)
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
