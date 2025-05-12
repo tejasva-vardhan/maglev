@@ -4,7 +4,7 @@ run: build
 	./bin/maglev -api-keys=test
 
 build:
-	go build -o bin/maglev ./cmd/api
+	go build -gcflags "all=-N -l" -o bin/maglev ./cmd/api
 
 clean:
 	go clean
