@@ -1,0 +1,48 @@
+package restapi
+
+import (
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"net/http"
+	"testing"
+)
+
+func TestVehiclesForAgencyHandlerRequiresValidApiKey(t *testing.T) {
+	api := createTestApi(t)
+	agencies := api.GtfsManager.GetAgencies()
+	require.NotEmpty(t, agencies)
+	agencyId := agencies[0].Id
+	resp, model := serveApiAndRetrieveEndpoint(t, api, "/api/where/vehicles-for-agency/"+agencyId+".json?key=invalid")
+
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	assert.Equal(t, http.StatusUnauthorized, model.Code)
+	assert.Equal(t, "permission denied", model.Text)
+}
+
+func TestVehiclesForAgencyHandlerEndToEnd(t *testing.T) {
+	api := createTestApi(t)
+	agencies := api.GtfsManager.GetAgencies()
+	require.NotEmpty(t, agencies)
+	agencyId := agencies[0].Id
+
+	resp, model := serveApiAndRetrieveEndpoint(t, api, "/api/where/vehicles-for-agency/"+agencyId+".json?key=TEST")
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	assert.Equal(t, 200, model.Code)
+	assert.Equal(t, "OK", model.Text)
+
+	data, ok := model.Data.(map[string]interface{})
+	require.True(t, ok)
+
+	// Check that we have a list of routes
+	_, ok = data["list"].([]interface{})
+	require.True(t, ok)
+
+	refs, ok := data["references"].(map[string]interface{})
+	require.True(t, ok)
+
+	refAgencies, ok := refs["agencies"].([]interface{})
+	require.True(t, ok)
+	assert.Len(t, refAgencies, 0)
+}
