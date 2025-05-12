@@ -15,7 +15,7 @@ func (api *RestAPI) routesForAgencyHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	routesForAgency := api.GtfsManager.GetRoutesByAgencyID(id)
+	routesForAgency := api.GtfsManager.RoutesForAgencyID(id)
 	routesList := make([]models.Route, 0, len(routesForAgency))
 	for _, route := range routesForAgency {
 		routesList = append(routesList, models.NewRoute(

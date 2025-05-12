@@ -69,8 +69,8 @@ func (manager *Manager) FindAgency(id string) *gtfs.Agency {
 	return nil
 }
 
-// GetRoutesByAgencyID retrieves all routes associated with the specified agency ID from the GTFS data.
-func (manager *Manager) GetRoutesByAgencyID(agencyID string) []*gtfs.Route {
+// RoutesForAgencyID retrieves all routes associated with the specified agency ID from the GTFS data.
+func (manager *Manager) RoutesForAgencyID(agencyID string) []*gtfs.Route {
 	var agencyRoutes []*gtfs.Route
 
 	for i := range manager.gtfsData.Routes {

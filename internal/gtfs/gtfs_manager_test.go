@@ -40,3 +40,32 @@ func TestManager_GetAgencies(t *testing.T) {
 		})
 	}
 }
+
+func TestManager_RoutesForAgencyID(t *testing.T) {
+	testCases := []struct {
+		name     string
+		dataPath string
+	}{
+		{
+			name:     "FromLocalFile",
+			dataPath: models.GetFixturePath(t, "gtfs.zip"),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			gtfsConfig := Config{
+				GtfsURL: tc.dataPath,
+			}
+			manager, err := InitGTFSManager(gtfsConfig)
+			assert.Nil(t, err)
+
+			routes := manager.RoutesForAgencyID("40")
+			assert.Equal(t, 6, len(routes))
+
+			route := routes[0]
+			assert.Equal(t, "1 Shuttle", route.ShortName)
+			assert.Equal(t, "40", route.Agency.Id)
+		})
+	}
+}
