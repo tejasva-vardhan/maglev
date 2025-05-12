@@ -33,10 +33,9 @@ func InitGTFSManager(config Config) (*Manager, error) {
 
 	manager := &Manager{
 		gtfsSource:  config.GtfsURL,
-		gtfsData:    staticData,
-		lastUpdated: time.Now(),
 		isLocalFile: isLocalFile,
 	}
+	manager.setStaticGTFS(staticData)
 
 	if !isLocalFile {
 		go manager.updateStaticGTFS()

@@ -72,10 +72,18 @@ func (manager *Manager) updateStaticGTFS() { // nolint
 			}
 
 			// Update the GTFS data in the manager
-			manager.gtfsData = staticData
-			manager.lastUpdated = time.Now()
+			manager.setStaticGTFS(staticData)
 
 			log.Printf("GTFS data updated successfully for %v", manager.gtfsSource)
 		}
 	}
+}
+
+func (manager *Manager) setStaticGTFS(staticData *gtfs.Static) {
+	manager.gtfsData = staticData
+	manager.lastUpdated = time.Now()
+
+	// perform post-processing here!
+
+	log.Printf("GTFS data updated successfully for %v", manager.gtfsSource)
 }
