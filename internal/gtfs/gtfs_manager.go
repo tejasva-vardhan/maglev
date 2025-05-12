@@ -81,6 +81,25 @@ func (manager *Manager) RoutesForAgencyID(agencyID string) []*gtfs.Route {
 	return agencyRoutes
 }
 
+func (manager *Manager) VehiclesForAgencyID(agencyID string) []gtfs.Vehicle {
+	routes := manager.RoutesForAgencyID(agencyID)
+	routeIDs := make(map[string]bool) // all route IDs for the agency.
+	for _, route := range routes {
+		routeIDs[route.Id] = true
+	}
+
+	var vehicles []gtfs.Vehicle
+	for _, v := range manager.GetRealTimeVehicles() {
+		if v.Trip != nil {
+			if routeIDs[v.Trip.ID.RouteID] {
+				vehicles = append(vehicles, v)
+			}
+		}
+	}
+
+	return vehicles
+}
+
 func (manager *Manager) PrintStatistics() {
 	fmt.Printf("Source: %s (Local File: %v)\n", manager.gtfsSource, manager.isLocalFile)
 	fmt.Printf("Last Updated: %s\n", manager.lastUpdated)
