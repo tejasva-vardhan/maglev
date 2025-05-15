@@ -56,25 +56,7 @@ func createTables(tx *sql.Tx) {
 	createCalendarTable(tx)
 	createTripsTable(tx)
 	createShapesTable(tx)
-
-	// Create stop_times table (junction table between trips and stops)
-	createTable(tx, "stop_times", `
-		CREATE TABLE IF NOT EXISTS stop_times (
-			trip_id TEXT NOT NULL,
-			arrival_time INTEGER NOT NULL,
-			departure_time INTEGER NOT NULL,
-			stop_id TEXT NOT NULL,
-			stop_sequence INTEGER NOT NULL,
-			stop_headsign TEXT,
-			pickup_type INTEGER DEFAULT 0,
-			drop_off_type INTEGER DEFAULT 0,
-			shape_dist_traveled REAL,
-			timepoint INTEGER DEFAULT 1,
-			FOREIGN KEY (trip_id) REFERENCES trips(trip_id),
-			FOREIGN KEY (stop_id) REFERENCES stops(stop_id),
-			PRIMARY KEY (trip_id, stop_sequence)
-		);
-	`)
+	createStopTimesTable(tx)
 }
 
 // createTable creates a table in the database

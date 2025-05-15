@@ -197,7 +197,7 @@ func (c *Client) processAndStoreGTFSData(b []byte) error {
 			allStopTimes = append(allStopTimes, stopTime)
 		}
 	}
-	err = InsertStopTimeBatch(c.DB, allStopTimes)
+	err = InsertStopTimes(c.DB, allStopTimes)
 	if err != nil {
 		log.Fatal("Unable to create stop times\n", err)
 	}
