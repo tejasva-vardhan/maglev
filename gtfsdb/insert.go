@@ -5,42 +5,6 @@ import (
 	"fmt"
 )
 
-func InsertTripBatch(db *sql.DB, trips []Trip) error {
-	tx, err := db.Begin()
-	if err != nil {
-		return fmt.Errorf("error starting transaction: %w", err)
-	}
-
-	stmt, err := tx.Prepare(`
-		INSERT OR REPLACE INTO trips (
-			trip_id, route_id, service_id, trip_headsign, trip_short_name,
-			direction_id, block_id, shape_id, wheelchair_accessible, bikes_allowed
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-	`)
-	if err != nil {
-		tx.Rollback() // nolint:errcheck
-		return fmt.Errorf("error preparing statement: %w", err)
-	}
-	defer stmt.Close() // nolint:errcheck
-
-	for _, trip := range trips {
-		_, err := stmt.Exec(
-			trip.ID, trip.RouteID, trip.ServiceID, trip.Headsign, trip.ShortName,
-			trip.DirectionID, trip.BlockID, trip.ShapeID, trip.WheelchairAccessible, trip.BikesAllowed,
-		)
-		if err != nil {
-			tx.Rollback() // nolint:errcheck
-			return fmt.Errorf("error inserting trip: %w", err)
-		}
-	}
-
-	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("error committing transaction: %w", err)
-	}
-
-	return nil
-}
-
 // InsertShapes inserts multiple stop times using a transaction for better performance
 func InsertShapes(db *sql.DB, shapes []Shape) error {
 	tx, err := db.Begin()

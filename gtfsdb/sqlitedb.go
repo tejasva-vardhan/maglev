@@ -54,24 +54,7 @@ func createTables(tx *sql.Tx) {
 	createRoutesTable(tx)
 	createStopsTable(tx)
 	createCalendarTable(tx)
-
-	// Create trips table
-	createTable(tx, "trips", `
-		CREATE TABLE IF NOT EXISTS trips (
-			trip_id TEXT PRIMARY KEY,
-			route_id TEXT NOT NULL,
-			service_id TEXT NOT NULL,
-			trip_headsign TEXT,
-			trip_short_name TEXT,
-			direction_id INTEGER,
-			block_id TEXT,
-			shape_id TEXT,
-			wheelchair_accessible INTEGER DEFAULT 0,
-			bikes_allowed INTEGER DEFAULT 0,
-			FOREIGN KEY (route_id) REFERENCES routes(route_id),
-			FOREIGN KEY (service_id) REFERENCES calendar(service_id)
-		);
-	`)
+	createTripsTable(tx)
 
 	// Create shapes table
 	createTable(tx, "shapes", `

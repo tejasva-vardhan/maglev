@@ -20,17 +20,3 @@ type StopTime struct {
 	DropOffType   int    // drop_off_type
 	Timepoint     int    // timepoint
 }
-
-// Trip represents a journey made by a vehicle in the GTFS feed
-type Trip struct {
-	ID                   string // trip_id
-	RouteID              string // route_id
-	ServiceID            string // service_id
-	Headsign             string // trip_headsign
-	ShortName            string // trip_short_name
-	DirectionID          int    // direction_id
-	BlockID              string // block_id
-	ShapeID              string // shape_id
-	WheelchairAccessible int    // wheelchair_accessible
-	BikesAllowed         int    // bikes_allowed
-}

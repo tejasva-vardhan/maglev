@@ -176,7 +176,7 @@ func (c *Client) processAndStoreGTFSData(b []byte) error {
 		}
 		allTrips = append(allTrips, trip)
 	}
-	err = InsertTripBatch(c.DB, allTrips)
+	err = InsertTrips(c.DB, allTrips)
 	if err != nil {
 		log.Fatal("Unable to create trips\n", err)
 	}
