@@ -4,6 +4,7 @@ include .env
 
 run: build
 	bin/maglev \
+		-data-path=./gtfs.db \
     	-gtfs-url=https://unitrans.ucdavis.edu/media/gtfs/Unitrans_GTFS.zip \
     	-trip-updates-url=https://webservices.umoiq.com/api/gtfs-rt/v1/trip-updates/unitrans \
     	-vehicle-positions-url=https://webservices.umoiq.com/api/gtfs-rt/v1/vehicle-positions/unitrans \

@@ -36,18 +36,18 @@ func rawGtfsData(source string, isLocalFile bool) ([]byte, error) {
 	return b, nil
 }
 
-func buildGtfsDB(source string, isLocalFile bool) (*gtfsdb.Client, error) {
-	config := gtfsdb.NewConfig("./static_gtfs.db", true)
-	client := gtfsdb.NewClient(config)
+func buildGtfsDB(config Config, isLocalFile bool) (*gtfsdb.Client, error) {
+	dbConfig := gtfsdb.NewConfig(config.GTFSDataPath, true)
+	client := gtfsdb.NewClient(dbConfig)
 
 	ctx := context.Background()
 
 	var err error
 
 	if isLocalFile {
-		err = client.ImportFromFile(ctx, source)
+		err = client.ImportFromFile(ctx, config.GtfsURL)
 	} else {
-		err = client.DownloadAndStore(ctx, source)
+		err = client.DownloadAndStore(ctx, config.GtfsURL)
 	}
 
 	return client, err

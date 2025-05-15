@@ -6,6 +6,7 @@ type Config struct {
 	VehiclePositionsURL     string
 	RealTimeAuthHeaderKey   string
 	RealTimeAuthHeaderValue string
+	GTFSDataPath            string
 }
 
 func (config Config) realTimeDataEnabled() bool {

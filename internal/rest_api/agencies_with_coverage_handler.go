@@ -13,7 +13,7 @@ func (api *RestAPI) agenciesWithCoverageHandler(w http.ResponseWriter, r *http.R
 		api.serverErrorResponse(w, r, err)
 		return
 	}
-	
+
 	lat, lon, latSpan, lonSpan := api.GtfsManager.GetRegionBounds()
 	var agenciesWithCoverage []models.AgencyCoverage
 	var agencyReferences []models.AgencyReference

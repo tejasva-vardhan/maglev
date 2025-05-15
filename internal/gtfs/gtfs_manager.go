@@ -40,7 +40,7 @@ func InitGTFSManager(config Config) (*Manager, error) {
 	}
 	manager.setStaticGTFS(staticData)
 
-	gtfsDB, err := buildGtfsDB(config.GtfsURL, isLocalFile)
+	gtfsDB, err := buildGtfsDB(config, isLocalFile)
 	if err != nil {
 		return nil, fmt.Errorf("error building GTFS database: %w", err)
 	}
