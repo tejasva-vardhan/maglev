@@ -8,23 +8,6 @@ type Shape struct {
 	Sequence int     // shape_pt_sequence
 }
 
-// Stop represents a transit stop or station in the GTFS feed
-type Stop struct {
-	ID                 string  // stop_id
-	Code               string  // stop_code
-	Name               string  // stop_name
-	Desc               string  // stop_desc
-	Lat                float64 // stop_lat
-	Lon                float64 // stop_lon
-	ZoneID             string  // zone_id
-	URL                string  // stop_url
-	LocationType       int     // location_type
-	Timezone           string  // stop_timezone
-	WheelchairBoarding int     // wheelchair_boarding
-	LevelID            string  // level_id
-	PlatformCode       string  // platform_code
-}
-
 // StopTime represents a vehicle arrival/departure at a specific stop in the GTFS feed
 type StopTime struct {
 	TripID        string // trip_id

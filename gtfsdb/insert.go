@@ -5,45 +5,6 @@ import (
 	"fmt"
 )
 
-// InsertStopBatch add new stops to the database
-func InsertStopBatch(db *sql.DB, stops []Stop) error {
-	tx, err := db.Begin()
-	if err != nil {
-		return fmt.Errorf("error starting transaction: %w", err)
-	}
-
-	stmt, err := tx.Prepare(`
-		INSERT OR REPLACE INTO stops (
-			stop_id, stop_code, stop_name, stop_desc, stop_lat, stop_lon,
-			zone_id, stop_url, location_type, stop_timezone,
-			wheelchair_boarding, level_id, platform_code
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-	`)
-	if err != nil {
-		tx.Rollback() // nolint:errcheck
-		return fmt.Errorf("error preparing statement: %w", err)
-	}
-	defer stmt.Close() // nolint:errcheck
-
-	for _, stop := range stops {
-		_, err := stmt.Exec(
-			stop.ID, stop.Code, stop.Name, stop.Desc, stop.Lat, stop.Lon,
-			stop.ZoneID, stop.URL, stop.LocationType, stop.Timezone,
-			stop.WheelchairBoarding, stop.LevelID, stop.PlatformCode,
-		)
-		if err != nil {
-			tx.Rollback() // nolint:errcheck
-			return fmt.Errorf("error inserting stop: %w", err)
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("error committing transaction: %w", err)
-	}
-
-	return nil
-}
-
 func InsertTripBatch(db *sql.DB, trips []Trip) error {
 	tx, err := db.Begin()
 	if err != nil {
