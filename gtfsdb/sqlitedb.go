@@ -50,38 +50,9 @@ func InitDB(dbPath string) (*sql.DB, error) {
 }
 
 func createTables(tx *sql.Tx) {
-	// Create agencies table
-	createTable(tx, "agencies", `
-		CREATE TABLE IF NOT EXISTS agencies (
-			agency_id TEXT PRIMARY KEY,
-			agency_name TEXT NOT NULL,
-			agency_url TEXT NOT NULL,
-			agency_timezone TEXT NOT NULL,
-			agency_lang TEXT,
-			agency_phone TEXT,
-			agency_fare_url TEXT,
-			agency_email TEXT
-		);
-	`)
+	createAgenciesTable(tx)
+	createRoutesTable(tx)
 
-	// Create routes table with foreign key to agencies
-	createTable(tx, "routes", `
-		CREATE TABLE IF NOT EXISTS routes (
-			route_id TEXT PRIMARY KEY,
-			agency_id TEXT,
-			route_short_name TEXT,
-			route_long_name TEXT,
-			route_desc TEXT,
-			route_type INTEGER NOT NULL,
-			route_url TEXT,
-			route_color TEXT,
-			route_text_color TEXT,
-			continuous_pickup INTEGER,
-			continuous_drop_off INTEGER,
-			FOREIGN KEY (agency_id) REFERENCES agencies(agency_id)
-		);`)
-
-	// First, create your regular stops table as you've already done
 	createTable(tx, "stops", `
     CREATE TABLE IF NOT EXISTS stops (
         stop_id TEXT PRIMARY KEY,

@@ -62,3 +62,20 @@ func insertAgency(db *sql.DB, agency Agency) error {
 	}
 	return nil
 }
+
+// createAgenciesTable creates the "agencies" table in the database using the provided transaction object.
+// The table stores details about agencies, including fields like agency_id, name, URL, timezone, language, and contact info.
+func createAgenciesTable(tx *sql.Tx) {
+	createTable(tx, "agencies", `
+		CREATE TABLE IF NOT EXISTS agencies (
+			agency_id TEXT PRIMARY KEY,
+			agency_name TEXT NOT NULL,
+			agency_url TEXT NOT NULL,
+			agency_timezone TEXT NOT NULL,
+			agency_lang TEXT,
+			agency_phone TEXT,
+			agency_fare_url TEXT,
+			agency_email TEXT
+		);
+	`)
+}

@@ -14,21 +14,6 @@ type Calendar struct {
 	EndDate   string // end_date (YYYYMMDD)
 }
 
-// Route represents a transit route in the GTFS feed
-type Route struct {
-	ID                string // route_id
-	AgencyID          string // agency_id
-	ShortName         string // route_short_name
-	LongName          string // route_long_name
-	Desc              string // route_desc
-	Type              int    // route_type
-	URL               string // route_url
-	Color             string // route_color
-	TextColor         string // route_text_color
-	ContinuousPickup  int    // continuous_pickup
-	ContinuousDropOff int    // continuous_drop_off
-}
-
 // Shape represents points that define a vehicle's path
 type Shape struct {
 	ID       string  // shape_id

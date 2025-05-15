@@ -5,25 +5,6 @@ import (
 	"fmt"
 )
 
-// InsertRoute adds a new route to the database
-func InsertRoute(db *sql.DB, route Route) error {
-	_, err := db.Exec(`
-		INSERT OR REPLACE INTO routes (
-			route_id, agency_id, route_short_name, route_long_name,
-			route_desc, route_type, route_url, route_color,
-			route_text_color, continuous_pickup, continuous_drop_off
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-	`,
-		route.ID, route.AgencyID, route.ShortName, route.LongName,
-		route.Desc, route.Type, route.URL, route.Color,
-		route.TextColor, route.ContinuousPickup, route.ContinuousDropOff,
-	)
-	if err != nil {
-		return fmt.Errorf("error inserting route: %w", err)
-	}
-	return nil
-}
-
 // InsertStopBatch add new stops to the database
 func InsertStopBatch(db *sql.DB, stops []Stop) error {
 	tx, err := db.Begin()
