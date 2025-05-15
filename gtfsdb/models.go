@@ -1,13 +1,5 @@
 package gtfsdb
 
-// Shape represents points that define a vehicle's path
-type Shape struct {
-	ID       string  // shape_id
-	Lat      float64 // shape_pt_lat
-	Lon      float64 // shape_pt_lon
-	Sequence int     // shape_pt_sequence
-}
-
 // StopTime represents a vehicle arrival/departure at a specific stop in the GTFS feed
 type StopTime struct {
 	TripID        string // trip_id

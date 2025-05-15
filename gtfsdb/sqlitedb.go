@@ -55,17 +55,7 @@ func createTables(tx *sql.Tx) {
 	createStopsTable(tx)
 	createCalendarTable(tx)
 	createTripsTable(tx)
-
-	// Create shapes table
-	createTable(tx, "shapes", `
-		CREATE TABLE IF NOT EXISTS shapes (
-		    id INTEGER PRIMARY KEY AUTOINCREMENT,
-		    shape_id TEXT NOT NULL,
-		    lat REAL NOT NULL,
-		    lon REAL NOT NULL,
-		    shape_pt_sequence INTEGER NOT NULL
-		);
-    `)
+	createShapesTable(tx)
 
 	// Create stop_times table (junction table between trips and stops)
 	createTable(tx, "stop_times", `
