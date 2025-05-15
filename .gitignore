@@ -2,3 +2,5 @@ coverage.out
 bin/**
 __debug_bin*
 .env
+*.db
+*.db-journal

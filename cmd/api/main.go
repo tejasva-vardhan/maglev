@@ -43,8 +43,6 @@ func main() {
 		logger.Error("failed to initialize GTFS manager", "error", err)
 	}
 
-	gtfsManager.PrintStatistics()
-
 	coreApp := &app.Application{
 		Config:      cfg,
 		GtfsConfig:  gtfsCfg,

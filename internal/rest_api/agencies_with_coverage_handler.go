@@ -1,15 +1,22 @@
 package restapi
 
 import (
+	"context"
 	"maglev.onebusaway.org/internal/models"
 	"net/http"
 )
 
 func (api *RestAPI) agenciesWithCoverageHandler(w http.ResponseWriter, r *http.Request) {
-	agencies := api.GtfsManager.GetAgencies()
+	ctx := context.Background()
+	agencies, err := api.GtfsManager.GtfsDB.QueryAgencies(ctx)
+	if err != nil {
+		api.serverErrorResponse(w, r, err)
+		return
+	}
+	
 	lat, lon, latSpan, lonSpan := api.GtfsManager.GetRegionBounds()
-	agenciesWithCoverage := make([]models.AgencyCoverage, 0, len(agencies))
-	agencyReferences := make([]models.AgencyReference, 0, len(agencies))
+	var agenciesWithCoverage []models.AgencyCoverage
+	var agencyReferences []models.AgencyReference
 
 	for _, a := range agencies {
 		agenciesWithCoverage = append(
