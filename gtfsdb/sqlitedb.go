@@ -112,21 +112,7 @@ func createTables(tx *sql.Tx) {
     END;`,
 	)
 
-	// Create calendar table (needed for trips references)
-	createTable(tx, "calendar", `
-		CREATE TABLE IF NOT EXISTS calendar (
-			service_id TEXT PRIMARY KEY,
-			monday INTEGER NOT NULL,
-			tuesday INTEGER NOT NULL,
-			wednesday INTEGER NOT NULL,
-			thursday INTEGER NOT NULL,
-			friday INTEGER NOT NULL,
-			saturday INTEGER NOT NULL,
-			sunday INTEGER NOT NULL,
-			start_date TEXT NOT NULL,
-			end_date TEXT NOT NULL
-		);`,
-	)
+	createCalendarTable(tx)
 
 	// Create trips table
 	createTable(tx, "trips", `

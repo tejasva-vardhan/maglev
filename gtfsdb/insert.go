@@ -44,23 +44,6 @@ func InsertStopBatch(db *sql.DB, stops []Stop) error {
 	return nil
 }
 
-// InsertCalendar adds a new calendar entry to the database
-func InsertCalendar(db *sql.DB, calendar Calendar) error {
-	_, err := db.Exec(`
-		INSERT OR REPLACE INTO calendar (
-			service_id, monday, tuesday, wednesday, thursday,
-			friday, saturday, sunday, start_date, end_date
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-	`,
-		calendar.ServiceID, calendar.Monday, calendar.Tuesday, calendar.Wednesday, calendar.Thursday,
-		calendar.Friday, calendar.Saturday, calendar.Sunday, calendar.StartDate, calendar.EndDate,
-	)
-	if err != nil {
-		return fmt.Errorf("error inserting calendar: %w", err)
-	}
-	return nil
-}
-
 func InsertTripBatch(db *sql.DB, trips []Trip) error {
 	tx, err := db.Begin()
 	if err != nil {

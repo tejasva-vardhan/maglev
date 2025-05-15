@@ -1,19 +1,5 @@
 package gtfsdb
 
-// Calendar represents service dates for trips in the GTFS feed
-type Calendar struct {
-	ServiceID string // service_id
-	Monday    int    // monday
-	Tuesday   int    // tuesday
-	Wednesday int    // wednesday
-	Thursday  int    // thursday
-	Friday    int    // friday
-	Saturday  int    // saturday
-	Sunday    int    // sunday
-	StartDate string // start_date (YYYYMMDD)
-	EndDate   string // end_date (YYYYMMDD)
-}
-
 // Shape represents points that define a vehicle's path
 type Shape struct {
 	ID       string  // shape_id
