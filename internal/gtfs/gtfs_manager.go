@@ -3,17 +3,20 @@ package gtfs
 import (
 	"context"
 	"fmt"
+	"maglev.onebusaway.org/gtfsdb"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/jamespfennell/gtfs"
+	_ "modernc.org/sqlite" // Pure Go SQLite driver
 )
 
 // Manager manages the GTFS data and provides methods to access it
 type Manager struct {
 	gtfsSource       string
 	gtfsData         *gtfs.Static
+	GtfsDB           *gtfsdb.Client
 	lastUpdated      time.Time
 	isLocalFile      bool
 	realTimeTrips    []gtfs.Trip
@@ -36,6 +39,12 @@ func InitGTFSManager(config Config) (*Manager, error) {
 		isLocalFile: isLocalFile,
 	}
 	manager.setStaticGTFS(staticData)
+
+	gtfsDB, err := buildGtfsDB(config, isLocalFile)
+	if err != nil {
+		return nil, fmt.Errorf("error building GTFS database: %w", err)
+	}
+	manager.GtfsDB = gtfsDB
 
 	if !isLocalFile {
 		go manager.updateStaticGTFS()

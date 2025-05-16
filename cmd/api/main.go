@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maglev.onebusaway.org/internal/app"
+	"maglev.onebusaway.org/internal/appconf"
 	"maglev.onebusaway.org/internal/gtfs"
 	"maglev.onebusaway.org/internal/rest_api"
 	"maglev.onebusaway.org/internal/webui"
@@ -15,18 +16,20 @@ import (
 )
 
 func main() {
-	var cfg app.Config
+	var cfg appconf.Config
 	var gtfsCfg gtfs.Config
 	var apiKeysFlag string
+	var envFlag string
 
 	flag.IntVar(&cfg.Port, "port", 4000, "API server port")
-	flag.StringVar(&cfg.Env, "env", "development", "Environment (development|staging|production)")
+	flag.StringVar(&envFlag, "env", "development", "Environment (development|test|production)")
 	flag.StringVar(&apiKeysFlag, "api-keys", "test", "Comma Separated API Keys (test, etc)")
 	flag.StringVar(&gtfsCfg.GtfsURL, "gtfs-url", "https://www.soundtransit.org/GTFS-rail/40_gtfs.zip", "URL for a static GTFS zip file")
 	flag.StringVar(&gtfsCfg.TripUpdatesURL, "trip-updates-url", "https://api.pugetsound.onebusaway.org/api/gtfs_realtime/trip-updates-for-agency/40.pb?key=org.onebusaway.iphone", "URL for a GTFS-RT trip updates feed")
 	flag.StringVar(&gtfsCfg.VehiclePositionsURL, "vehicle-positions-url", "https://api.pugetsound.onebusaway.org/api/gtfs_realtime/vehicle-positions-for-agency/40.pb?key=org.onebusaway.iphone", "URL for a GTFS-RT vehicle positions feed")
 	flag.StringVar(&gtfsCfg.RealTimeAuthHeaderKey, "realtime-auth-header-name", "", "Optional header name for GTFS-RT auth")
 	flag.StringVar(&gtfsCfg.RealTimeAuthHeaderValue, "realtime-auth-header-value", "", "Optional header value for GTFS-RT auth")
+	flag.StringVar(&gtfsCfg.GTFSDataPath, "data-path", "./gtfs.db", "Path to the SQLite database containing GTFS data")
 	flag.Parse()
 
 	if apiKeysFlag != "" {
@@ -36,14 +39,14 @@ func main() {
 		}
 	}
 
+	cfg.Env = appconf.EnvFlagToEnvironment(envFlag)
+
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	gtfsManager, err := gtfs.InitGTFSManager(gtfsCfg)
 	if err != nil {
 		logger.Error("failed to initialize GTFS manager", "error", err)
 	}
-
-	gtfsManager.PrintStatistics()
 
 	coreApp := &app.Application{
 		Config:      cfg,

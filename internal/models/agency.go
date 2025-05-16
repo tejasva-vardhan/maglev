@@ -23,7 +23,7 @@ func NewAgencyCoverage(agencyID string, lat, latSpan, lon, lonSpan float64) Agen
 type AgencyReference struct {
 	Disclaimer     string `json:"disclaimer"`
 	Email          string `json:"email"`
-	FareURL        string `json:"fareUrl"`
+	FareUrl        string `json:"fareUrl"`
 	ID             string `json:"id"`
 	Lang           string `json:"lang"`
 	Name           string `json:"name"`
@@ -34,7 +34,7 @@ type AgencyReference struct {
 }
 
 // NewAgencyReference creates a new AgencyReference instance with the provided values
-func NewAgencyReference(id, name, url, timezone, lang, phone, email, fareURL, disclaimer string, privateService bool) AgencyReference {
+func NewAgencyReference(id, name, url, timezone, lang, phone, email, fareUrl, disclaimer string, privateService bool) AgencyReference {
 	return AgencyReference{
 		ID:             id,
 		Name:           name,
@@ -43,7 +43,7 @@ func NewAgencyReference(id, name, url, timezone, lang, phone, email, fareURL, di
 		Lang:           lang,
 		Phone:          phone,
 		Email:          email,
-		FareURL:        fareURL,
+		FareUrl:        fareUrl,
 		Disclaimer:     disclaimer,
 		PrivateService: privateService,
 	}

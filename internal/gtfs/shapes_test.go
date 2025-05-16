@@ -107,7 +107,8 @@ func TestGetRegionBounds(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			gtfsConfig := Config{
-				GtfsURL: models.GetFixturePath(t, "gtfs.zip"),
+				GtfsURL:      models.GetFixturePath(t, "raba.zip"),
+				GTFSDataPath: ":memory:",
 			}
 			manager, err := InitGTFSManager(gtfsConfig)
 

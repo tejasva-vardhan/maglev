@@ -52,13 +52,13 @@ func TestAgencyReferenceCreation(t *testing.T) {
 	url := "https://soundtransit.org"
 	timezone := "America/Los_Angeles"
 	lang := "en"
-	phone := "888-889-6368"
+	phone := "530-241-2877"
 	email := "example@soundtransit.org"
-	fareURL := "https://soundtransit.org/fares"
+	fareUrl := "https://soundtransit.org/fares"
 	disclaimer := "Transit data provided by Sound Transit"
 	privateService := false
 
-	agency := NewAgencyReference(id, name, url, timezone, lang, phone, email, fareURL, disclaimer, privateService)
+	agency := NewAgencyReference(id, name, url, timezone, lang, phone, email, fareUrl, disclaimer, privateService)
 
 	assert.Equal(t, id, agency.ID)
 	assert.Equal(t, name, agency.Name)
@@ -67,7 +67,7 @@ func TestAgencyReferenceCreation(t *testing.T) {
 	assert.Equal(t, lang, agency.Lang)
 	assert.Equal(t, phone, agency.Phone)
 	assert.Equal(t, email, agency.Email)
-	assert.Equal(t, fareURL, agency.FareURL)
+	assert.Equal(t, fareUrl, agency.FareUrl)
 	assert.Equal(t, disclaimer, agency.Disclaimer)
 	assert.Equal(t, privateService, agency.PrivateService)
 }
@@ -79,9 +79,9 @@ func TestAgencyReferenceJSON(t *testing.T) {
 		URL:            "https://soundtransit.org",
 		Timezone:       "America/Los_Angeles",
 		Lang:           "en",
-		Phone:          "888-889-6368",
+		Phone:          "530-241-2877",
 		Email:          "example@soundtransit.org",
-		FareURL:        "https://soundtransit.org/fares",
+		FareUrl:        "https://soundtransit.org/fares",
 		Disclaimer:     "Transit data provided by Sound Transit",
 		PrivateService: true,
 	}
@@ -100,7 +100,7 @@ func TestAgencyReferenceJSON(t *testing.T) {
 	assert.Equal(t, agency.Lang, unmarshaledAgency.Lang)
 	assert.Equal(t, agency.Phone, unmarshaledAgency.Phone)
 	assert.Equal(t, agency.Email, unmarshaledAgency.Email)
-	assert.Equal(t, agency.FareURL, unmarshaledAgency.FareURL)
+	assert.Equal(t, agency.FareUrl, unmarshaledAgency.FareUrl)
 	assert.Equal(t, agency.Disclaimer, unmarshaledAgency.Disclaimer)
 	assert.Equal(t, agency.PrivateService, unmarshaledAgency.PrivateService)
 }
@@ -125,7 +125,7 @@ func TestAgencyReferenceWithEmptyStrings(t *testing.T) {
 	assert.Equal(t, "", agency.Lang)
 	assert.Equal(t, "", agency.Phone)
 	assert.Equal(t, "", agency.Email)
-	assert.Equal(t, "", agency.FareURL)
+	assert.Equal(t, "", agency.FareUrl)
 	assert.Equal(t, "", agency.Disclaimer)
 	assert.Equal(t, false, agency.PrivateService)
 }

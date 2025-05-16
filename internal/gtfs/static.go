@@ -6,13 +6,13 @@ import (
 	"github.com/jamespfennell/gtfs"
 	"io"
 	"log"
+	"maglev.onebusaway.org/gtfsdb"
 	"net/http"
 	"os"
 	"time"
 )
 
-// loadGTFSData loads and parses GTFS data from either a URL or a local file
-func loadGTFSData(source string, isLocalFile bool) (*gtfs.Static, error) {
+func rawGtfsData(source string, isLocalFile bool) ([]byte, error) {
 	var b []byte
 	var err error
 
@@ -32,6 +32,32 @@ func loadGTFSData(source string, isLocalFile bool) (*gtfs.Static, error) {
 		if err != nil {
 			return nil, fmt.Errorf("error reading GTFS data: %w", err)
 		}
+	}
+	return b, nil
+}
+
+func buildGtfsDB(config Config, isLocalFile bool) (*gtfsdb.Client, error) {
+	dbConfig := gtfsdb.NewConfig(config.GTFSDataPath, config.Env, true)
+	client := gtfsdb.NewClient(dbConfig)
+
+	ctx := context.Background()
+
+	var err error
+
+	if isLocalFile {
+		err = client.ImportFromFile(ctx, config.GtfsURL)
+	} else {
+		err = client.DownloadAndStore(ctx, config.GtfsURL)
+	}
+
+	return client, err
+}
+
+// loadGTFSData loads and parses GTFS data from either a URL or a local file
+func loadGTFSData(source string, isLocalFile bool) (*gtfs.Static, error) {
+	b, err := rawGtfsData(source, isLocalFile)
+	if err != nil {
+		return nil, fmt.Errorf("error reading GTFS data: %w", err)
 	}
 
 	staticData, err := gtfs.ParseStatic(b, gtfs.ParseStaticOptions{})
