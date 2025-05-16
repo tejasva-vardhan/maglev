@@ -9,6 +9,7 @@ type Config struct {
 	Port    int
 	Env     Environment
 	ApiKeys []string
+	Verbose bool
 }
 
 // Environment is an enumerated type representing various stages or configurations in the system's lifecycle.

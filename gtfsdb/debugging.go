@@ -1,10 +1,41 @@
 package gtfsdb
 
 import (
+	"database/sql"
 	"fmt"
 	"github.com/jamespfennell/gtfs"
 	"log"
+	"strings"
 )
+
+func PrintSimpleSchema(db *sql.DB) error { // nolint:unused
+	// Get all database objects
+	rows, err := db.Query(`
+		SELECT type, name, sql
+		FROM sqlite_master
+		WHERE type IN ('table', 'index', 'view', 'trigger')
+		  AND name NOT LIKE 'sqlite_%'
+		ORDER BY type, name
+	`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close() // nolint:errcheck
+
+	log.Println("DATABASE SCHEMA:")
+	log.Println("----------------")
+
+	for rows.Next() {
+		var objType, objName, objSQL string
+		if err := rows.Scan(&objType, &objName, &objSQL); err != nil {
+			return err
+		}
+		log.Printf("%s: %s\n", strings.ToUpper(objType), objName)
+		log.Printf("%s\n\n", objSQL)
+	}
+
+	return nil
+}
 
 func (c *Client) staticDataCounts(staticData *gtfs.Static) map[string]int {
 	return map[string]int{

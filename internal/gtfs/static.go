@@ -37,7 +37,7 @@ func rawGtfsData(source string, isLocalFile bool) ([]byte, error) {
 }
 
 func buildGtfsDB(config Config, isLocalFile bool) (*gtfsdb.Client, error) {
-	dbConfig := gtfsdb.NewConfig(config.GTFSDataPath, config.Env, true)
+	dbConfig := gtfsdb.NewConfig(config.GTFSDataPath, config.Env, config.Verbose)
 	client := gtfsdb.NewClient(dbConfig)
 
 	ctx := context.Background()
@@ -99,8 +99,6 @@ func (manager *Manager) updateStaticGTFS() { // nolint
 
 			// Update the GTFS data in the manager
 			manager.setStaticGTFS(staticData)
-
-			log.Printf("GTFS data updated successfully for %v", manager.gtfsSource)
 		}
 	}
 }
@@ -111,5 +109,7 @@ func (manager *Manager) setStaticGTFS(staticData *gtfs.Static) {
 
 	// perform post-processing here!
 
-	log.Printf("GTFS data updated successfully for %v", manager.gtfsSource)
+	if manager.config.Verbose {
+		log.Printf("GTFS data updated successfully for %v", manager.gtfsSource)
+	}
 }

@@ -32,6 +32,9 @@ func main() {
 	flag.StringVar(&gtfsCfg.GTFSDataPath, "data-path", "./gtfs.db", "Path to the SQLite database containing GTFS data")
 	flag.Parse()
 
+	gtfsCfg.Verbose = true
+	cfg.Verbose = true
+
 	if apiKeysFlag != "" {
 		cfg.ApiKeys = strings.Split(apiKeysFlag, ",")
 		for i := range cfg.ApiKeys {
@@ -79,6 +82,8 @@ func main() {
 
 	logger.Info("starting server", "addr", srv.Addr, "env", cfg.Env)
 	err = srv.ListenAndServe()
-	logger.Error(err.Error())
+	if err != nil {
+		logger.Error(err.Error())
+	}
 	os.Exit(1)
 }
