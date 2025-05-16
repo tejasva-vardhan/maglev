@@ -1,5 +1,9 @@
 package gtfs
 
+import (
+	"maglev.onebusaway.org/internal/appconf"
+)
+
 type Config struct {
 	GtfsURL                 string
 	TripUpdatesURL          string
@@ -7,6 +11,7 @@ type Config struct {
 	RealTimeAuthHeaderKey   string
 	RealTimeAuthHeaderValue string
 	GTFSDataPath            string
+	Env                     appconf.Environment
 }
 
 func (config Config) realTimeDataEnabled() bool {

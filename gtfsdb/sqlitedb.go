@@ -4,12 +4,17 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"maglev.onebusaway.org/internal/appconf"
 )
 
 // InitDB creates a new SQLite database with GTFS tables for agencies and routes
-func InitDB(dbPath string) (*sql.DB, error) {
+func InitDB(config Config) (*sql.DB, error) {
+	if config.Env == appconf.Test && config.DBPath != ":memory:" {
+		log.Fatal("DB is being created in a file.", config.DBPath)
+	}
+
 	// Open database connection
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := sql.Open("sqlite", config.DBPath)
 	if err != nil {
 		return nil, fmt.Errorf("error opening database: %w", err)
 	}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maglev.onebusaway.org/internal/app"
+	"maglev.onebusaway.org/internal/appconf"
 	"maglev.onebusaway.org/internal/gtfs"
 	"maglev.onebusaway.org/internal/rest_api"
 	"maglev.onebusaway.org/internal/webui"
@@ -15,12 +16,13 @@ import (
 )
 
 func main() {
-	var cfg app.Config
+	var cfg appconf.Config
 	var gtfsCfg gtfs.Config
 	var apiKeysFlag string
+	var envFlag string
 
 	flag.IntVar(&cfg.Port, "port", 4000, "API server port")
-	flag.StringVar(&cfg.Env, "env", "development", "Environment (development|staging|production)")
+	flag.StringVar(&envFlag, "env", "development", "Environment (development|test|production)")
 	flag.StringVar(&apiKeysFlag, "api-keys", "test", "Comma Separated API Keys (test, etc)")
 	flag.StringVar(&gtfsCfg.GtfsURL, "gtfs-url", "https://www.soundtransit.org/GTFS-rail/40_gtfs.zip", "URL for a static GTFS zip file")
 	flag.StringVar(&gtfsCfg.TripUpdatesURL, "trip-updates-url", "https://api.pugetsound.onebusaway.org/api/gtfs_realtime/trip-updates-for-agency/40.pb?key=org.onebusaway.iphone", "URL for a GTFS-RT trip updates feed")
@@ -36,6 +38,8 @@ func main() {
 			cfg.ApiKeys[i] = strings.TrimSpace(cfg.ApiKeys[i])
 		}
 	}
+
+	cfg.Env = appconf.EnvFlagToEnvironment(envFlag)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 

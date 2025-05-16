@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"github.com/stretchr/testify/require"
 	"maglev.onebusaway.org/internal/app"
+	"maglev.onebusaway.org/internal/appconf"
 	"maglev.onebusaway.org/internal/gtfs"
 	"maglev.onebusaway.org/internal/models"
 	"net/http"
@@ -15,16 +16,18 @@ import (
 // createTestApi creates a new restAPI instance with a GTFS manager initialized for use in tests.
 func createTestApi(t *testing.T) *RestAPI {
 	gtfsConfig := gtfs.Config{
-		GtfsURL: filepath.Join("../../testdata", "gtfs.zip"),
+		GtfsURL:      filepath.Join("../../testdata", "raba.zip"),
+		GTFSDataPath: ":memory:",
 	}
 	gtfsManager, err := gtfs.InitGTFSManager(gtfsConfig)
 	require.NoError(t, err)
 
 	app := &app.Application{
-		Config: app.Config{
-			Env:     "test",
+		Config: appconf.Config{
+			Env:     appconf.EnvFlagToEnvironment("test"),
 			ApiKeys: []string{"TEST"},
 		},
+		GtfsConfig:  gtfsConfig,
 		GtfsManager: gtfsManager,
 	}
 

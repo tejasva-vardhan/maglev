@@ -52,7 +52,7 @@ func TestAgencyReferenceCreation(t *testing.T) {
 	url := "https://soundtransit.org"
 	timezone := "America/Los_Angeles"
 	lang := "en"
-	phone := "888-889-6368"
+	phone := "530-241-2877"
 	email := "example@soundtransit.org"
 	fareUrl := "https://soundtransit.org/fares"
 	disclaimer := "Transit data provided by Sound Transit"
@@ -79,7 +79,7 @@ func TestAgencyReferenceJSON(t *testing.T) {
 		URL:            "https://soundtransit.org",
 		Timezone:       "America/Los_Angeles",
 		Lang:           "en",
-		Phone:          "888-889-6368",
+		Phone:          "530-241-2877",
 		Email:          "example@soundtransit.org",
 		FareUrl:        "https://soundtransit.org/fares",
 		Disclaimer:     "Transit data provided by Sound Transit",

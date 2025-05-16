@@ -21,7 +21,7 @@ type Client struct {
 
 // NewClient creates a new Client with the provided configuration
 func NewClient(config Config) *Client {
-	db, err := InitDB(config.DBPath)
+	db, err := InitDB(config)
 	if err != nil {
 		log.Fatal("Unable to create DB", err)
 	} else if config.verbose {

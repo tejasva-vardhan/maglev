@@ -37,7 +37,7 @@ func rawGtfsData(source string, isLocalFile bool) ([]byte, error) {
 }
 
 func buildGtfsDB(config Config, isLocalFile bool) (*gtfsdb.Client, error) {
-	dbConfig := gtfsdb.NewConfig(config.GTFSDataPath, true)
+	dbConfig := gtfsdb.NewConfig(config.GTFSDataPath, config.Env, true)
 	client := gtfsdb.NewClient(dbConfig)
 
 	ctx := context.Background()
