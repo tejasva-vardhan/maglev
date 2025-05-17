@@ -1,4 +1,4 @@
-.PHONY: build clean coverage test run lint
+.PHONY: build clean coverage test run lint schema make
 
 include .env
 
@@ -32,3 +32,6 @@ lint: check-golangci-lint
 
 test:
 	go test ./...
+
+models:
+	go tool sqlc generate -f gtfsdb/sqlc.yml

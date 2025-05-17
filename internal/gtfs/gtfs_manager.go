@@ -22,6 +22,7 @@ type Manager struct {
 	realTimeTrips    []gtfs.Trip
 	realTimeVehicles []gtfs.Vehicle
 	realTimeMutex    sync.RWMutex
+	config           Config
 }
 
 // InitGTFSManager initializes the Manager with the GTFS data from the given source
@@ -37,6 +38,7 @@ func InitGTFSManager(config Config) (*Manager, error) {
 	manager := &Manager{
 		gtfsSource:  config.GtfsURL,
 		isLocalFile: isLocalFile,
+		config:      config,
 	}
 	manager.setStaticGTFS(staticData)
 

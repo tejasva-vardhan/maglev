@@ -12,6 +12,7 @@ type Config struct {
 	RealTimeAuthHeaderValue string
 	GTFSDataPath            string
 	Env                     appconf.Environment
+	Verbose                 bool
 }
 
 func (config Config) realTimeDataEnabled() bool {

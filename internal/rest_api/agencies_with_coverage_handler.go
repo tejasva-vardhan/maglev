@@ -8,7 +8,7 @@ import (
 
 func (api *RestAPI) agenciesWithCoverageHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
-	agencies, err := api.GtfsManager.GtfsDB.QueryAgencies(ctx)
+	agencies, err := api.GtfsManager.GtfsDB.Queries.ListAgencies(ctx)
 	if err != nil {
 		api.serverErrorResponse(w, r, err)
 		return
@@ -21,20 +21,20 @@ func (api *RestAPI) agenciesWithCoverageHandler(w http.ResponseWriter, r *http.R
 	for _, a := range agencies {
 		agenciesWithCoverage = append(
 			agenciesWithCoverage,
-			models.NewAgencyCoverage(a.Id, lat, latSpan, lon, lonSpan),
+			models.NewAgencyCoverage(a.ID, lat, latSpan, lon, lonSpan),
 		)
 
 		agencyReferences = append(
 			agencyReferences,
 			models.NewAgencyReference(
-				a.Id,
+				a.ID,
 				a.Name,
 				a.Url,
 				a.Timezone,
-				a.Language,
-				a.Phone,
-				a.Email,
-				a.FareUrl,
+				a.Lang.String,
+				a.Phone.String,
+				a.Email.String,
+				a.FareUrl.String,
 				"",
 				false,
 			),
