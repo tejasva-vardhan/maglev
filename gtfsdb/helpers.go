@@ -9,6 +9,7 @@ import (
 	"log"
 	"maglev.onebusaway.org/internal/appconf"
 	"strings"
+	"time"
 )
 
 //go:embed schema.sql
@@ -49,6 +50,17 @@ func performDatabaseMigration(ctx context.Context, db *sql.DB) error {
 }
 
 func (c *Client) processAndStoreGTFSData(b []byte) error {
+	startTime := time.Now()
+	defer func() {
+		endTime := time.Now()
+
+		c.importRuntime = endTime.Sub(startTime)
+
+		if c.config.verbose {
+			log.Println("Importing GTFS data took", c.importRuntime.String())
+		}
+	}()
+	
 	var staticCounts map[string]int
 
 	staticData, err := gtfs.ParseStatic(b, gtfs.ParseStaticOptions{})

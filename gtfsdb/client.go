@@ -60,20 +60,12 @@ func (c *Client) DownloadAndStore(ctx context.Context, url string) error {
 
 // ImportFromFile imports GTFS data from a local zip file into the database
 func (c *Client) ImportFromFile(ctx context.Context, path string) error {
-	startTime := time.Now()
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
 
 	err = c.processAndStoreGTFSData(data)
-	endTime := time.Now()
-
-	c.importRuntime = endTime.Sub(startTime)
-
-	if c.config.verbose {
-		log.Println("Importing GTFS data took", c.importRuntime.String())
-	}
 
 	return err
 }
