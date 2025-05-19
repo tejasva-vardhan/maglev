@@ -400,3 +400,125 @@ func (q *Queries) ListAgencies(ctx context.Context) ([]Agency, error) {
 	}
 	return items, nil
 }
+
+const listRoutes = `-- name: ListRoutes :many
+SELECT 
+    id, 
+    agency_id, 
+    short_name, 
+    long_name, 
+    "desc", 
+    type, 
+    url, 
+    color, 
+    text_color, 
+    continuous_pickup, 
+    continuous_drop_off
+FROM routes
+ORDER BY agency_id, id
+`
+
+func (q *Queries) GetRoutes(ctx context.Context) ([]Route, error) {
+	rows, err := q.query(ctx, q.listRoutesStmt, listRoutes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []Route
+	for rows.Next() {
+		var i Route
+		if err := rows.Scan(
+			&i.ID,
+			&i.AgencyID,
+			&i.ShortName,
+			&i.LongName,
+			&i.Desc,
+			&i.Type,
+			&i.Url,
+			&i.Color,
+			&i.TextColor,
+			&i.ContinuousPickup,
+			&i.ContinuousDropOff,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getRouteIDsForStop = `
+	SELECT DISTINCT routes.agency_id || '_' || routes.id AS route_id
+	FROM stop_times
+	JOIN trips ON stop_times.trip_id = trips.id
+	JOIN routes ON trips.route_id = routes.id
+	WHERE stop_times.stop_id = ?
+	`
+
+// Returns the route ID in the format {agency_id}_{route_id} for a given stop ID
+func (q *Queries) GetRouteIDsForStop(ctx context.Context, stopID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, getRouteIDsForStop, stopID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var combinedIDs []string
+	for rows.Next() {
+		var combinedID string
+		if err := rows.Scan(&combinedID); err != nil {
+			return nil, err
+		}
+		combinedIDs = append(combinedIDs, combinedID)
+	}
+	return combinedIDs, nil
+}
+
+const getAgencyForStop = `-- name: GetAgencyForStop :many
+SELECT DISTINCT a.id, a.name, a.url, a.timezone, a.lang, a.phone, a.fare_url, a.email
+FROM agencies a
+JOIN routes r ON a.id = r.agency_id
+JOIN trips t ON r.id = t.route_id
+JOIN stop_times st ON t.id = st.trip_id
+WHERE st.stop_id = ?
+ORDER BY a.id
+`
+
+// GetAgencyForStop returns all agencies that serve a particular stop
+func (q *Queries) GetAgencyForStop(ctx context.Context, stopID string) (Agency, error) {
+	rows, err := q.query(ctx, q.getAgencyForStopStmt, getAgencyForStop, stopID)
+	if err != nil {
+		return Agency{}, err
+	}
+	defer rows.Close()
+
+	var agency Agency
+	if rows.Next() {
+		if err := rows.Scan(
+			&agency.ID,
+			&agency.Name,
+			&agency.Url,
+			&agency.Timezone,
+			&agency.Lang,
+			&agency.Phone,
+			&agency.FareUrl,
+			&agency.Email,
+		); err != nil {
+			return Agency{}, err
+		}
+	}
+	if err := rows.Close(); err != nil {
+		return Agency{}, err
+	}
+	if err := rows.Err(); err != nil {
+		return Agency{}, err
+	}
+	return agency, nil
+}
