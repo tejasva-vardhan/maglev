@@ -51,3 +51,20 @@ func (api *RestAPI) serverErrorResponse(w http.ResponseWriter, r *http.Request, 
 		api.Logger.Error("failed to encode server error response", "error", encoderErr)
 	}
 }
+
+// validationErrorResponse sends a 400 Bad Request response with field-specific validation errors
+func (api *RestAPI) validationErrorResponse(w http.ResponseWriter, r *http.Request, fieldErrors map[string][]string) {
+	// Create response with the required format for validation errors
+	response := struct {
+		FieldErrors map[string][]string `json:"fieldErrors"`
+	}{
+		FieldErrors: fieldErrors,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusBadRequest)
+	err := json.NewEncoder(w).Encode(response)
+	if err != nil {
+		api.Logger.Error("failed to encode validation error response", "error", err)
+	}
+}

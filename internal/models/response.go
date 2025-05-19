@@ -25,6 +25,16 @@ func NewListResponse(list interface{}, references ReferencesModel) ResponseModel
 	return NewOKResponse(data)
 }
 
+func NewListResponseWithRange(list interface{}, references ReferencesModel, outOfRange bool) ResponseModel {
+	data := map[string]interface{}{
+		"limitExceeded": false,
+		"list":          list,
+		"outOfRange":    outOfRange,
+		"references":    references,
+	}
+	return NewOKResponse(data)
+}
+
 func NewEntryResponse(entry interface{}, references ReferencesModel) ResponseModel {
 	data := map[string]interface{}{
 		"entry":      entry,
