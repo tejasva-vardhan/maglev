@@ -124,7 +124,6 @@ func (manager *Manager) GetStopsForLocation(lat, lon float64, radius float64, la
 				if distance <= radius {
 					return []*gtfs.Stop{stop}
 				}
-				break
 			}
 			continue
 		}
