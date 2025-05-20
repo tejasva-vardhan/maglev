@@ -47,6 +47,10 @@ func (api *RestAPI) stopsForLocationHandler(w http.ResponseWriter, r *http.Reque
 		}
 		agency, err := api.GtfsManager.GtfsDB.Queries.GetAgencyForStop(ctx, stop.Id)
 
+		if err != nil {
+			continue
+		}
+
 		results = append(results, models.NewStop(
 			stop.Id,
 			"Direction",
