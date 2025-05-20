@@ -57,7 +57,7 @@ func (api *RestAPI) stopsForLocationHandler(w http.ResponseWriter, r *http.Reque
 			utils.FormCombinedID(agency.ID, stop.Id),
 			stop.Name,
 			"",
-			stop.WheelchairBoarding.String(),
+			utils.MapWheelchairBoarding(stop.WheelchairBoarding),
 			*stop.Latitude,
 			*stop.Longitude,
 			0,
