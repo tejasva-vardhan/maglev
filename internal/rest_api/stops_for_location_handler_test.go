@@ -117,7 +117,7 @@ func TestStopsForLocationRadius(t *testing.T) {
 	assert.Len(t, list, 74)
 }
 
-func TestStopForLocationLatAndLan(t *testing.T) {
+func TestStopsForLocationLatAndLan(t *testing.T) {
 	_, resp, model := serveAndRetrieveEndpoint(t, "/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.362535")
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	data, ok := model.Data.(map[string]interface{})
@@ -128,5 +128,17 @@ func TestStopForLocationLatAndLan(t *testing.T) {
 }
 func TestStopsForLocationHandlerValidatesParameters(t *testing.T) {
 	_, resp, _ := serveAndRetrieveEndpoint(t, "/api/where/stops-for-location.json?key=TEST&lat=invalid&lon=-121.74")
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+func TestStopsForLocationHandlerValidatesLatLon(t *testing.T) {
+	_, resp, _ := serveAndRetrieveEndpoint(t, "/api/where/stops-for-location.json?key=TEST&lat=invalid&lon=invalid")
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+func TestStopsForLocationHandlerValidatesLatLonSpan(t *testing.T) {
+	_, resp, _ := serveAndRetrieveEndpoint(t, "/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.426966&latSpan=invalid&lonSpan=invalid")
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+func TestStopsForLocationHandlerValidatesRadius(t *testing.T) {
+	_, resp, _ := serveAndRetrieveEndpoint(t, "/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.426966&radius=invalid")
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
