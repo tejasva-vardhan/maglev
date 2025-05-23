@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"maglev.onebusaway.org/gtfsdb"
+	"maglev.onebusaway.org/internal/utils"
+	"math"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -90,6 +93,66 @@ func (manager *Manager) RoutesForAgencyID(agencyID string) []*gtfs.Route {
 	}
 
 	return agencyRoutes
+}
+
+type stopWithDistance struct {
+	stop     *gtfs.Stop
+	distance float64
+}
+
+func (manager *Manager) GetStopsForLocation(lat, lon float64, radius float64, latSpan, lonSpan float64, query string, maxCount int) []*gtfs.Stop {
+	const epsilon = 1e-6
+
+	if radius == 0 {
+		radius = 1000
+	}
+	if query != "" {
+		radius *= 10
+	}
+
+	var candidates []stopWithDistance
+
+	for i := range manager.gtfsData.Stops {
+		stop := &manager.gtfsData.Stops[i]
+		if stop.Latitude == nil || stop.Longitude == nil {
+			continue
+		}
+
+		if query != "" {
+			if stop.Code == query {
+				distance := utils.Haversine(lat, lon, *stop.Latitude, *stop.Longitude)
+				if distance <= radius {
+					return []*gtfs.Stop{stop}
+				}
+			}
+			continue
+		}
+
+		if latSpan > 0 && lonSpan > 0 {
+			if math.Abs(*stop.Latitude-lat) <= latSpan+epsilon && math.Abs(*stop.Longitude-lon) <= lonSpan+epsilon {
+				distance := utils.Haversine(lat, lon, *stop.Latitude, *stop.Longitude)
+				candidates = append(candidates, stopWithDistance{stop, distance})
+			}
+		} else {
+			distance := utils.Haversine(lat, lon, *stop.Latitude, *stop.Longitude)
+			if distance <= radius {
+				candidates = append(candidates, stopWithDistance{stop, distance})
+			}
+		}
+	}
+
+	// Sort by distance
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].distance < candidates[j].distance
+	})
+
+	// Limit to maxCount
+	var stops []*gtfs.Stop
+	for i := 0; i < len(candidates) && i < maxCount; i++ {
+		stops = append(stops, candidates[i].stop)
+	}
+
+	return stops
 }
 
 func (manager *Manager) VehiclesForAgencyID(agencyID string) []gtfs.Vehicle {

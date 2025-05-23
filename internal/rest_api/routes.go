@@ -34,4 +34,5 @@ func (api *RestAPI) SetRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/where/current-time.json", validateAPIKey(api, api.currentTimeHandler))
 	mux.Handle("GET /api/where/routes-for-agency/{id}", validateAPIKey(api, api.routesForAgencyHandler))
 	mux.Handle("GET /api/where/vehicles-for-agency/{id}", validateAPIKey(api, api.vehiclesForAgencyHandler))
+	mux.Handle("GET /api/where/stops-for-location.json", validateAPIKey(api, api.stopsForLocationHandler))
 }

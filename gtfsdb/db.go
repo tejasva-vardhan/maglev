@@ -138,31 +138,35 @@ func (q *Queries) queryRow(ctx context.Context, stmt *sql.Stmt, query string, ar
 }
 
 type Queries struct {
-	db                 DBTX
-	tx                 *sql.Tx
-	createAgencyStmt   *sql.Stmt
-	createCalendarStmt *sql.Stmt
-	createRouteStmt    *sql.Stmt
-	createShapeStmt    *sql.Stmt
-	createStopStmt     *sql.Stmt
-	createStopTimeStmt *sql.Stmt
-	createTripStmt     *sql.Stmt
-	getAgencyStmt      *sql.Stmt
-	listAgenciesStmt   *sql.Stmt
+	db                   DBTX
+	tx                   *sql.Tx
+	createAgencyStmt     *sql.Stmt
+	createCalendarStmt   *sql.Stmt
+	createRouteStmt      *sql.Stmt
+	createShapeStmt      *sql.Stmt
+	createStopStmt       *sql.Stmt
+	createStopTimeStmt   *sql.Stmt
+	createTripStmt       *sql.Stmt
+	getAgencyStmt        *sql.Stmt
+	listAgenciesStmt     *sql.Stmt
+	listRoutesStmt       *sql.Stmt
+	getAgencyForStopStmt *sql.Stmt
 }
 
 func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 	return &Queries{
-		db:                 tx,
-		tx:                 tx,
-		createAgencyStmt:   q.createAgencyStmt,
-		createCalendarStmt: q.createCalendarStmt,
-		createRouteStmt:    q.createRouteStmt,
-		createShapeStmt:    q.createShapeStmt,
-		createStopStmt:     q.createStopStmt,
-		createStopTimeStmt: q.createStopTimeStmt,
-		createTripStmt:     q.createTripStmt,
-		getAgencyStmt:      q.getAgencyStmt,
-		listAgenciesStmt:   q.listAgenciesStmt,
+		db:                   tx,
+		tx:                   tx,
+		createAgencyStmt:     q.createAgencyStmt,
+		createCalendarStmt:   q.createCalendarStmt,
+		createRouteStmt:      q.createRouteStmt,
+		createShapeStmt:      q.createShapeStmt,
+		createStopStmt:       q.createStopStmt,
+		createStopTimeStmt:   q.createStopTimeStmt,
+		createTripStmt:       q.createTripStmt,
+		getAgencyStmt:        q.getAgencyStmt,
+		listAgenciesStmt:     q.listAgenciesStmt,
+		listRoutesStmt:       q.listRoutesStmt,
+		getAgencyForStopStmt: q.getAgencyForStopStmt,
 	}
 }
