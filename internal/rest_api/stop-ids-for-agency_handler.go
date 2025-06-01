@@ -15,20 +15,19 @@ func (api *RestAPI) stopIDsForAgencyHandler(w http.ResponseWriter, r *http.Reque
 	agency := api.GtfsManager.FindAgency(id)
 
 	if agency == nil {
-		api.sendNotFound(w, r)
+		api.sendNull(w, r)
 		return
 	}
 
 	ctx := context.Background()
 
 	stopIDs, err := api.GtfsManager.GtfsDB.Queries.GetStopIDsForAgency(ctx, id)
-	if err != nil {
 
-	}
-	if stopIDs == nil {
-		api.sendNotFound(w, r)
+	if err != nil {
+		api.serverErrorResponse(w, r, err)
 		return
 	}
+
 	response := make([]string, 0, len(stopIDs))
 	for _, stopID := range stopIDs {
 		response = append(response, utils.FormCombinedID(id, stopID))
