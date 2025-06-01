@@ -4,7 +4,7 @@ tmp_dir = "tmp"
 [build]
   cmd = "go build -gcflags 'all=-N -l' -o bin/maglev ./cmd/api"
   bin = "bin/maglev"
-  full_bin = "make run-dev"
+  full_bin = "make watch"
 
   delay = 1000
   exclude_dir = ["assets", "tmp", "vendor", "bin", ".git"]

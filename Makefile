@@ -1,4 +1,4 @@
-.PHONY: build clean coverage test run lint schema make rin-dev watch
+.PHONY: build clean coverage test run lint schema make watch
 
 include .env
 
@@ -36,7 +36,7 @@ test:
 models:
 	go tool sqlc generate -f gtfsdb/sqlc.yml
 
-run-dev:
+watch:
 	go run ./cmd/api \
 		-data-path=./gtfs.db \
 		-gtfs-url=https://unitrans.ucdavis.edu/media/gtfs/Unitrans_GTFS.zip \
@@ -44,6 +44,3 @@ run-dev:
 		-vehicle-positions-url=https://webservices.umoiq.com/api/gtfs-rt/v1/vehicle-positions/unitrans \
 		-realtime-auth-header-name=x-umo-iq-api-key \
 		-realtime-auth-header-value=$(REALTIME_AUTH_HEADER_VALUE)
-
-watch:
-	air
