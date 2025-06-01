@@ -3,8 +3,10 @@ module maglev.onebusaway.org
 go 1.24.2
 
 require (
+	github.com/davecgh/go-spew v1.1.1
 	github.com/jamespfennell/gtfs v0.1.24
 	github.com/stretchr/testify v1.10.0
+	modernc.org/sqlite v1.37.0
 )
 
 require (
@@ -12,7 +14,6 @@ require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/cubicdaiya/gonp v1.0.4 // indirect
-	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fatih/structtag v1.2.0 // indirect
 	github.com/go-sql-driver/mysql v1.9.2 // indirect
@@ -59,7 +60,6 @@ require (
 	modernc.org/libc v1.62.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.9.1 // indirect
-	modernc.org/sqlite v1.37.0 // indirect
 )
 
 tool github.com/sqlc-dev/sqlc/cmd/sqlc
