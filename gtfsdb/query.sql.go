@@ -402,17 +402,17 @@ func (q *Queries) ListAgencies(ctx context.Context) ([]Agency, error) {
 }
 
 const listRoutes = `-- name: ListRoutes :many
-SELECT 
-    id, 
-    agency_id, 
-    short_name, 
-    long_name, 
-    "desc", 
-    type, 
-    url, 
-    color, 
-    text_color, 
-    continuous_pickup, 
+SELECT
+    id,
+    agency_id,
+    short_name,
+    long_name,
+    "desc",
+    type,
+    url,
+    color,
+    text_color,
+    continuous_pickup,
     continuous_drop_off
 FROM routes
 ORDER BY agency_id, id
@@ -521,4 +521,32 @@ func (q *Queries) GetAgencyForStop(ctx context.Context, stopID string) (Agency, 
 		return Agency{}, err
 	}
 	return agency, nil
+}
+
+const getStopIDsForAgency = `
+	SELECT s.id from stops s
+`
+
+
+func (q *Queries) GetStopIDsForAgency(ctx context.Context, agencyID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, getStopIDsForAgency, agencyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var stopIDs []string
+	for rows.Next() {
+		var stopID string
+		if err := rows.Scan(&stopID); err != nil {
+			return nil, err
+		}
+		stopIDs = append(stopIDs, stopID)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return stopIDs, nil
 }
