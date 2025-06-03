@@ -3,13 +3,14 @@ package restapi
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/url"
+	"strconv"
+
 	"github.com/jamespfennell/gtfs"
 	"maglev.onebusaway.org/gtfsdb"
 	"maglev.onebusaway.org/internal/models"
 	"maglev.onebusaway.org/internal/utils"
-	"net/http"
-	"net/url"
-	"strconv"
 )
 
 func (api *RestAPI) stopsForLocationHandler(w http.ResponseWriter, r *http.Request) {
@@ -35,15 +36,21 @@ func (api *RestAPI) stopsForLocationHandler(w http.ResponseWriter, r *http.Reque
 	agencyIDs := map[string]bool{}
 
 	for _, stop := range stops {
-		rids, err := api.GtfsManager.GtfsDB.Queries.GetRouteIDsForStop(ctx, stop.Id)
-		if err != nil || len(rids) == 0 {
+		ridsIface, err := api.GtfsManager.GtfsDB.Queries.GetRouteIDsForStop(ctx, stop.Id)
+		if err != nil || len(ridsIface) == 0 {
 			continue
 		}
 
-		for _, rid := range rids {
-			agencyId, routeId, _ := utils.ExtractAgencyIDAndCodeID(rid)
+		var rids []string
+		for _, rid := range ridsIface {
+			ridStr, ok := rid.(string)
+			if !ok {
+				continue
+			}
+			agencyId, routeId, _ := utils.ExtractAgencyIDAndCodeID(ridStr)
 			agencyIDs[agencyId] = true
 			routeIDs[routeId] = true
+			rids = append(rids, ridStr)
 		}
 		agency, err := api.GtfsManager.GtfsDB.Queries.GetAgencyForStop(ctx, stop.Id)
 
@@ -111,7 +118,7 @@ func filterAgencies(all []gtfs.Agency, present map[string]bool) []models.AgencyR
 }
 
 func filterRoutes(q *gtfsdb.Queries, ctx context.Context, present map[string]bool) []interface{} {
-	routes, err := q.GetRoutes(ctx)
+	routes, err := q.ListRoutes(ctx)
 	if err != nil {
 		return nil
 	}

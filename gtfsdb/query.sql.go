@@ -12,8 +12,18 @@ import (
 
 const createAgency = `-- name: CreateAgency :one
 INSERT
-OR REPLACE INTO agencies (id, name, url, timezone, lang, phone, fare_url, email)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, name, url, timezone, lang, phone, fare_url, email
+OR REPLACE INTO agencies (
+    id,
+    name,
+    url,
+    timezone,
+    lang,
+    phone,
+    fare_url,
+    email
+)
+VALUES
+    (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, name, url, timezone, lang, phone, fare_url, email
 `
 
 type CreateAgencyParams struct {
@@ -55,9 +65,19 @@ func (q *Queries) CreateAgency(ctx context.Context, arg CreateAgencyParams) (Age
 const createCalendar = `-- name: CreateCalendar :one
 INSERT
 OR REPLACE INTO calendar (
-    id, monday, tuesday, wednesday, thursday,
-    friday, saturday, sunday, start_date, end_date
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date
+    id,
+    monday,
+    tuesday,
+    wednesday,
+    thursday,
+    friday,
+    saturday,
+    sunday,
+    start_date,
+    end_date
+)
+VALUES
+    (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date
 `
 
 type CreateCalendarParams struct {
@@ -105,8 +125,20 @@ func (q *Queries) CreateCalendar(ctx context.Context, arg CreateCalendarParams) 
 const createRoute = `-- name: CreateRoute :one
 INSERT
 OR REPLACE INTO routes (
-    id, agency_id, short_name, long_name, desc, type, url, color, text_color, continuous_pickup, continuous_drop_off
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, agency_id, short_name, long_name, "desc", type, url, color, text_color, continuous_pickup, continuous_drop_off
+    id,
+    agency_id,
+    short_name,
+    long_name,
+    desc,
+    type,
+    url,
+    color,
+    text_color,
+    continuous_pickup,
+    continuous_drop_off
+)
+VALUES
+    (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, agency_id, short_name, long_name, "desc", type, url, color, text_color, continuous_pickup, continuous_drop_off
 `
 
 type CreateRouteParams struct {
@@ -156,9 +188,9 @@ func (q *Queries) CreateRoute(ctx context.Context, arg CreateRouteParams) (Route
 
 const createShape = `-- name: CreateShape :one
 INSERT
-OR REPLACE INTO shapes (
-    shape_id, lat, lon, shape_pt_sequence
-) VALUES (?, ?, ?, ?) RETURNING id, shape_id, lat, lon, shape_pt_sequence
+OR REPLACE INTO shapes (shape_id, lat, lon, shape_pt_sequence)
+VALUES
+    (?, ?, ?, ?) RETURNING id, shape_id, lat, lon, shape_pt_sequence
 `
 
 type CreateShapeParams struct {
@@ -189,10 +221,21 @@ func (q *Queries) CreateShape(ctx context.Context, arg CreateShapeParams) (Shape
 const createStop = `-- name: CreateStop :one
 INSERT
 OR REPLACE INTO stops (
-			id, code, name, desc, lat, lon,
-			zone_id, url, location_type, timezone,
-			wheelchair_boarding, platform_code
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, code, name, "desc", lat, lon, zone_id, url, location_type, timezone, wheelchair_boarding, platform_code
+    id,
+    code,
+    name,
+    desc,
+    lat,
+    lon,
+    zone_id,
+    url,
+    location_type,
+    timezone,
+    wheelchair_boarding,
+    platform_code
+)
+VALUES
+    (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, code, name, "desc", lat, lon, zone_id, url, location_type, timezone, wheelchair_boarding, platform_code
 `
 
 type CreateStopParams struct {
@@ -246,9 +289,18 @@ func (q *Queries) CreateStop(ctx context.Context, arg CreateStopParams) (Stop, e
 const createStopTime = `-- name: CreateStopTime :one
 INSERT
 OR REPLACE INTO stop_times (
-    trip_id, arrival_time, departure_time, stop_id, stop_sequence,
-    stop_headsign, pickup_type, drop_off_type, timepoint
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING trip_id, arrival_time, departure_time, stop_id, stop_sequence, stop_headsign, pickup_type, drop_off_type, shape_dist_traveled, timepoint
+    trip_id,
+    arrival_time,
+    departure_time,
+    stop_id,
+    stop_sequence,
+    stop_headsign,
+    pickup_type,
+    drop_off_type,
+    timepoint
+)
+VALUES
+    (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING trip_id, arrival_time, departure_time, stop_id, stop_sequence, stop_headsign, pickup_type, drop_off_type, shape_dist_traveled, timepoint
 `
 
 type CreateStopTimeParams struct {
@@ -294,9 +346,19 @@ func (q *Queries) CreateStopTime(ctx context.Context, arg CreateStopTimeParams) 
 const createTrip = `-- name: CreateTrip :one
 INSERT
 OR REPLACE INTO trips (
-    id, route_id, service_id, trip_headsign, trip_short_name,
-    direction_id, block_id, shape_id, wheelchair_accessible, bikes_allowed
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, route_id, service_id, trip_headsign, trip_short_name, direction_id, block_id, shape_id, wheelchair_accessible, bikes_allowed
+    id,
+    route_id,
+    service_id,
+    trip_headsign,
+    trip_short_name,
+    direction_id,
+    block_id,
+    shape_id,
+    wheelchair_accessible,
+    bikes_allowed
+)
+VALUES
+    (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, route_id, service_id, trip_headsign, trip_short_name, direction_id, block_id, shape_id, wheelchair_accessible, bikes_allowed
 `
 
 type CreateTripParams struct {
@@ -342,9 +404,14 @@ func (q *Queries) CreateTrip(ctx context.Context, arg CreateTripParams) (Trip, e
 }
 
 const getAgency = `-- name: GetAgency :one
-SELECT id, name, url, timezone, lang, phone, fare_url, email
-FROM agencies
-WHERE id = ? LIMIT 1
+SELECT
+    id, name, url, timezone, lang, phone, fare_url, email
+FROM
+    agencies
+WHERE
+    id = ?
+LIMIT
+    1
 `
 
 func (q *Queries) GetAgency(ctx context.Context, id string) (Agency, error) {
@@ -363,10 +430,116 @@ func (q *Queries) GetAgency(ctx context.Context, id string) (Agency, error) {
 	return i, err
 }
 
+const getAgencyForStop = `-- name: GetAgencyForStop :one
+SELECT DISTINCT
+    a.id,
+    a.name,
+    a.url,
+    a.timezone,
+    a.lang,
+    a.phone,
+    a.fare_url,
+    a.email
+FROM
+    agencies a
+    JOIN routes r ON a.id = r.agency_id
+    JOIN trips t ON r.id = t.route_id
+    JOIN stop_times st ON t.id = st.trip_id
+WHERE
+    st.stop_id = ?
+ORDER BY
+    a.id
+LIMIT
+    1
+`
+
+func (q *Queries) GetAgencyForStop(ctx context.Context, stopID string) (Agency, error) {
+	row := q.queryRow(ctx, q.getAgencyForStopStmt, getAgencyForStop, stopID)
+	var i Agency
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Url,
+		&i.Timezone,
+		&i.Lang,
+		&i.Phone,
+		&i.FareUrl,
+		&i.Email,
+	)
+	return i, err
+}
+
+const getRouteIDsForStop = `-- name: GetRouteIDsForStop :many
+SELECT DISTINCT
+    routes.agency_id || '_' || routes.id AS route_id
+FROM
+    stop_times
+    JOIN trips ON stop_times.trip_id = trips.id
+    JOIN routes ON trips.route_id = routes.id
+WHERE
+    stop_times.stop_id = ?
+`
+
+func (q *Queries) GetRouteIDsForStop(ctx context.Context, stopID string) ([]interface{}, error) {
+	rows, err := q.query(ctx, q.getRouteIDsForStopStmt, getRouteIDsForStop, stopID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []interface{}
+	for rows.Next() {
+		var route_id interface{}
+		if err := rows.Scan(&route_id); err != nil {
+			return nil, err
+		}
+		items = append(items, route_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getStopIDsForAgency = `-- name: GetStopIDsForAgency :many
+SELECT
+    s.id
+FROM
+    stops s
+`
+
+func (q *Queries) GetStopIDsForAgency(ctx context.Context) ([]string, error) {
+	rows, err := q.query(ctx, q.getStopIDsForAgencyStmt, getStopIDsForAgency)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAgencies = `-- name: ListAgencies :many
-SELECT id, name, url, timezone, lang, phone, fare_url, email
-FROM agencies
-ORDER BY id
+SELECT
+    id, name, url, timezone, lang, phone, fare_url, email
+FROM
+    agencies
+ORDER BY
+    id
 `
 
 func (q *Queries) ListAgencies(ctx context.Context) ([]Agency, error) {
@@ -414,17 +587,19 @@ SELECT
     text_color,
     continuous_pickup,
     continuous_drop_off
-FROM routes
-ORDER BY agency_id, id
+FROM
+    routes
+ORDER BY
+    agency_id,
+    id
 `
 
-func (q *Queries) GetRoutes(ctx context.Context) ([]Route, error) {
+func (q *Queries) ListRoutes(ctx context.Context) ([]Route, error) {
 	rows, err := q.query(ctx, q.listRoutesStmt, listRoutes)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-
 	var items []Route
 	for rows.Next() {
 		var i Route
@@ -452,101 +627,4 @@ func (q *Queries) GetRoutes(ctx context.Context) ([]Route, error) {
 		return nil, err
 	}
 	return items, nil
-}
-
-const getRouteIDsForStop = `
-	SELECT DISTINCT routes.agency_id || '_' || routes.id AS route_id
-	FROM stop_times
-	JOIN trips ON stop_times.trip_id = trips.id
-	JOIN routes ON trips.route_id = routes.id
-	WHERE stop_times.stop_id = ?
-	`
-
-// Returns the route ID in the format {agency_id}_{route_id} for a given stop ID
-func (q *Queries) GetRouteIDsForStop(ctx context.Context, stopID string) ([]string, error) {
-	rows, err := q.db.QueryContext(ctx, getRouteIDsForStop, stopID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var combinedIDs []string
-	for rows.Next() {
-		var combinedID string
-		if err := rows.Scan(&combinedID); err != nil {
-			return nil, err
-		}
-		combinedIDs = append(combinedIDs, combinedID)
-	}
-	return combinedIDs, nil
-}
-
-const getAgencyForStop = `-- name: GetAgencyForStop :many
-SELECT DISTINCT a.id, a.name, a.url, a.timezone, a.lang, a.phone, a.fare_url, a.email
-FROM agencies a
-JOIN routes r ON a.id = r.agency_id
-JOIN trips t ON r.id = t.route_id
-JOIN stop_times st ON t.id = st.trip_id
-WHERE st.stop_id = ?
-ORDER BY a.id
-`
-
-// GetAgencyForStop returns all agencies that serve a particular stop
-func (q *Queries) GetAgencyForStop(ctx context.Context, stopID string) (Agency, error) {
-	rows, err := q.query(ctx, q.getAgencyForStopStmt, getAgencyForStop, stopID)
-	if err != nil {
-		return Agency{}, err
-	}
-	defer rows.Close()
-
-	var agency Agency
-	if rows.Next() {
-		if err := rows.Scan(
-			&agency.ID,
-			&agency.Name,
-			&agency.Url,
-			&agency.Timezone,
-			&agency.Lang,
-			&agency.Phone,
-			&agency.FareUrl,
-			&agency.Email,
-		); err != nil {
-			return Agency{}, err
-		}
-	}
-	if err := rows.Close(); err != nil {
-		return Agency{}, err
-	}
-	if err := rows.Err(); err != nil {
-		return Agency{}, err
-	}
-	return agency, nil
-}
-
-const getStopIDsForAgency = `
-	SELECT s.id from stops s
-`
-
-
-func (q *Queries) GetStopIDsForAgency(ctx context.Context, agencyID string) ([]string, error) {
-	rows, err := q.db.QueryContext(ctx, getStopIDsForAgency, agencyID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var stopIDs []string
-	for rows.Next() {
-		var stopID string
-		if err := rows.Scan(&stopID); err != nil {
-			return nil, err
-		}
-		stopIDs = append(stopIDs, stopID)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return stopIDs, nil
 }
