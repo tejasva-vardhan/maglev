@@ -550,3 +550,30 @@ func (q *Queries) GetStopIDsForAgency(ctx context.Context, agencyID string) ([]s
 	}
 	return stopIDs, nil
 }
+
+const getRouteIdsForAgency = `
+	SELECT r.id FROM routes r
+`
+
+func (q *Queries) GetRouteIDsForAgency(ctx context.Context, agencyID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, getRouteIdsForAgency, agencyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var routeIDs []string
+	for rows.Next() {
+		var routeID string
+		if err := rows.Scan(&routeID); err != nil {
+			return nil, err
+		}
+		routeIDs = append(routeIDs, routeID)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return routeIDs, nil
+}
