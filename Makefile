@@ -37,10 +37,4 @@ models:
 	go tool sqlc generate -f gtfsdb/sqlc.yml
 
 watch:
-	go run ./cmd/api \
-		-data-path=./gtfs.db \
-		-gtfs-url=https://unitrans.ucdavis.edu/media/gtfs/Unitrans_GTFS.zip \
-		-trip-updates-url=https://webservices.umoiq.com/api/gtfs-rt/v1/trip-updates/unitrans \
-		-vehicle-positions-url=https://webservices.umoiq.com/api/gtfs-rt/v1/vehicle-positions/unitrans \
-		-realtime-auth-header-name=x-umo-iq-api-key \
-		-realtime-auth-header-value=$(REALTIME_AUTH_HEADER_VALUE)
+	air
