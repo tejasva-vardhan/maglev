@@ -179,4 +179,20 @@ LIMIT
 SELECT
     s.id
 FROM
-    stops s
+    stops s;
+
+-- name: GetTrip :one
+SELECT
+    *
+FROM
+    trips
+WHERE
+    id = ?;
+
+-- name: GetRoute :one
+SELECT
+    *
+FROM
+    routes
+WHERE
+    id = ?;
