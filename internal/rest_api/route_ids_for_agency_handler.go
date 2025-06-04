@@ -1,7 +1,6 @@
 package restapi
 
 import (
-	"context"
 	"net/http"
 
 	"maglev.onebusaway.org/internal/models"
@@ -18,7 +17,7 @@ func (api *RestAPI) routeIDsForAgencyHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	ctx := context.Background()
+	ctx := r.Context()
 
 	routeIDs, err := api.GtfsManager.GtfsDB.Queries.GetRouteIDsForAgency(ctx, id)
 
