@@ -54,6 +54,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getRouteStmt, err = db.PrepareContext(ctx, getRoute); err != nil {
 		return nil, fmt.Errorf("error preparing query GetRoute: %w", err)
 	}
+	if q.getRouteIDsForAgencyStmt, err = db.PrepareContext(ctx, getRouteIDsForAgency); err != nil {
+		return nil, fmt.Errorf("error preparing query GetRouteIDsForAgency: %w", err)
+	}
 	if q.getRouteIDsForStopStmt, err = db.PrepareContext(ctx, getRouteIDsForStop); err != nil {
 		return nil, fmt.Errorf("error preparing query GetRouteIDsForStop: %w", err)
 	}
@@ -124,6 +127,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getRouteStmt: %w", cerr)
 		}
 	}
+	if q.getRouteIDsForAgencyStmt != nil {
+		if cerr := q.getRouteIDsForAgencyStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getRouteIDsForAgencyStmt: %w", cerr)
+		}
+	}
 	if q.getRouteIDsForStopStmt != nil {
 		if cerr := q.getRouteIDsForStopStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getRouteIDsForStopStmt: %w", cerr)
@@ -186,43 +194,45 @@ func (q *Queries) queryRow(ctx context.Context, stmt *sql.Stmt, query string, ar
 }
 
 type Queries struct {
-	db                      DBTX
-	tx                      *sql.Tx
-	createAgencyStmt        *sql.Stmt
-	createCalendarStmt      *sql.Stmt
-	createRouteStmt         *sql.Stmt
-	createShapeStmt         *sql.Stmt
-	createStopStmt          *sql.Stmt
-	createStopTimeStmt      *sql.Stmt
-	createTripStmt          *sql.Stmt
-	getAgencyStmt           *sql.Stmt
-	getAgencyForStopStmt    *sql.Stmt
+	db                       DBTX
+	tx                       *sql.Tx
+	createAgencyStmt         *sql.Stmt
+	createCalendarStmt       *sql.Stmt
+	createRouteStmt          *sql.Stmt
+	createShapeStmt          *sql.Stmt
+	createStopStmt           *sql.Stmt
+	createStopTimeStmt       *sql.Stmt
+	createTripStmt           *sql.Stmt
+	getAgencyStmt            *sql.Stmt
+	getAgencyForStopStmt     *sql.Stmt
 	getRouteStmt            *sql.Stmt
-	getRouteIDsForStopStmt  *sql.Stmt
-	getStopIDsForAgencyStmt *sql.Stmt
+	getRouteIDsForAgencyStmt *sql.Stmt
+	getRouteIDsForStopStmt   *sql.Stmt
+	getStopIDsForAgencyStmt  *sql.Stmt
 	getTripStmt             *sql.Stmt
-	listAgenciesStmt        *sql.Stmt
-	listRoutesStmt          *sql.Stmt
+	listAgenciesStmt         *sql.Stmt
+	listRoutesStmt           *sql.Stmt
 }
 
 func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 	return &Queries{
-		db:                      tx,
-		tx:                      tx,
-		createAgencyStmt:        q.createAgencyStmt,
-		createCalendarStmt:      q.createCalendarStmt,
-		createRouteStmt:         q.createRouteStmt,
-		createShapeStmt:         q.createShapeStmt,
-		createStopStmt:          q.createStopStmt,
-		createStopTimeStmt:      q.createStopTimeStmt,
-		createTripStmt:          q.createTripStmt,
-		getAgencyStmt:           q.getAgencyStmt,
-		getAgencyForStopStmt:    q.getAgencyForStopStmt,
+		db:                       tx,
+		tx:                       tx,
+		createAgencyStmt:         q.createAgencyStmt,
+		createCalendarStmt:       q.createCalendarStmt,
+		createRouteStmt:          q.createRouteStmt,
+		createShapeStmt:          q.createShapeStmt,
+		createStopStmt:           q.createStopStmt,
+		createStopTimeStmt:       q.createStopTimeStmt,
+		createTripStmt:           q.createTripStmt,
+		getAgencyStmt:            q.getAgencyStmt,
+		getAgencyForStopStmt:     q.getAgencyForStopStmt,
 		getRouteStmt:            q.getRouteStmt,
-		getRouteIDsForStopStmt:  q.getRouteIDsForStopStmt,
-		getStopIDsForAgencyStmt: q.getStopIDsForAgencyStmt,
+		getRouteIDsForAgencyStmt: q.getRouteIDsForAgencyStmt,
+		getRouteIDsForStopStmt:   q.getRouteIDsForStopStmt,
+		getStopIDsForAgencyStmt:  q.getStopIDsForAgencyStmt,
 		getTripStmt:             q.getTripStmt,
-		listAgenciesStmt:        q.listAgenciesStmt,
-		listRoutesStmt:          q.listRoutesStmt,
+		listAgenciesStmt:         q.listAgenciesStmt,
+		listRoutesStmt:           q.listRoutesStmt,
 	}
 }

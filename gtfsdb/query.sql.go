@@ -497,6 +497,39 @@ func (q *Queries) GetRoute(ctx context.Context, id string) (Route, error) {
 	return i, err
 }
 
+const getRouteIDsForAgency = `-- name: GetRouteIDsForAgency :many
+SELECT
+    r.id
+FROM
+    routes r
+    JOIN agencies a ON r.agency_id = a.id
+WHERE
+    a.id = ?
+`
+
+func (q *Queries) GetRouteIDsForAgency(ctx context.Context, id string) ([]string, error) {
+	rows, err := q.query(ctx, q.getRouteIDsForAgencyStmt, getRouteIDsForAgency, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getRouteIDsForStop = `-- name: GetRouteIDsForStop :many
 SELECT DISTINCT
     routes.agency_id || '_' || routes.id AS route_id
