@@ -3,13 +3,14 @@ package gtfs
 import (
 	"context"
 	"fmt"
-	"maglev.onebusaway.org/gtfsdb"
-	"maglev.onebusaway.org/internal/utils"
 	"math"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"maglev.onebusaway.org/gtfsdb"
+	"maglev.onebusaway.org/internal/utils"
 
 	"github.com/jamespfennell/gtfs"
 	_ "modernc.org/sqlite" // Pure Go SQLite driver
@@ -67,6 +68,10 @@ func InitGTFSManager(config Config) (*Manager, error) {
 
 func (manager *Manager) GetAgencies() []gtfs.Agency {
 	return manager.gtfsData.Agencies
+}
+
+func (manager *Manager) GetTrips() []gtfs.ScheduledTrip {
+	return manager.gtfsData.Trips
 }
 
 func (manager *Manager) GetStaticData() *gtfs.Static {

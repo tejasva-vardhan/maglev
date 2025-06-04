@@ -469,6 +469,34 @@ func (q *Queries) GetAgencyForStop(ctx context.Context, stopID string) (Agency, 
 	return i, err
 }
 
+const getRoute = `-- name: GetRoute :one
+SELECT
+    id, agency_id, short_name, long_name, "desc", type, url, color, text_color, continuous_pickup, continuous_drop_off
+FROM
+    routes
+WHERE
+    id = ?
+`
+
+func (q *Queries) GetRoute(ctx context.Context, id string) (Route, error) {
+	row := q.queryRow(ctx, q.getRouteStmt, getRoute, id)
+	var i Route
+	err := row.Scan(
+		&i.ID,
+		&i.AgencyID,
+		&i.ShortName,
+		&i.LongName,
+		&i.Desc,
+		&i.Type,
+		&i.Url,
+		&i.Color,
+		&i.TextColor,
+		&i.ContinuousPickup,
+		&i.ContinuousDropOff,
+	)
+	return i, err
+}
+
 const getRouteIDsForStop = `-- name: GetRouteIDsForStop :many
 SELECT DISTINCT
     routes.agency_id || '_' || routes.id AS route_id
@@ -531,6 +559,33 @@ func (q *Queries) GetStopIDsForAgency(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const getTrip = `-- name: GetTrip :one
+SELECT
+    id, route_id, service_id, trip_headsign, trip_short_name, direction_id, block_id, shape_id, wheelchair_accessible, bikes_allowed
+FROM
+    trips
+WHERE
+    id = ?
+`
+
+func (q *Queries) GetTrip(ctx context.Context, id string) (Trip, error) {
+	row := q.queryRow(ctx, q.getTripStmt, getTrip, id)
+	var i Trip
+	err := row.Scan(
+		&i.ID,
+		&i.RouteID,
+		&i.ServiceID,
+		&i.TripHeadsign,
+		&i.TripShortName,
+		&i.DirectionID,
+		&i.BlockID,
+		&i.ShapeID,
+		&i.WheelchairAccessible,
+		&i.BikesAllowed,
+	)
+	return i, err
 }
 
 const listAgencies = `-- name: ListAgencies :many
