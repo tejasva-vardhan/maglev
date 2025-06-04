@@ -181,11 +181,18 @@ SELECT
 FROM
     stops s;
 
--- name: GetRouteIDsForAgency :many
+-- name: GetTrip :one
 SELECT
-    r.id
+    *
 FROM
-    routes r
-    JOIN agencies a ON r.agency_id = a.id
+    trips
 WHERE
-    a.id = ?;
+    id = ?;
+
+-- name: GetRoute :one
+SELECT
+    *
+FROM
+    routes
+WHERE
+    id = ?;
