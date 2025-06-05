@@ -205,3 +205,21 @@ FROM
     routes
 WHERE
     id = ?;
+
+-- name: GetStop :one
+SELECT
+    *
+FROM
+    stops
+WHERE
+    id = ?;
+
+-- name: GetRoutesForStop :many
+SELECT DISTINCT
+    routes.*
+FROM
+    stop_times
+    JOIN trips ON stop_times.trip_id = trips.id
+    JOIN routes ON trips.route_id = routes.id
+WHERE
+    stop_times.stop_id = ?;
