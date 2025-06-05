@@ -205,11 +205,11 @@ type Queries struct {
 	createTripStmt           *sql.Stmt
 	getAgencyStmt            *sql.Stmt
 	getAgencyForStopStmt     *sql.Stmt
-	getRouteStmt            *sql.Stmt
+	getRouteStmt             *sql.Stmt
 	getRouteIDsForAgencyStmt *sql.Stmt
 	getRouteIDsForStopStmt   *sql.Stmt
 	getStopIDsForAgencyStmt  *sql.Stmt
-	getTripStmt             *sql.Stmt
+	getTripStmt              *sql.Stmt
 	listAgenciesStmt         *sql.Stmt
 	listRoutesStmt           *sql.Stmt
 }
@@ -227,11 +227,11 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		createTripStmt:           q.createTripStmt,
 		getAgencyStmt:            q.getAgencyStmt,
 		getAgencyForStopStmt:     q.getAgencyForStopStmt,
-		getRouteStmt:            q.getRouteStmt,
+		getRouteStmt:             q.getRouteStmt,
 		getRouteIDsForAgencyStmt: q.getRouteIDsForAgencyStmt,
 		getRouteIDsForStopStmt:   q.getRouteIDsForStopStmt,
 		getStopIDsForAgencyStmt:  q.getStopIDsForAgencyStmt,
-		getTripStmt:             q.getTripStmt,
+		getTripStmt:              q.getTripStmt,
 		listAgenciesStmt:         q.listAgenciesStmt,
 		listRoutesStmt:           q.listRoutesStmt,
 	}

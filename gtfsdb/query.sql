@@ -143,6 +143,15 @@ ORDER BY
     agency_id,
     id;
 
+-- name: GetRouteIDsForAgency :many
+SELECT
+    r.id
+FROM
+    routes r
+    JOIN agencies a ON r.agency_id = a.id
+WHERE
+    a.id = ?;
+
 -- name: GetRouteIDsForStop :many
 SELECT DISTINCT
     routes.agency_id || '_' || routes.id AS route_id
