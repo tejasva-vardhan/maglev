@@ -12,6 +12,11 @@ import (
 func (api *RestAPI) shapes(w http.ResponseWriter, r *http.Request) {
 	_, shapeID, err := utils.ExtractAgencyIDAndCodeID(utils.ExtractIDFromParams(r))
 
+	if err != nil {
+		api.serverErrorResponse(w, r, err)
+		return
+	}
+
 	ctx := r.Context()
 	shapes, err := api.GtfsManager.GtfsDB.Queries.GetShapeByID(ctx, shapeID)
 
