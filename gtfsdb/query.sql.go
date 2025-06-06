@@ -533,6 +533,39 @@ func (q *Queries) GetRoute(ctx context.Context, id string) (Route, error) {
 	return i, err
 }
 
+const getRouteIDsForAgency = `-- name: GetRouteIDsForAgency :many
+SELECT
+    r.id
+FROM
+    routes r
+    JOIN agencies a ON r.agency_id = a.id
+WHERE
+    a.id = ?
+`
+
+func (q *Queries) GetRouteIDsForAgency(ctx context.Context, id string) ([]string, error) {
+	rows, err := q.query(ctx, q.getRouteIDsForAgencyStmt, getRouteIDsForAgency, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getRouteIDsForStop = `-- name: GetRouteIDsForStop :many
 SELECT DISTINCT
     routes.agency_id || '_' || routes.id AS route_id
@@ -557,6 +590,52 @@ func (q *Queries) GetRouteIDsForStop(ctx context.Context, stopID string) ([]inte
 			return nil, err
 		}
 		items = append(items, route_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getRoutesForStop = `-- name: GetRoutesForStop :many
+SELECT DISTINCT
+    routes.id, routes.agency_id, routes.short_name, routes.long_name, routes."desc", routes.type, routes.url, routes.color, routes.text_color, routes.continuous_pickup, routes.continuous_drop_off
+FROM
+    stop_times
+    JOIN trips ON stop_times.trip_id = trips.id
+    JOIN routes ON trips.route_id = routes.id
+WHERE
+    stop_times.stop_id = ?
+`
+
+func (q *Queries) GetRoutesForStop(ctx context.Context, stopID string) ([]Route, error) {
+	rows, err := q.query(ctx, q.getRoutesForStopStmt, getRoutesForStop, stopID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Route
+	for rows.Next() {
+		var i Route
+		if err := rows.Scan(
+			&i.ID,
+			&i.AgencyID,
+			&i.ShortName,
+			&i.LongName,
+			&i.Desc,
+			&i.Type,
+			&i.Url,
+			&i.Color,
+			&i.TextColor,
+			&i.ContinuousPickup,
+			&i.ContinuousDropOff,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -603,6 +682,35 @@ func (q *Queries) GetShapeByID(ctx context.Context, shapeID string) ([]Shape, er
 		return nil, err
 	}
 	return items, nil
+}
+
+const getStop = `-- name: GetStop :one
+SELECT
+    id, code, name, "desc", lat, lon, zone_id, url, location_type, timezone, wheelchair_boarding, platform_code
+FROM
+    stops
+WHERE
+    id = ?
+`
+
+func (q *Queries) GetStop(ctx context.Context, id string) (Stop, error) {
+	row := q.queryRow(ctx, q.getStopStmt, getStop, id)
+	var i Stop
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Name,
+		&i.Desc,
+		&i.Lat,
+		&i.Lon,
+		&i.ZoneID,
+		&i.Url,
+		&i.LocationType,
+		&i.Timezone,
+		&i.WheelchairBoarding,
+		&i.PlatformCode,
+	)
+	return i, err
 }
 
 const getStopIDsForAgency = `-- name: GetStopIDsForAgency :many
