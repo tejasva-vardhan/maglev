@@ -223,3 +223,17 @@ FROM
     JOIN routes ON trips.route_id = routes.id
 WHERE
     stop_times.stop_id = ?;
+
+-- name: GetAllShapes :many
+SELECT
+    *
+FROM
+    shapes;
+
+-- name: GetShapeByID :many
+SELECT
+    *
+FROM
+    shapes
+WHERE
+    shape_id = ?;
