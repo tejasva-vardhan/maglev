@@ -469,6 +469,42 @@ func (q *Queries) GetAgencyForStop(ctx context.Context, stopID string) (Agency, 
 	return i, err
 }
 
+const getAllShapes = `-- name: GetAllShapes :many
+SELECT
+    id, shape_id, lat, lon, shape_pt_sequence
+FROM
+    shapes
+`
+
+func (q *Queries) GetAllShapes(ctx context.Context) ([]Shape, error) {
+	rows, err := q.query(ctx, q.getAllShapesStmt, getAllShapes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Shape
+	for rows.Next() {
+		var i Shape
+		if err := rows.Scan(
+			&i.ID,
+			&i.ShapeID,
+			&i.Lat,
+			&i.Lon,
+			&i.ShapePtSequence,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getRoute = `-- name: GetRoute :one
 SELECT
     id, agency_id, short_name, long_name, "desc", type, url, color, text_color, continuous_pickup, continuous_drop_off
@@ -497,39 +533,6 @@ func (q *Queries) GetRoute(ctx context.Context, id string) (Route, error) {
 	return i, err
 }
 
-const getRouteIDsForAgency = `-- name: GetRouteIDsForAgency :many
-SELECT
-    r.id
-FROM
-    routes r
-    JOIN agencies a ON r.agency_id = a.id
-WHERE
-    a.id = ?
-`
-
-func (q *Queries) GetRouteIDsForAgency(ctx context.Context, id string) ([]string, error) {
-	rows, err := q.query(ctx, q.getRouteIDsForAgencyStmt, getRouteIDsForAgency, id)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getRouteIDsForStop = `-- name: GetRouteIDsForStop :many
 SELECT DISTINCT
     routes.agency_id || '_' || routes.id AS route_id
@@ -554,6 +557,44 @@ func (q *Queries) GetRouteIDsForStop(ctx context.Context, stopID string) ([]inte
 			return nil, err
 		}
 		items = append(items, route_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getShapeByID = `-- name: GetShapeByID :many
+SELECT
+    id, shape_id, lat, lon, shape_pt_sequence
+FROM
+    shapes
+WHERE
+    shape_id = ?
+`
+
+func (q *Queries) GetShapeByID(ctx context.Context, shapeID string) ([]Shape, error) {
+	rows, err := q.query(ctx, q.getShapeByIDStmt, getShapeByID, shapeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Shape
+	for rows.Next() {
+		var i Shape
+		if err := rows.Scan(
+			&i.ID,
+			&i.ShapeID,
+			&i.Lat,
+			&i.Lon,
+			&i.ShapePtSequence,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

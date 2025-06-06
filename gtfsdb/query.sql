@@ -196,3 +196,17 @@ FROM
     routes
 WHERE
     id = ?;
+
+-- name: GetAllShapes :many
+SELECT
+    *
+FROM
+    shapes;
+
+-- name: GetShapeByID :many
+SELECT
+    *
+FROM
+    shapes
+WHERE
+    shape_id = ?;
