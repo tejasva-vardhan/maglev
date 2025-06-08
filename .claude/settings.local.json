@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:api.pugetsound.onebusaway.org)",
+      "WebFetch(domain:developer.onebusaway.org)",
+      "Bash(rg:*)",
+      "WebFetch(domain:pkg.go.dev)",
+      "Bash(make:*)",
+      "Bash(go test:*)",
+      "Bash(go tool cover:*)",
+      "Bash(go list:*)",
+      "Bash(golangci-lint run:*)"
+    ],
+    "deny": []
+  }
+}

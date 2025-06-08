@@ -1,0 +1,193 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Development Commands
+
+All commands are managed through the Makefile:
+
+- `make run` - Build and run the server with test API key
+- `make build` - Build the application binary to bin/maglev
+- `make test` - Run all tests
+- `make lint` - Run golangci-lint (requires installation: `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest`)
+- `make coverage` - Generate test coverage report with HTML output
+- `make models` - Regenerate sqlc models from SQL queries
+- `make watch` - Run with Air for live reloading during development
+- `make clean` - Clean build artifacts
+
+## Architecture Overview
+
+This is a Go 1.24.2+ application that provides a REST API for OneBusAway transit data. The architecture follows a layered design:
+
+### Core Components
+
+- **Application Layer** (`internal/app/`): Central dependency injection container holding config, logger, and GTFS manager
+- **REST API Layer** (`internal/rest_api/`): HTTP handlers for the OneBusAway API endpoints
+- **GTFS Manager** (`internal/gtfs/`): Manages both static GTFS data and real-time feeds (trip updates, vehicle positions)
+- **Database Layer** (`gtfsdb/`): SQLite database with sqlc-generated Go code for type-safe SQL operations
+- **Models** (`internal/models/`): Business logic and data structures for agencies, routes, stops, trips, vehicles
+
+### Data Flow
+
+1. GTFS static data is loaded from URLs or local files into SQLite via the GTFS manager
+2. Real-time data (GTFS-RT) is periodically fetched and merged with static data
+3. REST API handlers query the GTFS manager and database to serve OneBusAway-compatible responses
+4. All database access uses sqlc-generated type-safe queries from `gtfsdb/query.sql`
+
+### Key Patterns
+
+- Dependency injection through the `Application` struct
+- All HTTP handlers embed `*app.Application` for access to shared dependencies
+- Database operations use sqlc for compile-time query validation
+- Real-time data is managed with read-write mutexes for concurrent access
+- Configuration is handled through command-line flags with defaults
+
+## Database Management
+
+The project uses SQLite with sqlc for type-safe database access:
+
+- Schema: `gtfsdb/schema.sql`
+- Queries: `gtfsdb/query.sql` 
+- Generated code: `gtfsdb/query.sql.go` and `gtfsdb/models.go`
+- Configuration: `gtfsdb/sqlc.yml`
+
+After modifying SQL queries or schema, run `make models` to regenerate the Go code.
+
+## Testing
+
+- Run single test: `go test ./path/to/package -run TestName`
+- Run tests with verbose output: `go test -v ./...`
+- Generate coverage: `make coverage` (opens HTML report in browser)
+
+Test files follow Go conventions with `_test.go` suffix and are co-located with the code they test.
+
+## Data Access Patterns
+
+### GTFS Manager vs Database Access
+
+The GTFS Manager provides two types of data access:
+
+**In-Memory Data** (from `manager.gtfsData`):
+- `FindAgency(id)` - Direct agency lookup
+- `RoutesForAgencyID(id)` - Routes for an agency
+- `VehiclesForAgencyID(id)` - Real-time vehicle data
+- Access via: `api.GtfsManager.FindAgency()`, etc.
+
+**Database Queries** (via sqlc):
+- `GetRoute(ctx, id)` - Single route by ID
+- `GetAgency(ctx, id)` - Single agency by ID  
+- Access via: `api.GtfsManager.GtfsDB.Queries.GetRoute()`, etc.
+- **Important**: No `FindRoute()` method exists - use database queries for route lookups
+
+### Working with sqlc Models
+
+Database models use `sql.NullString` for optional fields:
+
+```go
+// Always check .Valid before accessing .String
+if route.ShortName.Valid {
+    shortName = route.ShortName.String
+}
+```
+
+Common nullable fields: `ShortName`, `LongName`, `Desc`, `Url`, `Color`, `TextColor`
+
+## OneBusAway API Patterns
+
+### Response Structure
+
+All endpoints return standardized responses using `models.NewListResponse()`:
+
+```go
+response := models.NewListResponse(dataList, references)
+```
+
+### Building References
+
+Use maps to deduplicate, then convert to slices:
+
+```go
+// Build reference maps to avoid duplicates
+agencyRefs := make(map[string]models.AgencyReference)
+routeRefs := make(map[string]models.Route)
+
+// Convert to slices for final response
+agencyRefList := make([]models.AgencyReference, 0, len(agencyRefs))
+for _, ref := range agencyRefs {
+    agencyRefList = append(agencyRefList, ref)
+}
+```
+
+### GTFS-RT Status Mapping
+
+Map GTFS-RT CurrentStatus enum to OneBusAway strings:
+- `0` (INCOMING_AT) → `"INCOMING_AT"` / `"approaching"`
+- `1` (STOPPED_AT) → `"STOPPED_AT"` / `"stopped"`  
+- `2` (IN_TRANSIT_TO) → `"IN_TRANSIT_TO"` / `"in_progress"`
+- Default → `"SCHEDULED"` / `"scheduled"`
+
+### API Route Registration
+
+Check `internal/rest_api/routes.go` first - many endpoints are already registered but may need implementation updates. Route patterns follow: `/api/where/{endpoint}/{id}` with API key validation.
+
+## Testing Real-Time Data
+
+### Test Data Matching Requirements
+
+**Critical**: GTFS static data and GTFS-RT data must be from the same transit agency to achieve meaningful test coverage. Mismatched data results in:
+- Real-time vehicles that don't match any agency routes
+- Vehicle processing loops that never execute with actual data
+- Poor test coverage of core functionality
+
+**Example**: Using RABA static data (`raba.zip`) with Unitrans real-time data (`unitrans-*.pb`) will load vehicles but `VehiclesForAgencyID()` returns 0 vehicles.
+
+### Real-Time Test Infrastructure
+
+For testing GTFS-RT functionality, use HTTP test servers to serve local `.pb` files:
+
+```go
+func createTestApiWithRealTimeData(t *testing.T) (*RestAPI, func()) {
+    mux := http.NewServeMux()
+    
+    mux.HandleFunc("/vehicle-positions", func(w http.ResponseWriter, r *http.Request) {
+        data, err := os.ReadFile(filepath.Join("../../testdata", "agency-vehicle-positions.pb"))
+        require.NoError(t, err)
+        w.Header().Set("Content-Type", "application/x-protobuf")
+        w.Write(data)
+    })
+    
+    server := httptest.NewServer(mux)
+    
+    gtfsConfig := gtfs.Config{
+        GtfsURL:              filepath.Join("../../testdata", "agency.zip"),
+        VehiclePositionsURL:  server.URL + "/vehicle-positions",
+        TripUpdatesURL:       server.URL + "/trip-updates",
+    }
+    
+    // ... rest of setup
+    return api, server.Close
+}
+```
+
+**Benefits**:
+- Simulates real-world HTTP usage without modifying production code
+- Keeps test-specific infrastructure isolated
+- Allows testing with matching static/real-time data pairs
+- Easy to set up and maintain
+
+### Coverage Improvements
+
+Real-time data testing can dramatically improve coverage:
+- **Before matching data**: ~30% handler coverage
+- **After matching data**: ~86% handler coverage
+
+Test the complete vehicle processing pipeline including timestamp conversion, location mapping, status translation, and reference building.
+
+## REST API Documentation
+
+The official REST API documentation is available at: https://developer.onebusaway.org/api/where/methods
+
+The Open API specification is located at https://github.com/OneBusAway/sdk-config/blob/main/openapi.yml
+
+You should always fetch the latest version of the OpenAPI specification from the OneBusAway SDK Config repository
+before implementing new endpoints or modifying existing ones.
