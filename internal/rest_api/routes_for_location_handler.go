@@ -17,7 +17,7 @@ func (api *RestAPI) routesForLocationHandler(w http.ResponseWriter, r *http.Requ
 	latSpan, _ := utils.ParseFloatParam(queryParams, "latSpan", fieldErrors)
 	lonSpan, _ := utils.ParseFloatParam(queryParams, "lonSpan", fieldErrors)
 	query := queryParams.Get("query")
-
+	query = strings.ToLower(query)
 	if len(fieldErrors) > 0 {
 		api.validationErrorResponse(w, r, fieldErrors)
 		return
@@ -44,7 +44,7 @@ func (api *RestAPI) routesForLocationHandler(w http.ResponseWriter, r *http.Requ
 		}
 
 		for _, route := range routes {
-			if query != "" && strings.ToLower(route.ShortName.String) != strings.ToLower(query) {
+			if query != "" && strings.ToLower(route.ShortName.String) != query {
 				continue
 			}
 			agencyIDs[route.AgencyID] = true
