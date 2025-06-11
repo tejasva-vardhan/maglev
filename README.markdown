@@ -1,3 +1,5 @@
+<img src="marketing/maglev-header.png" alt="OneBusAway Maglev" width="600">
+
 # OBA Maglev
 
 A complete rewrite of the OneBusAway (OBA) REST API server in Golang.
