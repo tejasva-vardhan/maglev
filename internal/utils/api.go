@@ -3,6 +3,8 @@ package utils
 import (
 	"fmt"
 	"github.com/jamespfennell/gtfs"
+	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -48,4 +50,29 @@ func MapWheelchairBoarding(wheelchairBoarding gtfs.WheelchairBoarding) string {
 	default:
 		return "UNKNOWN"
 	}
+}
+
+// ParseFloatParam retrieves a float64 value from the provided URL query parameters.
+// If the key is not present or the value is invalid, it returns 0 and updates the fieldErrors map.
+// - params: URL query parameters.
+// - key: The key to look for in the query parameters.
+// - fieldErrors: A map to collect validation errors for fields.
+// Returns:
+// - The parsed float64 value (or 0 if invalid).
+// - The updated fieldErrors map containing any validation errors.
+func ParseFloatParam(params url.Values, key string, fieldErrors map[string][]string) (float64, map[string][]string) {
+	if fieldErrors == nil {
+		fieldErrors = make(map[string][]string)
+	}
+
+	val := params.Get(key)
+	if val == "" {
+		return 0, fieldErrors
+	}
+
+	f, err := strconv.ParseFloat(val, 64)
+	if err != nil {
+		fieldErrors[key] = append(fieldErrors[key], fmt.Sprintf("Invalid field value for field %q.", key))
+	}
+	return f, fieldErrors
 }

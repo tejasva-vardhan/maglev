@@ -5,9 +5,10 @@ import (
 	"maglev.onebusaway.org/internal/models"
 	"maglev.onebusaway.org/internal/utils"
 	"net/http"
+	"strings"
 )
 
-func (api *RestAPI) stopsForLocationHandler(w http.ResponseWriter, r *http.Request) {
+func (api *RestAPI) routesForLocationHandler(w http.ResponseWriter, r *http.Request) {
 	queryParams := r.URL.Query()
 
 	lat, fieldErrors := utils.ParseFloatParam(queryParams, "lat", nil)
@@ -16,63 +17,60 @@ func (api *RestAPI) stopsForLocationHandler(w http.ResponseWriter, r *http.Reque
 	latSpan, _ := utils.ParseFloatParam(queryParams, "latSpan", fieldErrors)
 	lonSpan, _ := utils.ParseFloatParam(queryParams, "lonSpan", fieldErrors)
 	query := queryParams.Get("query")
-
+	query = strings.ToLower(query)
 	if len(fieldErrors) > 0 {
 		api.validationErrorResponse(w, r, fieldErrors)
 		return
 	}
+	if radius == 0 {
+		// Default radius to 600 meters if not specified
+		radius = 600
+		if query != "" {
+			radius = 10000
+		}
+	}
 
-	stops := api.GtfsManager.GetStopsForLocation(lat, lon, radius, latSpan, lonSpan, query, 100, false)
+	stops := api.GtfsManager.GetStopsForLocation(lat, lon, radius, latSpan, lonSpan, query, 50, true)
 
 	ctx := context.Background()
-	var results []models.Stop
+	var results = []models.Route{}
 	routeIDs := map[string]bool{}
 	agencyIDs := map[string]bool{}
 
 	for _, stop := range stops {
-		routeIds, err := api.GtfsManager.GtfsDB.Queries.GetRouteIDsForStop(ctx, stop.Id)
-		if err != nil || len(routeIds) == 0 {
+		routes, err := api.GtfsManager.GtfsDB.Queries.GetRoutesForStop(ctx, stop.Id)
+		if err != nil || len(routes) == 0 {
 			continue
 		}
 
-		var rids []string
-		for _, rid := range routeIds {
-			ridStr, ok := rid.(string)
-			if !ok {
+		for _, route := range routes {
+			if query != "" && strings.ToLower(route.ShortName.String) != query {
 				continue
 			}
-			agencyId, routeId, _ := utils.ExtractAgencyIDAndCodeID(ridStr)
-			agencyIDs[agencyId] = true
-			routeIDs[routeId] = true
-			rids = append(rids, ridStr)
+			agencyIDs[route.AgencyID] = true
+			if !routeIDs[route.ID] {
+				results = append(results, models.NewRoute(
+					utils.FormCombinedID(route.AgencyID, route.ID),
+					route.AgencyID,
+					route.ShortName.String,
+					route.LongName.String,
+					route.Desc.String,
+					models.RouteType(route.Type),
+					route.Url.String,
+					route.Color.String,
+					route.TextColor.String,
+					route.ShortName.String,
+				))
+			}
+			routeIDs[route.ID] = true
 		}
-		agency, err := api.GtfsManager.GtfsDB.Queries.GetAgencyForStop(ctx, stop.Id)
-
-		if err != nil {
-			continue
-		}
-
-		results = append(results, models.NewStop(
-			stop.Id,
-			"Direction",
-			utils.FormCombinedID(agency.ID, stop.Id),
-			stop.Name,
-			"",
-			utils.MapWheelchairBoarding(stop.WheelchairBoarding),
-			*stop.Latitude,
-			*stop.Longitude,
-			0,
-			rids,
-			rids,
-		))
 	}
 
 	agencies := utils.FilterAgencies(api.GtfsManager.GetAgencies(), agencyIDs)
-	routes := utils.FilterRoutes(api.GtfsManager.GtfsDB.Queries, ctx, routeIDs)
 
 	references := models.ReferencesModel{
 		Agencies:   agencies,
-		Routes:     routes,
+		Routes:     []interface{}{},
 		Situations: []interface{}{},
 		StopTimes:  []interface{}{},
 		Stops:      []interface{}{},

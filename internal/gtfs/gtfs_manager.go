@@ -109,7 +109,7 @@ type stopWithDistance struct {
 	distance float64
 }
 
-func (manager *Manager) GetStopsForLocation(lat, lon float64, radius float64, latSpan, lonSpan float64, query string, maxCount int) []*gtfs.Stop {
+func (manager *Manager) GetStopsForLocation(lat, lon float64, radius float64, latSpan, lonSpan float64, query string, maxCount int, isForRoutes bool) []*gtfs.Stop {
 	const epsilon = 1e-6
 
 	if radius == 0 {
@@ -127,7 +127,7 @@ func (manager *Manager) GetStopsForLocation(lat, lon float64, radius float64, la
 			continue
 		}
 
-		if query != "" {
+		if query != "" && !isForRoutes {
 			if stop.Code == query {
 				distance := utils.Haversine(lat, lon, *stop.Latitude, *stop.Longitude)
 				if distance <= radius {
