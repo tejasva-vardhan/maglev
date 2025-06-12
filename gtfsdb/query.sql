@@ -257,3 +257,43 @@ WHERE
     st.stop_id = ?
 ORDER BY 
     r.id, st.arrival_time;
+
+-- name: GetImportMetadata :one
+SELECT
+    *
+FROM
+    import_metadata
+WHERE
+    id = 1;
+
+-- name: UpsertImportMetadata :one
+INSERT
+OR REPLACE INTO import_metadata (
+    id,
+    file_hash,
+    import_time,
+    file_source
+)
+VALUES
+    (1, ?, ?, ?) RETURNING *;
+
+-- name: ClearStopTimes :exec
+DELETE FROM stop_times;
+
+-- name: ClearShapes :exec  
+DELETE FROM shapes;
+
+-- name: ClearTrips :exec
+DELETE FROM trips;
+
+-- name: ClearCalendar :exec
+DELETE FROM calendar;
+
+-- name: ClearStops :exec
+DELETE FROM stops;
+
+-- name: ClearRoutes :exec
+DELETE FROM routes;
+
+-- name: ClearAgencies :exec
+DELETE FROM agencies;

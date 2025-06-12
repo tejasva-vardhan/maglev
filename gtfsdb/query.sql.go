@@ -10,6 +10,69 @@ import (
 	"database/sql"
 )
 
+const clearAgencies = `-- name: ClearAgencies :exec
+DELETE FROM agencies
+`
+
+func (q *Queries) ClearAgencies(ctx context.Context) error {
+	_, err := q.exec(ctx, q.clearAgenciesStmt, clearAgencies)
+	return err
+}
+
+const clearCalendar = `-- name: ClearCalendar :exec
+DELETE FROM calendar
+`
+
+func (q *Queries) ClearCalendar(ctx context.Context) error {
+	_, err := q.exec(ctx, q.clearCalendarStmt, clearCalendar)
+	return err
+}
+
+const clearRoutes = `-- name: ClearRoutes :exec
+DELETE FROM routes
+`
+
+func (q *Queries) ClearRoutes(ctx context.Context) error {
+	_, err := q.exec(ctx, q.clearRoutesStmt, clearRoutes)
+	return err
+}
+
+const clearShapes = `-- name: ClearShapes :exec
+DELETE FROM shapes
+`
+
+func (q *Queries) ClearShapes(ctx context.Context) error {
+	_, err := q.exec(ctx, q.clearShapesStmt, clearShapes)
+	return err
+}
+
+const clearStopTimes = `-- name: ClearStopTimes :exec
+DELETE FROM stop_times
+`
+
+func (q *Queries) ClearStopTimes(ctx context.Context) error {
+	_, err := q.exec(ctx, q.clearStopTimesStmt, clearStopTimes)
+	return err
+}
+
+const clearStops = `-- name: ClearStops :exec
+DELETE FROM stops
+`
+
+func (q *Queries) ClearStops(ctx context.Context) error {
+	_, err := q.exec(ctx, q.clearStopsStmt, clearStops)
+	return err
+}
+
+const clearTrips = `-- name: ClearTrips :exec
+DELETE FROM trips
+`
+
+func (q *Queries) ClearTrips(ctx context.Context) error {
+	_, err := q.exec(ctx, q.clearTripsStmt, clearTrips)
+	return err
+}
+
 const createAgency = `-- name: CreateAgency :one
 INSERT
 OR REPLACE INTO agencies (
@@ -505,6 +568,27 @@ func (q *Queries) GetAllShapes(ctx context.Context) ([]Shape, error) {
 	return items, nil
 }
 
+const getImportMetadata = `-- name: GetImportMetadata :one
+SELECT
+    id, file_hash, import_time, file_source
+FROM
+    import_metadata
+WHERE
+    id = 1
+`
+
+func (q *Queries) GetImportMetadata(ctx context.Context) (ImportMetadatum, error) {
+	row := q.queryRow(ctx, q.getImportMetadataStmt, getImportMetadata)
+	var i ImportMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.FileHash,
+		&i.ImportTime,
+		&i.FileSource,
+	)
+	return i, err
+}
+
 const getRoute = `-- name: GetRoute :one
 SELECT
     id, agency_id, short_name, long_name, "desc", type, url, color, text_color, continuous_pickup, continuous_drop_off
@@ -930,4 +1014,34 @@ func (q *Queries) ListRoutes(ctx context.Context) ([]Route, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const upsertImportMetadata = `-- name: UpsertImportMetadata :one
+INSERT
+OR REPLACE INTO import_metadata (
+    id,
+    file_hash,
+    import_time,
+    file_source
+)
+VALUES
+    (1, ?, ?, ?) RETURNING id, file_hash, import_time, file_source
+`
+
+type UpsertImportMetadataParams struct {
+	FileHash   string
+	ImportTime int64
+	FileSource string
+}
+
+func (q *Queries) UpsertImportMetadata(ctx context.Context, arg UpsertImportMetadataParams) (ImportMetadatum, error) {
+	row := q.queryRow(ctx, q.upsertImportMetadataStmt, upsertImportMetadata, arg.FileHash, arg.ImportTime, arg.FileSource)
+	var i ImportMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.FileHash,
+		&i.ImportTime,
+		&i.FileSource,
+	)
+	return i, err
 }

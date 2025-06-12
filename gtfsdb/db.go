@@ -24,6 +24,27 @@ func New(db DBTX) *Queries {
 func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	q := Queries{db: db}
 	var err error
+	if q.clearAgenciesStmt, err = db.PrepareContext(ctx, clearAgencies); err != nil {
+		return nil, fmt.Errorf("error preparing query ClearAgencies: %w", err)
+	}
+	if q.clearCalendarStmt, err = db.PrepareContext(ctx, clearCalendar); err != nil {
+		return nil, fmt.Errorf("error preparing query ClearCalendar: %w", err)
+	}
+	if q.clearRoutesStmt, err = db.PrepareContext(ctx, clearRoutes); err != nil {
+		return nil, fmt.Errorf("error preparing query ClearRoutes: %w", err)
+	}
+	if q.clearShapesStmt, err = db.PrepareContext(ctx, clearShapes); err != nil {
+		return nil, fmt.Errorf("error preparing query ClearShapes: %w", err)
+	}
+	if q.clearStopTimesStmt, err = db.PrepareContext(ctx, clearStopTimes); err != nil {
+		return nil, fmt.Errorf("error preparing query ClearStopTimes: %w", err)
+	}
+	if q.clearStopsStmt, err = db.PrepareContext(ctx, clearStops); err != nil {
+		return nil, fmt.Errorf("error preparing query ClearStops: %w", err)
+	}
+	if q.clearTripsStmt, err = db.PrepareContext(ctx, clearTrips); err != nil {
+		return nil, fmt.Errorf("error preparing query ClearTrips: %w", err)
+	}
 	if q.createAgencyStmt, err = db.PrepareContext(ctx, createAgency); err != nil {
 		return nil, fmt.Errorf("error preparing query CreateAgency: %w", err)
 	}
@@ -53,6 +74,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.getAllShapesStmt, err = db.PrepareContext(ctx, getAllShapes); err != nil {
 		return nil, fmt.Errorf("error preparing query GetAllShapes: %w", err)
+	}
+	if q.getImportMetadataStmt, err = db.PrepareContext(ctx, getImportMetadata); err != nil {
+		return nil, fmt.Errorf("error preparing query GetImportMetadata: %w", err)
 	}
 	if q.getRouteStmt, err = db.PrepareContext(ctx, getRoute); err != nil {
 		return nil, fmt.Errorf("error preparing query GetRoute: %w", err)
@@ -87,11 +111,49 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.listRoutesStmt, err = db.PrepareContext(ctx, listRoutes); err != nil {
 		return nil, fmt.Errorf("error preparing query ListRoutes: %w", err)
 	}
+	if q.upsertImportMetadataStmt, err = db.PrepareContext(ctx, upsertImportMetadata); err != nil {
+		return nil, fmt.Errorf("error preparing query UpsertImportMetadata: %w", err)
+	}
 	return &q, nil
 }
 
 func (q *Queries) Close() error {
 	var err error
+	if q.clearAgenciesStmt != nil {
+		if cerr := q.clearAgenciesStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing clearAgenciesStmt: %w", cerr)
+		}
+	}
+	if q.clearCalendarStmt != nil {
+		if cerr := q.clearCalendarStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing clearCalendarStmt: %w", cerr)
+		}
+	}
+	if q.clearRoutesStmt != nil {
+		if cerr := q.clearRoutesStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing clearRoutesStmt: %w", cerr)
+		}
+	}
+	if q.clearShapesStmt != nil {
+		if cerr := q.clearShapesStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing clearShapesStmt: %w", cerr)
+		}
+	}
+	if q.clearStopTimesStmt != nil {
+		if cerr := q.clearStopTimesStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing clearStopTimesStmt: %w", cerr)
+		}
+	}
+	if q.clearStopsStmt != nil {
+		if cerr := q.clearStopsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing clearStopsStmt: %w", cerr)
+		}
+	}
+	if q.clearTripsStmt != nil {
+		if cerr := q.clearTripsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing clearTripsStmt: %w", cerr)
+		}
+	}
 	if q.createAgencyStmt != nil {
 		if cerr := q.createAgencyStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing createAgencyStmt: %w", cerr)
@@ -140,6 +202,11 @@ func (q *Queries) Close() error {
 	if q.getAllShapesStmt != nil {
 		if cerr := q.getAllShapesStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getAllShapesStmt: %w", cerr)
+		}
+	}
+	if q.getImportMetadataStmt != nil {
+		if cerr := q.getImportMetadataStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getImportMetadataStmt: %w", cerr)
 		}
 	}
 	if q.getRouteStmt != nil {
@@ -197,6 +264,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing listRoutesStmt: %w", cerr)
 		}
 	}
+	if q.upsertImportMetadataStmt != nil {
+		if cerr := q.upsertImportMetadataStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing upsertImportMetadataStmt: %w", cerr)
+		}
+	}
 	return err
 }
 
@@ -236,6 +308,13 @@ func (q *Queries) queryRow(ctx context.Context, stmt *sql.Stmt, query string, ar
 type Queries struct {
 	db                       DBTX
 	tx                       *sql.Tx
+	clearAgenciesStmt        *sql.Stmt
+	clearCalendarStmt        *sql.Stmt
+	clearRoutesStmt          *sql.Stmt
+	clearShapesStmt          *sql.Stmt
+	clearStopTimesStmt       *sql.Stmt
+	clearStopsStmt           *sql.Stmt
+	clearTripsStmt           *sql.Stmt
 	createAgencyStmt         *sql.Stmt
 	createCalendarStmt       *sql.Stmt
 	createRouteStmt          *sql.Stmt
@@ -246,6 +325,7 @@ type Queries struct {
 	getAgencyStmt            *sql.Stmt
 	getAgencyForStopStmt     *sql.Stmt
 	getAllShapesStmt         *sql.Stmt
+	getImportMetadataStmt    *sql.Stmt
 	getRouteStmt             *sql.Stmt
 	getRouteIDsForAgencyStmt *sql.Stmt
 	getRouteIDsForStopStmt   *sql.Stmt
@@ -257,12 +337,20 @@ type Queries struct {
 	getTripStmt              *sql.Stmt
 	listAgenciesStmt         *sql.Stmt
 	listRoutesStmt           *sql.Stmt
+	upsertImportMetadataStmt *sql.Stmt
 }
 
 func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 	return &Queries{
 		db:                       tx,
 		tx:                       tx,
+		clearAgenciesStmt:        q.clearAgenciesStmt,
+		clearCalendarStmt:        q.clearCalendarStmt,
+		clearRoutesStmt:          q.clearRoutesStmt,
+		clearShapesStmt:          q.clearShapesStmt,
+		clearStopTimesStmt:       q.clearStopTimesStmt,
+		clearStopsStmt:           q.clearStopsStmt,
+		clearTripsStmt:           q.clearTripsStmt,
 		createAgencyStmt:         q.createAgencyStmt,
 		createCalendarStmt:       q.createCalendarStmt,
 		createRouteStmt:          q.createRouteStmt,
@@ -273,6 +361,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		getAgencyStmt:            q.getAgencyStmt,
 		getAgencyForStopStmt:     q.getAgencyForStopStmt,
 		getAllShapesStmt:         q.getAllShapesStmt,
+		getImportMetadataStmt:    q.getImportMetadataStmt,
 		getRouteStmt:             q.getRouteStmt,
 		getRouteIDsForAgencyStmt: q.getRouteIDsForAgencyStmt,
 		getRouteIDsForStopStmt:   q.getRouteIDsForStopStmt,
@@ -284,5 +373,6 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		getTripStmt:              q.getTripStmt,
 		listAgenciesStmt:         q.listAgenciesStmt,
 		listRoutesStmt:           q.listRoutesStmt,
+		upsertImportMetadataStmt: q.upsertImportMetadataStmt,
 	}
 }
