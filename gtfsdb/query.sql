@@ -237,3 +237,23 @@ FROM
     shapes
 WHERE
     shape_id = ?;
+
+-- name: GetScheduleForStop :many
+SELECT 
+    st.trip_id,
+    st.arrival_time,
+    st.departure_time,
+    st.stop_headsign,
+    t.service_id,
+    t.route_id,
+    t.trip_headsign,
+    r.id as route_id,
+    r.agency_id
+FROM 
+    stop_times st
+    JOIN trips t ON st.trip_id = t.id
+    JOIN routes r ON t.route_id = r.id
+WHERE 
+    st.stop_id = ?
+ORDER BY 
+    r.id, st.arrival_time;

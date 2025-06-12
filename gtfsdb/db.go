@@ -66,6 +66,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getRoutesForStopStmt, err = db.PrepareContext(ctx, getRoutesForStop); err != nil {
 		return nil, fmt.Errorf("error preparing query GetRoutesForStop: %w", err)
 	}
+	if q.getScheduleForStopStmt, err = db.PrepareContext(ctx, getScheduleForStop); err != nil {
+		return nil, fmt.Errorf("error preparing query GetScheduleForStop: %w", err)
+	}
 	if q.getShapeByIDStmt, err = db.PrepareContext(ctx, getShapeByID); err != nil {
 		return nil, fmt.Errorf("error preparing query GetShapeByID: %w", err)
 	}
@@ -159,6 +162,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getRoutesForStopStmt: %w", cerr)
 		}
 	}
+	if q.getScheduleForStopStmt != nil {
+		if cerr := q.getScheduleForStopStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getScheduleForStopStmt: %w", cerr)
+		}
+	}
 	if q.getShapeByIDStmt != nil {
 		if cerr := q.getShapeByIDStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getShapeByIDStmt: %w", cerr)
@@ -242,6 +250,7 @@ type Queries struct {
 	getRouteIDsForAgencyStmt *sql.Stmt
 	getRouteIDsForStopStmt   *sql.Stmt
 	getRoutesForStopStmt     *sql.Stmt
+	getScheduleForStopStmt   *sql.Stmt
 	getShapeByIDStmt         *sql.Stmt
 	getStopStmt              *sql.Stmt
 	getStopIDsForAgencyStmt  *sql.Stmt
@@ -268,6 +277,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		getRouteIDsForAgencyStmt: q.getRouteIDsForAgencyStmt,
 		getRouteIDsForStopStmt:   q.getRouteIDsForStopStmt,
 		getRoutesForStopStmt:     q.getRoutesForStopStmt,
+		getScheduleForStopStmt:   q.getScheduleForStopStmt,
 		getShapeByIDStmt:         q.getShapeByIDStmt,
 		getStopStmt:              q.getStopStmt,
 		getStopIDsForAgencyStmt:  q.getStopIDsForAgencyStmt,

@@ -646,6 +646,72 @@ func (q *Queries) GetRoutesForStop(ctx context.Context, stopID string) ([]Route,
 	return items, nil
 }
 
+const getScheduleForStop = `-- name: GetScheduleForStop :many
+SELECT 
+    st.trip_id,
+    st.arrival_time,
+    st.departure_time,
+    st.stop_headsign,
+    t.service_id,
+    t.route_id,
+    t.trip_headsign,
+    r.id as route_id,
+    r.agency_id
+FROM 
+    stop_times st
+    JOIN trips t ON st.trip_id = t.id
+    JOIN routes r ON t.route_id = r.id
+WHERE 
+    st.stop_id = ?
+ORDER BY 
+    r.id, st.arrival_time
+`
+
+type GetScheduleForStopRow struct {
+	TripID        string
+	ArrivalTime   int64
+	DepartureTime int64
+	StopHeadsign  sql.NullString
+	ServiceID     string
+	RouteID       string
+	TripHeadsign  sql.NullString
+	RouteID_2     string
+	AgencyID      string
+}
+
+func (q *Queries) GetScheduleForStop(ctx context.Context, stopID string) ([]GetScheduleForStopRow, error) {
+	rows, err := q.query(ctx, q.getScheduleForStopStmt, getScheduleForStop, stopID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetScheduleForStopRow
+	for rows.Next() {
+		var i GetScheduleForStopRow
+		if err := rows.Scan(
+			&i.TripID,
+			&i.ArrivalTime,
+			&i.DepartureTime,
+			&i.StopHeadsign,
+			&i.ServiceID,
+			&i.RouteID,
+			&i.TripHeadsign,
+			&i.RouteID_2,
+			&i.AgencyID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getShapeByID = `-- name: GetShapeByID :many
 SELECT
     id, shape_id, lat, lon, shape_pt_sequence
