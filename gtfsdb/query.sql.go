@@ -893,6 +893,39 @@ func (q *Queries) GetStopIDsForAgency(ctx context.Context) ([]string, error) {
 	return items, nil
 }
 
+const getStopIDsForRoute = `-- name: GetStopIDsForRoute :many
+SELECT DISTINCT
+    stop_times.stop_id
+FROM
+    stop_times
+        JOIN trips ON stop_times.trip_id = trips.id
+WHERE
+    trips.route_id = ?
+`
+
+func (q *Queries) GetStopIDsForRoute(ctx context.Context, routeID string) ([]string, error) {
+	rows, err := q.query(ctx, q.getStopIDsForRouteStmt, getStopIDsForRoute, routeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var stop_id string
+		if err := rows.Scan(&stop_id); err != nil {
+			return nil, err
+		}
+		items = append(items, stop_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTrip = `-- name: GetTrip :one
 SELECT
     id, route_id, service_id, trip_headsign, trip_short_name, direction_id, block_id, shape_id, wheelchair_accessible, bikes_allowed
@@ -918,6 +951,49 @@ func (q *Queries) GetTrip(ctx context.Context, id string) (Trip, error) {
 		&i.BikesAllowed,
 	)
 	return i, err
+}
+
+const getTripsForRoute = `-- name: GetTripsForRoute :many
+SELECT
+    id, route_id, service_id, trip_headsign, trip_short_name, direction_id, block_id, shape_id, wheelchair_accessible, bikes_allowed
+FROM
+    trips
+WHERE
+    route_id = ?
+`
+
+func (q *Queries) GetTripsForRoute(ctx context.Context, routeID string) ([]Trip, error) {
+	rows, err := q.query(ctx, q.getTripsForRouteStmt, getTripsForRoute, routeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Trip
+	for rows.Next() {
+		var i Trip
+		if err := rows.Scan(
+			&i.ID,
+			&i.RouteID,
+			&i.ServiceID,
+			&i.TripHeadsign,
+			&i.TripShortName,
+			&i.DirectionID,
+			&i.BlockID,
+			&i.ShapeID,
+			&i.WheelchairAccessible,
+			&i.BikesAllowed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listAgencies = `-- name: ListAgencies :many

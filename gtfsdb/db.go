@@ -102,8 +102,14 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getStopIDsForAgencyStmt, err = db.PrepareContext(ctx, getStopIDsForAgency); err != nil {
 		return nil, fmt.Errorf("error preparing query GetStopIDsForAgency: %w", err)
 	}
+	if q.getStopIDsForRouteStmt, err = db.PrepareContext(ctx, getStopIDsForRoute); err != nil {
+		return nil, fmt.Errorf("error preparing query GetStopIDsForRoute: %w", err)
+	}
 	if q.getTripStmt, err = db.PrepareContext(ctx, getTrip); err != nil {
 		return nil, fmt.Errorf("error preparing query GetTrip: %w", err)
+	}
+	if q.getTripsForRouteStmt, err = db.PrepareContext(ctx, getTripsForRoute); err != nil {
+		return nil, fmt.Errorf("error preparing query GetTripsForRoute: %w", err)
 	}
 	if q.listAgenciesStmt, err = db.PrepareContext(ctx, listAgencies); err != nil {
 		return nil, fmt.Errorf("error preparing query ListAgencies: %w", err)
@@ -249,9 +255,19 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getStopIDsForAgencyStmt: %w", cerr)
 		}
 	}
+	if q.getStopIDsForRouteStmt != nil {
+		if cerr := q.getStopIDsForRouteStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getStopIDsForRouteStmt: %w", cerr)
+		}
+	}
 	if q.getTripStmt != nil {
 		if cerr := q.getTripStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getTripStmt: %w", cerr)
+		}
+	}
+	if q.getTripsForRouteStmt != nil {
+		if cerr := q.getTripsForRouteStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getTripsForRouteStmt: %w", cerr)
 		}
 	}
 	if q.listAgenciesStmt != nil {
@@ -334,7 +350,9 @@ type Queries struct {
 	getShapeByIDStmt         *sql.Stmt
 	getStopStmt              *sql.Stmt
 	getStopIDsForAgencyStmt  *sql.Stmt
+	getStopIDsForRouteStmt   *sql.Stmt
 	getTripStmt              *sql.Stmt
+	getTripsForRouteStmt     *sql.Stmt
 	listAgenciesStmt         *sql.Stmt
 	listRoutesStmt           *sql.Stmt
 	upsertImportMetadataStmt *sql.Stmt
@@ -370,7 +388,9 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		getShapeByIDStmt:         q.getShapeByIDStmt,
 		getStopStmt:              q.getStopStmt,
 		getStopIDsForAgencyStmt:  q.getStopIDsForAgencyStmt,
+		getStopIDsForRouteStmt:   q.getStopIDsForRouteStmt,
 		getTripStmt:              q.getTripStmt,
+		getTripsForRouteStmt:     q.getTripsForRouteStmt,
 		listAgenciesStmt:         q.listAgenciesStmt,
 		listRoutesStmt:           q.listRoutesStmt,
 		upsertImportMetadataStmt: q.upsertImportMetadataStmt,

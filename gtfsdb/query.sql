@@ -238,8 +238,24 @@ FROM
 WHERE
     shape_id = ?;
 
+-- name: GetStopIDsForRoute :many
+SELECT DISTINCT
+    stop_times.stop_id
+FROM
+    stop_times
+        JOIN trips ON stop_times.trip_id = trips.id
+WHERE
+    trips.route_id = ?;
+
+-- name: GetTripsForRoute :many
+SELECT
+    *
+FROM
+    trips
+WHERE
+    route_id = ?;
 -- name: GetScheduleForStop :many
-SELECT 
+SELECT
     st.trip_id,
     st.arrival_time,
     st.departure_time,
@@ -249,13 +265,13 @@ SELECT
     t.trip_headsign,
     r.id as route_id,
     r.agency_id
-FROM 
+FROM
     stop_times st
     JOIN trips t ON st.trip_id = t.id
     JOIN routes r ON t.route_id = r.id
-WHERE 
+WHERE
     st.stop_id = ?
-ORDER BY 
+ORDER BY
     r.id, st.arrival_time;
 
 -- name: GetImportMetadata :one
@@ -280,7 +296,7 @@ VALUES
 -- name: ClearStopTimes :exec
 DELETE FROM stop_times;
 
--- name: ClearShapes :exec  
+-- name: ClearShapes :exec
 DELETE FROM shapes;
 
 -- name: ClearTrips :exec
