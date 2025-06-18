@@ -32,6 +32,12 @@ type Calendar struct {
 	EndDate   string
 }
 
+type CalendarDate struct {
+	ServiceID     string
+	Date          string
+	ExceptionType int64
+}
+
 type ImportMetadatum struct {
 	ID         int64
 	FileHash   string

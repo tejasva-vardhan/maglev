@@ -124,6 +124,11 @@ OR REPLACE INTO trips (
 VALUES
     (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *;
 
+-- name: CreateCalendarDate :one
+INSERT
+OR REPLACE INTO calendar_dates(service_id, date, exception_type)
+VALUES (?, ?, ?) RETURNING *;
+
 -- name: ListRoutes :many
 SELECT
     id,
@@ -154,7 +159,7 @@ WHERE
 
 -- name: GetRouteIDsForStop :many
 SELECT DISTINCT
-    routes.agency_id || '_' || routes.id AS route_id
+    (routes.agency_id || '_' || routes.id) AS route_id
 FROM
     stop_times
     JOIN trips ON stop_times.trip_id = trips.id
@@ -247,12 +252,66 @@ FROM
 WHERE
     trips.route_id = ?;
 
--- name: GetTripsForRoute :many
-SELECT
-    *
+-- name: GetAllTripsForRoute :many
+SELECT DISTINCT *
+FROM trips t
+WHERE t.route_id = @route_id
+ORDER BY t.direction_id, t.trip_headsign;
+
+-- name: GetStopIDsForTrip :many
+SELECT DISTINCT
+    stop_times.stop_id
 FROM
-    trips
+    stop_times
 WHERE
+    stop_times.trip_id = ?;
+-- name: GetShapesGroupedByTripHeadSign :many
+SELECT DISTINCT s.lat, s.lon, s.shape_pt_sequence
+FROM shapes s
+         JOIN (
+    SELECT shape_id
+    FROM trips
+    WHERE route_id = @route_id
+      AND trip_headsign = @trip_headsign
+      AND shape_id IS NOT NULL
+    LIMIT 1
+) t ON s.shape_id = t.shape_id
+ORDER BY s.shape_pt_sequence;
+-- name: GetActiveServiceIDsForDate :many
+WITH formatted_date AS (
+    SELECT STRFTIME('%w', SUBSTR(@target_date, 1, 4) || '-' || SUBSTR(@target_date, 5, 2) || '-' || SUBSTR(@target_date, 7, 2)) AS weekday
+)
+SELECT DISTINCT c.id AS service_id
+FROM calendar c, formatted_date fd
+WHERE c.start_date <= @target_date
+  AND c.end_date >= @target_date
+  AND (
+    (fd.weekday = '0' AND c.sunday = 1) OR
+    (fd.weekday = '1' AND c.monday = 1) OR
+    (fd.weekday = '2' AND c.tuesday = 1) OR
+    (fd.weekday = '3' AND c.wednesday = 1) OR
+    (fd.weekday = '4' AND c.thursday = 1) OR
+    (fd.weekday = '5' AND c.friday = 1) OR
+    (fd.weekday = '6' AND c.saturday = 1)
+    )
+UNION
+SELECT DISTINCT service_id
+FROM calendar_dates
+WHERE date = @target_date
+  AND exception_type = 1;
+
+-- name: GetTripsForRouteInActiveServiceIDs :many
+SELECT DISTINCT *
+FROM trips t
+WHERE t.route_id = @route_id
+  AND t.service_id IN (sqlc.slice(('service_ids')))
+ORDER BY t.direction_id, t.trip_headsign;
+
+-- name: GetOrderedStopIDsForTrip :many
+SELECT stop_id
+FROM stop_times
+WHERE trip_id = ?
+ORDER BY stop_sequence;
     route_id = ?;
 -- name: GetScheduleForStop :many
 SELECT
