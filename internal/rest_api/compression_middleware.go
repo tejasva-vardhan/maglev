@@ -6,22 +6,40 @@ import (
 	"github.com/klauspost/compress/gzhttp"
 )
 
-// applyGzipMiddleware wraps a handler with gzip compression
-func applyGzipMiddleware(next http.Handler) http.Handler {
-	// Use klauspost/compress for better performance
-	return gzhttp.GzipHandler(next)
+// CompressionConfig holds configuration options for response compression
+type CompressionConfig struct {
+	// MinSize is the minimum response size in bytes to compress (default: 1024)
+	MinSize int
+	// Level is the compression level 1-9 (default: 6 for balanced speed/compression)
+	Level int
 }
 
-// createCompressedAPIHandler creates an API handler with compression enabled
-func createCompressedAPIHandler(api *RestAPI) http.Handler {
-	// Create the base handler (this would normally be done in routes.go)
-	mux := http.NewServeMux()
+// DefaultCompressionConfig returns sensible defaults for compression
+func DefaultCompressionConfig() CompressionConfig {
+	return CompressionConfig{
+		MinSize: 1024, // 1KB minimum
+		Level:   6,    // Balanced compression
+	}
+}
 
-	// Add a simple test route for the integration test
-	mux.HandleFunc("/api/where/agencies-with-coverage.json", func(w http.ResponseWriter, r *http.Request) {
-		api.agenciesWithCoverageHandler(w, r)
-	})
+// NewCompressionMiddleware creates a compression middleware with the given configuration
+func NewCompressionMiddleware(config CompressionConfig) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		// Configure gzhttp with our settings
+		wrapper, err := gzhttp.NewWrapper(
+			gzhttp.MinSize(config.MinSize),
+			gzhttp.CompressionLevel(config.Level),
+		)
+		if err != nil {
+			// Fallback to default if configuration fails
+			return gzhttp.GzipHandler(next)
+		}
+		return wrapper(next)
+	}
+}
 
-	// Apply compression middleware
-	return applyGzipMiddleware(mux)
+// CompressionMiddleware applies gzip compression with default settings
+func CompressionMiddleware(next http.Handler) http.Handler {
+	config := DefaultCompressionConfig()
+	return NewCompressionMiddleware(config)(next)
 }

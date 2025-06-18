@@ -8,16 +8,6 @@ import (
 
 type handlerFunc func(w http.ResponseWriter, r *http.Request)
 
-func validateAPIKey(api *RestAPI, finalHandler handlerFunc) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if api.RequestHasInvalidAPIKey(r) {
-			api.invalidAPIKeyResponse(w, r)
-			return
-		}
-		finalHandler(w, r)
-	})
-}
-
 // Global rate limiter shared across all routes
 var globalRateLimiter func(http.Handler) http.Handler
 
@@ -29,13 +19,12 @@ func init() {
 // rateLimitAndValidateAPIKey combines rate limiting, API key validation, and compression
 func rateLimitAndValidateAPIKey(api *RestAPI, finalHandler handlerFunc) http.Handler {
 	// Create the handler chain: API key validation -> rate limiting -> compression -> final handler
-	// This order ensures we rate limit per valid API key and compress responses
 	finalHandlerHttp := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		finalHandler(w, r)
 	})
 
 	// Apply compression first (innermost)
-	compressedHandler := applyGzipMiddleware(finalHandlerHttp)
+	compressedHandler := CompressionMiddleware(finalHandlerHttp)
 
 	// Then rate limiting
 	rateLimitedHandler := globalRateLimiter(compressedHandler)
@@ -62,6 +51,7 @@ func registerPprofHandlers(mux *http.ServeMux) { // nolint:unused
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 }
 
+// SetRoutes registers all API endpoints with compression applied per route
 func (api *RestAPI) SetRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/where/agencies-with-coverage.json", rateLimitAndValidateAPIKey(api, api.agenciesWithCoverageHandler))
 	mux.Handle("GET /api/where/agency/{id}", rateLimitAndValidateAPIKey(api, api.agencyHandler))
@@ -79,4 +69,17 @@ func (api *RestAPI) SetRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/where/routes-for-location.json", rateLimitAndValidateAPIKey(api, api.routesForLocationHandler))
 	mux.Handle("GET /api/where/stops-for-route/{id}", rateLimitAndValidateAPIKey(api, api.stopsForRouteHandler))
 	mux.Handle("GET /api/where/schedule-for-stop/{id}", rateLimitAndValidateAPIKey(api, api.scheduleForStopHandler))
+}
+
+// SetupAPIRoutes creates and configures the API router with all middleware applied globally
+func (api *RestAPI) SetupAPIRoutes() http.Handler {
+	// Create the base router
+	mux := http.NewServeMux()
+
+	// Register all API routes
+	api.SetRoutes(mux)
+
+	// Apply global middleware chain: compression -> base routes
+	// This ensures all responses are compressed
+	return CompressionMiddleware(mux)
 }
