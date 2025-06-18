@@ -39,7 +39,9 @@ func loadRealtimeData(ctx context.Context, source string, headers map[string]str
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close() // nolint: errcheck
+	defer logging.SafeCloseWithLogging(resp.Body,
+		slog.Default().With(slog.String("component", "gtfs_realtime_downloader")),
+		"http_response_body")
 
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {

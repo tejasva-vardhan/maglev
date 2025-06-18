@@ -2,10 +2,12 @@ package restapi
 
 import (
 	"encoding/json"
+	"log/slog"
 	"github.com/stretchr/testify/require"
 	"maglev.onebusaway.org/internal/app"
 	"maglev.onebusaway.org/internal/appconf"
 	"maglev.onebusaway.org/internal/gtfs"
+	"maglev.onebusaway.org/internal/logging"
 	"maglev.onebusaway.org/internal/models"
 	"net/http"
 	"net/http/httptest"
@@ -51,7 +53,9 @@ func serveApiAndRetrieveEndpoint(t *testing.T, api *RestAPI, endpoint string) (*
 	defer server.Close()
 	resp, err := http.Get(server.URL + endpoint)
 	require.NoError(t, err)
-	defer resp.Body.Close() // nolint:errcheck
+	defer logging.SafeCloseWithLogging(resp.Body,
+		slog.Default().With(slog.String("component", "test")),
+		"http_response_body")
 
 	var response models.ResponseModel
 	err = json.NewDecoder(resp.Body).Decode(&response)

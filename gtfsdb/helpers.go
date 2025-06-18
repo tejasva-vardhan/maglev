@@ -401,12 +401,13 @@ func pickFirstAvailable(a, b string) string {
 func (c *Client) bulkInsertStops(ctx context.Context, stops []CreateStopParams) error {
 	db := c.DB
 	queries := c.Queries
+	logger := slog.Default().With(slog.String("component", "bulk_insert"))
 
 	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback() // nolint:errcheck
+	defer logging.SafeRollbackWithLogging(tx, logger, "bulk_insert_stops")
 
 	qtx := queries.WithTx(tx)
 	for _, params := range stops {
@@ -421,12 +422,13 @@ func (c *Client) bulkInsertStops(ctx context.Context, stops []CreateStopParams) 
 func (c *Client) bulkInsertTrips(ctx context.Context, trips []CreateTripParams) error {
 	db := c.DB
 	queries := c.Queries
+	logger := slog.Default().With(slog.String("component", "bulk_insert"))
 
 	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback() // nolint:errcheck
+	defer logging.SafeRollbackWithLogging(tx, logger, "bulk_insert_trips")
 
 	qtx := queries.WithTx(tx)
 	for _, params := range trips {
@@ -441,12 +443,13 @@ func (c *Client) bulkInsertTrips(ctx context.Context, trips []CreateTripParams) 
 func (c *Client) bulkInsertStopTimes(ctx context.Context, stopTimes []CreateStopTimeParams) error {
 	db := c.DB
 	queries := c.Queries
+	logger := slog.Default().With(slog.String("component", "bulk_insert"))
 
 	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback() // nolint:errcheck
+	defer logging.SafeRollbackWithLogging(tx, logger, "bulk_insert_stop_times")
 
 	qtx := queries.WithTx(tx)
 	for _, params := range stopTimes {
@@ -461,12 +464,13 @@ func (c *Client) bulkInsertStopTimes(ctx context.Context, stopTimes []CreateStop
 func (c *Client) bulkInsertShapes(ctx context.Context, shapes []CreateShapeParams) error {
 	db := c.DB
 	queries := c.Queries
+	logger := slog.Default().With(slog.String("component", "bulk_insert"))
 
 	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback() // nolint:errcheck
+	defer logging.SafeRollbackWithLogging(tx, logger, "bulk_insert_shapes")
 
 	qtx := queries.WithTx(tx)
 	for _, params := range shapes {
@@ -481,12 +485,13 @@ func (c *Client) bulkInsertShapes(ctx context.Context, shapes []CreateShapeParam
 func (c *Client) buldInsertCalendarDates(ctx context.Context, calendarDates []CreateCalendarDateParams) error {
 	db := c.DB
 	queries := c.Queries
+	logger := slog.Default().With(slog.String("component", "bulk_insert"))
 
 	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback() // nolint:errcheck
+	defer logging.SafeRollbackWithLogging(tx, logger, "bulk_insert_calendar_dates")
 
 	qtx := queries.WithTx(tx)
 	for _, params := range calendarDates {

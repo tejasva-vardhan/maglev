@@ -3,8 +3,10 @@ package gtfsdb
 import (
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"github.com/jamespfennell/gtfs"
 	"log"
+	"maglev.onebusaway.org/internal/logging"
 	"strings"
 )
 
@@ -20,7 +22,9 @@ func PrintSimpleSchema(db *sql.DB) error { // nolint:unused
 	if err != nil {
 		return err
 	}
-	defer rows.Close() // nolint:errcheck
+	defer logging.SafeCloseWithLogging(rows,
+		slog.Default().With(slog.String("component", "debugging")),
+		"database_rows")
 
 	log.Println("DATABASE SCHEMA:")
 	log.Println("----------------")
@@ -55,7 +59,9 @@ func (c *Client) TableCounts() (map[string]int, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to query table names: %w", err)
 	}
-	defer rows.Close() // nolint:errcheck
+	defer logging.SafeCloseWithLogging(rows,
+		slog.Default().With(slog.String("component", "debugging")),
+		"database_rows")
 	var tables []string
 
 	for rows.Next() {

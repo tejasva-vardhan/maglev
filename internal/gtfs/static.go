@@ -27,7 +27,9 @@ func rawGtfsData(source string, isLocalFile bool) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("error downloading GTFS data: %w", err)
 		}
-		defer resp.Body.Close() // nolint
+		defer logging.SafeCloseWithLogging(resp.Body, 
+			slog.Default().With(slog.String("component", "gtfs_downloader")), 
+			"http_response_body")
 
 		b, err = io.ReadAll(resp.Body)
 		if err != nil {
