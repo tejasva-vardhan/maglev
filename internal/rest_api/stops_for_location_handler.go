@@ -75,7 +75,7 @@ func (api *RestAPI) stopsForLocationHandler(w http.ResponseWriter, r *http.Reque
 		Routes:     routes,
 		Situations: []interface{}{},
 		StopTimes:  []interface{}{},
-		Stops:      []interface{}{},
+		Stops:      []models.Stop{},
 		Trips:      []interface{}{},
 	}
 

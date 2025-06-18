@@ -133,7 +133,7 @@ func TestRouteResponseJSON(t *testing.T) {
 		Routes:     []interface{}{},
 		Situations: []interface{}{},
 		StopTimes:  []interface{}{},
-		Stops:      []interface{}{},
+		Stops:      []Stop{},
 		Trips:      []interface{}{},
 	}
 
