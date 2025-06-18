@@ -39,16 +39,16 @@ func TestSimpleValidationErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			response, _ := serveApiAndRetrieveEndpoint(t, api, tt.endpoint)
 			assert.Equal(t, tt.expectedStatus, response.StatusCode, "Expected status code mismatch")
-			
+
 			if tt.expectedStatus == http.StatusBadRequest {
 				// Read the response body to check error format
 				bodyBytes, err := io.ReadAll(response.Body)
 				require.NoError(t, err)
-				
+
 				var errorResponse map[string]interface{}
 				err = json.Unmarshal(bodyBytes, &errorResponse)
 				require.NoError(t, err)
-				
+
 				// Should have some kind of error structure
 				assert.Contains(t, string(bodyBytes), "error", "Error response should contain error information")
 			}

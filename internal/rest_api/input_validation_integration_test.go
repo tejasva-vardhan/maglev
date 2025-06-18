@@ -117,7 +117,7 @@ func TestInputValidationIntegration(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			response, _ := serveApiAndRetrieveEndpoint(t, api, tt.endpoint)
 			assert.Equal(t, tt.expectedStatus, response.StatusCode, "Expected status code mismatch")
-			
+
 			// Check that the response contains the expected error message
 			if tt.expectedStatus == http.StatusBadRequest {
 				body := readResponseBody(t, response)
@@ -155,9 +155,9 @@ func TestInputSanitizationIntegration(t *testing.T) {
 			if tt.query != "" {
 				baseURL += "&query=" + url.QueryEscape(tt.query)
 			}
-			
+
 			response, _ := serveApiAndRetrieveEndpoint(t, api, baseURL)
-			
+
 			// Should succeed (not be blocked by validation)
 			assert.Equal(t, http.StatusOK, response.StatusCode, "Valid query should not be blocked")
 		})
@@ -196,10 +196,10 @@ func TestValidInputsPassThrough(t *testing.T) {
 	for _, tt := range validTests {
 		t.Run(tt.name, func(t *testing.T) {
 			response, _ := serveApiAndRetrieveEndpoint(t, api, tt.endpoint)
-			
+
 			// Should not return validation errors (400)
 			// Note: Some endpoints may return 404 if the data doesn't exist, which is fine
-			assert.NotEqual(t, http.StatusBadRequest, response.StatusCode, 
+			assert.NotEqual(t, http.StatusBadRequest, response.StatusCode,
 				"Valid input should not return validation error")
 		})
 	}

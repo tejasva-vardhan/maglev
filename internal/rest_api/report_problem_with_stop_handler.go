@@ -4,9 +4,9 @@ import (
 	"log/slog"
 	"net/http"
 
+	"maglev.onebusaway.org/internal/logging"
 	"maglev.onebusaway.org/internal/models"
 	"maglev.onebusaway.org/internal/utils"
-	"maglev.onebusaway.org/internal/logging"
 )
 
 func (api *RestAPI) reportProblemWithStopHandler(w http.ResponseWriter, r *http.Request) {

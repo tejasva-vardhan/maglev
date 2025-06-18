@@ -3,9 +3,9 @@ package gtfsdb
 import (
 	"database/sql"
 	"fmt"
-	"log/slog"
 	"github.com/jamespfennell/gtfs"
 	"log"
+	"log/slog"
 	"maglev.onebusaway.org/internal/logging"
 	"strings"
 )

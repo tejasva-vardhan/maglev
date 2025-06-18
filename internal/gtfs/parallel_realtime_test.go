@@ -22,16 +22,16 @@ func TestParallelRealtimeUpdates(t *testing.T) {
 
 	// Create test servers that simulate real GTFS-RT endpoints
 	mux := http.NewServeMux()
-	
+
 	mux.HandleFunc("/trip-updates", func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		callTimes = append(callTimes, time.Now())
 		callDelays = append(callDelays, 100*time.Millisecond) // Simulate processing time
 		mu.Unlock()
-		
+
 		// Simulate some processing time
 		time.Sleep(100 * time.Millisecond)
-		
+
 		data, err := os.ReadFile(filepath.Join("../../testdata", "raba-trip-updates.pb"))
 		if err != nil {
 			// If test data doesn't exist, return empty GTFS-RT data
@@ -42,16 +42,16 @@ func TestParallelRealtimeUpdates(t *testing.T) {
 		w.Header().Set("Content-Type", "application/x-protobuf")
 		w.Write(data)
 	})
-	
+
 	mux.HandleFunc("/vehicle-positions", func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		callTimes = append(callTimes, time.Now())
 		callDelays = append(callDelays, 100*time.Millisecond) // Simulate processing time
 		mu.Unlock()
-		
+
 		// Simulate some processing time
 		time.Sleep(100 * time.Millisecond)
-		
+
 		data, err := os.ReadFile(filepath.Join("../../testdata", "raba-vehicle-positions.pb"))
 		if err != nil {
 			// If test data doesn't exist, return empty GTFS-RT data
@@ -295,7 +295,7 @@ func TestRealTimeDataConsistency(t *testing.T) {
 	// Run multiple parallel updates to test for race conditions
 	var wg sync.WaitGroup
 	ctx := context.Background()
-	
+
 	config := Config{
 		TripUpdatesURL:      "http://invalid.example.com/trips",
 		VehiclePositionsURL: "http://invalid.example.com/vehicles",

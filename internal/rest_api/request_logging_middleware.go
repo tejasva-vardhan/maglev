@@ -24,23 +24,23 @@ func NewRequestLoggingMiddleware(logger *slog.Logger) func(http.Handler) http.Ha
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
-			
+
 			// Add logger to context for downstream handlers
 			ctx := logging.WithLogger(r.Context(), logger)
 			r = r.WithContext(ctx)
-			
+
 			// Wrap response writer to capture status code
 			wrapped := &responseWriter{
 				ResponseWriter: w,
 				statusCode:     http.StatusOK, // Default status
 			}
-			
+
 			// Call next handler
 			next.ServeHTTP(wrapped, r)
-			
+
 			// Log the request
 			duration := time.Since(start)
-			
+
 			logging.LogHTTPRequest(logger,
 				r.Method,
 				r.URL.Path, // Path without query parameters
@@ -56,7 +56,7 @@ func NewRequestLoggingMiddleware(logger *slog.Logger) func(http.Handler) http.Ha
 func createHandlerWithRequestLogging(api *RestAPI, logger *slog.Logger) http.Handler {
 	// Create a simple test handler
 	mux := http.NewServeMux()
-	
+
 	// Add the current time endpoint for testing
 	mux.HandleFunc("/api/where/current-time.json", func(w http.ResponseWriter, r *http.Request) {
 		// Check API key for authentication
@@ -66,7 +66,7 @@ func createHandlerWithRequestLogging(api *RestAPI, logger *slog.Logger) http.Han
 		}
 		api.currentTimeHandler(w, r)
 	})
-	
+
 	// Apply request logging middleware
 	requestLogger := NewRequestLoggingMiddleware(logger)
 	return requestLogger(mux)

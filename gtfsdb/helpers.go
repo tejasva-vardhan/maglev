@@ -7,8 +7,8 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"fmt"
-	"log/slog"
 	"github.com/jamespfennell/gtfs"
+	"log/slog"
 	"maglev.onebusaway.org/internal/appconf"
 	"maglev.onebusaway.org/internal/logging"
 	"strings"
@@ -57,7 +57,7 @@ func performDatabaseMigration(ctx context.Context, db *sql.DB) error {
 
 func (c *Client) processAndStoreGTFSDataWithSource(b []byte, source string) error {
 	logger := slog.Default().With(slog.String("component", "gtfs_importer"))
-	
+
 	startTime := time.Now()
 	defer func() {
 		endTime := time.Now()
@@ -507,10 +507,10 @@ func (c *Client) buldInsertCalendarDates(ctx context.Context, calendarDates []Cr
 func configureConnectionPool(db *sql.DB) {
 	// Set maximum number of open connections to 25
 	db.SetMaxOpenConns(25)
-	
+
 	// Set maximum number of idle connections to 5
 	db.SetMaxIdleConns(5)
-	
+
 	// Set maximum lifetime of connections to 5 minutes
 	db.SetConnMaxLifetime(5 * time.Minute)
 }

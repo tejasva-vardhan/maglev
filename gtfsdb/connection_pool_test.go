@@ -53,7 +53,7 @@ func TestConnectionPoolBehavior(t *testing.T) {
 
 	// Test that we can make concurrent connections
 	ctx := context.Background()
-	
+
 	// Make multiple concurrent queries to test connection pooling
 	done := make(chan bool, 10)
 	for i := 0; i < 10; i++ {
@@ -96,7 +96,7 @@ func TestConnectionLifetime(t *testing.T) {
 
 	// Get initial stats
 	initialStats := db.Stats()
-	
+
 	// Make a query to create at least one connection
 	ctx := context.Background()
 	row := db.QueryRowContext(ctx, "SELECT 1")
@@ -107,7 +107,7 @@ func TestConnectionLifetime(t *testing.T) {
 
 	// Verify we have at least one connection
 	stats := db.Stats()
-	assert.True(t, stats.MaxOpenConnections > initialStats.MaxOpenConnections || stats.OpenConnections > 0, 
+	assert.True(t, stats.MaxOpenConnections > initialStats.MaxOpenConnections || stats.OpenConnections > 0,
 		"Should have connection activity")
 }
 
@@ -123,10 +123,9 @@ func TestConnectionPoolConfiguration(t *testing.T) {
 	// Verify settings through behavior
 	stats := db.Stats()
 	assert.Equal(t, 25, stats.MaxOpenConnections, "MaxOpenConns should be 25")
-	
+
 	// Test that we can ping the database
 	ctx := context.Background()
 	err = db.PingContext(ctx)
 	assert.NoError(t, err, "Should be able to ping configured database")
 }
-

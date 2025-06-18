@@ -73,13 +73,13 @@ func TestContextCancellationHandling(t *testing.T) {
 			// The request should either complete normally or be cancelled
 			// If cancelled, we expect a timeout or cancellation error response
 			statusCode := w.Code
-			
+
 			// Valid responses: 200 (completed), 401 (API validation), 500 (error), or timeout-related
-			assert.True(t, statusCode == http.StatusOK || 
-					   statusCode == http.StatusUnauthorized ||  // API key validation happens first
-					   statusCode == http.StatusInternalServerError ||
-					   statusCode == http.StatusRequestTimeout ||
-					   statusCode == http.StatusGatewayTimeout,
+			assert.True(t, statusCode == http.StatusOK ||
+				statusCode == http.StatusUnauthorized || // API key validation happens first
+				statusCode == http.StatusInternalServerError ||
+				statusCode == http.StatusRequestTimeout ||
+				statusCode == http.StatusGatewayTimeout,
 				"Expected status 200, 401, 500, 408, or 504, got %d", statusCode)
 		})
 	}
@@ -116,7 +116,7 @@ func TestContextCancellationInGetStopsForLocation(t *testing.T) {
 	// This test verifies that our current implementation works normally
 	// since it uses context.Background() internally
 	stops := api.GtfsManager.GetStopsForLocation(context.Background(), 38.9, -77.0, 1000, 0, 0, "", 10, false)
-	
+
 	// Current implementation should return a slice (possibly empty)
 	// The function should not panic and should return a valid slice
 	if stops == nil {
@@ -136,7 +136,7 @@ func TestContextCancellationDuringDatabaseQueries(t *testing.T) {
 
 		// Try to execute a database query with cancelled context
 		_, err := api.GtfsManager.GtfsDB.Queries.ListAgencies(ctx)
-		
+
 		// The query should either succeed (if fast enough) or return a context error
 		if err != nil {
 			assert.Equal(t, context.Canceled, err)
@@ -153,7 +153,7 @@ func TestContextCancellationDuringDatabaseQueries(t *testing.T) {
 
 		// Try to execute a database query with timeout context
 		_, err := api.GtfsManager.GtfsDB.Queries.ListAgencies(ctx)
-		
+
 		// The query should either succeed (if very fast) or return a timeout error
 		if err != nil {
 			assert.Equal(t, context.DeadlineExceeded, err)

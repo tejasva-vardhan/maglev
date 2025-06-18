@@ -2,8 +2,8 @@ package restapi
 
 import (
 	"encoding/json"
-	"log/slog"
 	"github.com/stretchr/testify/require"
+	"log/slog"
 	"maglev.onebusaway.org/internal/app"
 	"maglev.onebusaway.org/internal/appconf"
 	"maglev.onebusaway.org/internal/gtfs"

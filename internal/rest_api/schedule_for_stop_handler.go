@@ -30,7 +30,7 @@ func (api *RestAPI) scheduleForStopHandler(w http.ResponseWriter, r *http.Reques
 
 	// Get the date parameter or use current date
 	dateParam := r.URL.Query().Get("date")
-	
+
 	// Validate date parameter
 	if err := utils.ValidateDate(dateParam); err != nil {
 		fieldErrors := map[string][]string{
@@ -39,7 +39,7 @@ func (api *RestAPI) scheduleForStopHandler(w http.ResponseWriter, r *http.Reques
 		api.validationErrorResponse(w, r, fieldErrors)
 		return
 	}
-	
+
 	var date int64
 	if dateParam != "" {
 		// Parse YYYY-MM-DD format

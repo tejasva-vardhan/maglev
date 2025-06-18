@@ -42,9 +42,9 @@ func (api *RestAPI) stopsForLocationHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	query = sanitizedQuery
-	
+
 	ctx := r.Context()
-	
+
 	// Check if context is already cancelled
 	if ctx.Err() != nil {
 		api.serverErrorResponse(w, r, ctx.Err())
@@ -52,7 +52,7 @@ func (api *RestAPI) stopsForLocationHandler(w http.ResponseWriter, r *http.Reque
 	}
 
 	stops := api.GtfsManager.GetStopsForLocation(ctx, lat, lon, radius, latSpan, lonSpan, query, 100, false)
-	
+
 	var results []models.Stop
 	routeIDs := map[string]bool{}
 	agencyIDs := map[string]bool{}

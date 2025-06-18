@@ -65,10 +65,10 @@ func TestConcurrentGTFSDataAccess(t *testing.T) {
 	t.Run("Concurrent read/write without protection should be unsafe", func(t *testing.T) {
 		// This test demonstrates the race condition that we need to fix
 		// We'll run it with the race detector to catch issues
-		
+
 		var wg sync.WaitGroup
 		done := make(chan struct{})
-		
+
 		// Start readers
 		for i := 0; i < 10; i++ {
 			wg.Add(1)

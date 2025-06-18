@@ -180,7 +180,7 @@ func (manager *Manager) GetStopsForLocation(ctx context.Context, lat, lon float6
 	if ctx.Err() != nil {
 		return []*gtfs.Stop{}
 	}
-	
+
 	// Use spatial index query for initial filtering
 	dbStops, err := manager.GtfsDB.Queries.GetStopsWithinBounds(ctx, gtfsdb.GetStopsWithinBoundsParams{
 		Lat:   minLat,

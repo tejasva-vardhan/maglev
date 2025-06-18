@@ -77,7 +77,7 @@ func main() {
 
 	// Wrap with security middleware
 	secureHandler := api.WithSecurityHeaders(mux)
-	
+
 	// Add request logging middleware (outermost)
 	requestLogger := logging.NewStructuredLogger(os.Stdout, slog.LevelInfo)
 	requestLogMiddleware := restapi.NewRequestLoggingMiddleware(requestLogger)

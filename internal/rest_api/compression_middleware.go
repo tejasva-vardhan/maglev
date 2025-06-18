@@ -16,12 +16,12 @@ func applyGzipMiddleware(next http.Handler) http.Handler {
 func createCompressedAPIHandler(api *RestAPI) http.Handler {
 	// Create the base handler (this would normally be done in routes.go)
 	mux := http.NewServeMux()
-	
+
 	// Add a simple test route for the integration test
 	mux.HandleFunc("/api/where/agencies-with-coverage.json", func(w http.ResponseWriter, r *http.Request) {
 		api.agenciesWithCoverageHandler(w, r)
 	})
-	
+
 	// Apply compression middleware
 	return applyGzipMiddleware(mux)
 }

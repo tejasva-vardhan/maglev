@@ -24,14 +24,14 @@ func LogError(logger *slog.Logger, message string, err error, attrs ...slog.Attr
 	if logger == nil {
 		return
 	}
-	
+
 	args := make([]any, 0, len(attrs)+2)
 	args = append(args, slog.String("error", err.Error()))
-	
+
 	for _, attr := range attrs {
 		args = append(args, attr)
 	}
-	
+
 	logger.Error(message, args...)
 }
 
@@ -40,7 +40,7 @@ func LogOperation(logger *slog.Logger, operation string, attrs ...slog.Attr) {
 	if logger == nil {
 		return
 	}
-	
+
 	args := make([]any, 0, len(attrs))
 	for _, attr := range attrs {
 		// Skip zero-value durations
@@ -49,7 +49,7 @@ func LogOperation(logger *slog.Logger, operation string, attrs ...slog.Attr) {
 		}
 		args = append(args, attr)
 	}
-	
+
 	logger.Info(operation, args...)
 }
 
@@ -58,7 +58,7 @@ func LogHTTPRequest(logger *slog.Logger, method, path string, status int, durati
 	if logger == nil {
 		return
 	}
-	
+
 	args := make([]any, 0, len(attrs)+4)
 	args = append(args,
 		slog.String("method", method),
@@ -66,11 +66,11 @@ func LogHTTPRequest(logger *slog.Logger, method, path string, status int, durati
 		slog.Int("status", status),
 		slog.Float64("duration_ms", durationMs),
 	)
-	
+
 	for _, attr := range attrs {
 		args = append(args, attr)
 	}
-	
+
 	logger.Info("http_request", args...)
 }
 
@@ -84,7 +84,7 @@ func FromContext(ctx context.Context) *slog.Logger {
 	if logger, ok := ctx.Value(loggerKey{}).(*slog.Logger); ok && logger != nil {
 		return logger
 	}
-	
+
 	// Return a default logger if none is found
 	return slog.Default()
 }
@@ -100,10 +100,10 @@ func ReplaceLogPrint(logger *slog.Logger, message string) {
 // ReplaceLogFatal replaces log.Fatal calls with error logging and returns an error
 func ReplaceLogFatal(logger *slog.Logger, message string, err error) error {
 	wrappedErr := fmt.Errorf("%s: %w", message, err)
-	
+
 	if logger != nil {
 		LogError(logger, message, err)
 	}
-	
+
 	return wrappedErr
 }

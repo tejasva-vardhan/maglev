@@ -3,9 +3,9 @@ package gtfs
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"github.com/jamespfennell/gtfs"
 	"io"
+	"log/slog"
 	"maglev.onebusaway.org/gtfsdb"
 	"maglev.onebusaway.org/internal/logging"
 	"net/http"
@@ -27,8 +27,8 @@ func rawGtfsData(source string, isLocalFile bool) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("error downloading GTFS data: %w", err)
 		}
-		defer logging.SafeCloseWithLogging(resp.Body, 
-			slog.Default().With(slog.String("component", "gtfs_downloader")), 
+		defer logging.SafeCloseWithLogging(resp.Body,
+			slog.Default().With(slog.String("component", "gtfs_downloader")),
 			"http_response_body")
 
 		b, err = io.ReadAll(resp.Body)
@@ -122,7 +122,7 @@ func (manager *Manager) updateStaticGTFS() { // nolint
 func (manager *Manager) setStaticGTFS(staticData *gtfs.Static) {
 	manager.staticMutex.Lock()
 	defer manager.staticMutex.Unlock()
-	
+
 	manager.gtfsData = staticData
 	manager.lastUpdated = time.Now()
 

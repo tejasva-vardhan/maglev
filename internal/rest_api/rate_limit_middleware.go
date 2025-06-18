@@ -82,7 +82,7 @@ func (rl *RateLimitMiddleware) rateLimitHandler(next http.Handler) http.Handler 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Extract API key from query parameters
 		apiKey := r.URL.Query().Get("key")
-		
+
 		// Use a default key for requests without an API key
 		if apiKey == "" {
 			apiKey = "__no_key__"
@@ -119,7 +119,7 @@ func (rl *RateLimitMiddleware) sendRateLimitExceeded(w http.ResponseWriter, r *h
 	} else {
 		retryAfter = time.Duration(1) / time.Duration(rl.rateLimit)
 	}
-	
+
 	// Set headers
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())))
@@ -129,8 +129,8 @@ func (rl *RateLimitMiddleware) sendRateLimitExceeded(w http.ResponseWriter, r *h
 
 	// Send JSON error response consistent with OneBusAway API format
 	errorResponse := map[string]interface{}{
-		"code":    http.StatusTooManyRequests,
-		"text":    "Rate limit exceeded. Please try again later.",
+		"code": http.StatusTooManyRequests,
+		"text": "Rate limit exceeded. Please try again later.",
 		"data": map[string]interface{}{
 			"entry": nil,
 			"references": map[string]interface{}{
@@ -152,7 +152,7 @@ func (rl *RateLimitMiddleware) sendRateLimitExceeded(w http.ResponseWriter, r *h
 func (rl *RateLimitMiddleware) cleanup() {
 	for range rl.cleanupTick.C {
 		rl.mu.Lock()
-		
+
 		// Remove limiters that haven't been used recently
 		// For simplicity, we'll remove all limiters and let them be recreated as needed
 		// In a production system, you might want to track last access time
@@ -165,7 +165,7 @@ func (rl *RateLimitMiddleware) cleanup() {
 				}
 			}
 		}
-		
+
 		rl.mu.Unlock()
 	}
 }

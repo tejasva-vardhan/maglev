@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-
 )
 
 // SafeCloseWithLogging closes a resource and logs any errors that occur
@@ -12,7 +11,7 @@ func SafeCloseWithLogging(closer io.Closer, logger *slog.Logger, operation strin
 	if closer == nil {
 		return
 	}
-	
+
 	if err := closer.Close(); err != nil {
 		LogError(logger, "failed to close resource", err,
 			slog.String("operation", operation),
@@ -26,7 +25,7 @@ func SafeRollbackWithLogging(tx interface{ Rollback() error }, logger *slog.Logg
 	if tx == nil {
 		return
 	}
-	
+
 	if err := tx.Rollback(); err != nil {
 		// Ignore the common "already committed or rolled back" error
 		// This happens when defer rollback is called after successful commit
@@ -34,7 +33,7 @@ func SafeRollbackWithLogging(tx interface{ Rollback() error }, logger *slog.Logg
 		if errStr == "sql: transaction has already been committed or rolled back" {
 			return
 		}
-		
+
 		LogError(logger, "failed to rollback transaction", err,
 			slog.String("operation", operation),
 			slog.String("component", "database"))
@@ -47,13 +46,13 @@ func HandleDeferredError(originalErr *error, deferredOp func() error, logger *sl
 	if deferredOp == nil {
 		return
 	}
-	
+
 	if err := deferredOp(); err != nil {
 		// Log the deferred error
 		LogError(logger, "deferred operation failed", err,
 			slog.String("operation", operation),
 			slog.String("component", "deferred_cleanup"))
-		
+
 		// If there was no original error, set this as the error
 		if *originalErr == nil {
 			*originalErr = fmt.Errorf("%s failed: %w", operation, err)

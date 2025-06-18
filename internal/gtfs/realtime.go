@@ -2,9 +2,9 @@ package gtfs
 
 import (
 	"context"
-	"log/slog"
 	"github.com/jamespfennell/gtfs"
 	"io"
+	"log/slog"
 	"maglev.onebusaway.org/internal/logging"
 	"net/http"
 	"sync"
@@ -53,7 +53,7 @@ func loadRealtimeData(ctx context.Context, source string, headers map[string]str
 
 func (manager *Manager) updateGTFSRealtime(ctx context.Context, config Config) {
 	logger := logging.FromContext(ctx)
-	
+
 	headers := map[string]string{}
 	if config.RealTimeAuthHeaderKey != "" && config.RealTimeAuthHeaderValue != "" {
 		headers[config.RealTimeAuthHeaderKey] = config.RealTimeAuthHeaderValue

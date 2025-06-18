@@ -33,13 +33,13 @@ func rateLimitAndValidateAPIKey(api *RestAPI, finalHandler handlerFunc) http.Han
 	finalHandlerHttp := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		finalHandler(w, r)
 	})
-	
+
 	// Apply compression first (innermost)
 	compressedHandler := applyGzipMiddleware(finalHandlerHttp)
-	
+
 	// Then rate limiting
 	rateLimitedHandler := globalRateLimiter(compressedHandler)
-	
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// First validate API key
 		if api.RequestHasInvalidAPIKey(r) {
