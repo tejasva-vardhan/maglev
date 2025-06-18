@@ -8,53 +8,126 @@ import (
 	"maglev.onebusaway.org/internal/models"
 	"maglev.onebusaway.org/internal/utils"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 )
 
 func (api *RestAPI) stopsForRouteHandler(w http.ResponseWriter, r *http.Request) {
 	agencyID, routeID, _ := utils.ExtractAgencyIDAndCodeID(utils.ExtractIDFromParams(r))
 
-	if routeID == "" || agencyID == "" {
-		http.Error(w, "null", http.StatusInternalServerError)
-		return
-	}
-
-	currentAgency := api.GtfsManager.FindAgency(agencyID)
+	currentAgency := api.handleCommonErrors(w, r, agencyID, routeID)
 	if currentAgency == nil {
-		http.Error(w, "null", http.StatusInternalServerError)
 		return
 	}
 
 	currentLocation, _ := time.LoadLocation(currentAgency.Timezone)
-	currentTime := time.Now().In(currentLocation)
-	formattedDate := currentTime.Format("20060102")
+	timeParam := r.URL.Query().Get("time")
+
+	formattedDate, fieldErrors, success := parseTimeParameter(timeParam, currentLocation)
+	if !success {
+		api.validationErrorResponse(w, r, fieldErrors)
+		return
+	}
 
 	ctx := context.Background()
-
-	serviceIDs, _ := api.GtfsManager.GtfsDB.Queries.GetActiveServiceIDsForDate(ctx, formattedDate)
-
-	allStops := make(map[string]bool)
-	allPolylines := make([]models.Polyline, 0, 100)
-	// Get trips for route that are active on the service date
-	trips, err := api.GtfsManager.GtfsDB.Queries.GetTripsForRouteInActiveServiceIDs(ctx, gtfsdb.GetTripsForRouteInActiveServiceIDsParams{
-		RouteID:    routeID,
-		ServiceIds: serviceIDs,
-	})
+	serviceIDs, err := api.GtfsManager.GtfsDB.Queries.GetActiveServiceIDsForDate(ctx, formattedDate)
 	if err != nil {
 		api.serverErrorResponse(w, r, err)
 		return
 	}
 
+	result, stopsList, err := api.processRouteStops(ctx, agencyID, routeID, serviceIDs)
+	if err != nil {
+		api.serverErrorResponse(w, r, err)
+		return
+	}
+
+	api.buildAndSendResponse(w, r, result, stopsList, *currentAgency)
+}
+
+func (api *RestAPI) handleCommonErrors(w http.ResponseWriter, r *http.Request, agencyID string, routeID string) *gtfs.Agency {
+	if routeID == "" || agencyID == "" {
+		http.Error(w, "null", http.StatusInternalServerError)
+		return nil
+	}
+
+	currentAgency := api.GtfsManager.FindAgency(agencyID)
+	if currentAgency == nil {
+		http.Error(w, "null", http.StatusInternalServerError)
+		return nil
+	}
+
+	return currentAgency
+}
+
+func parseTimeParameter(timeParam string, currentLocation *time.Location) (string, map[string][]string, bool) {
+	if timeParam == "" {
+		// No time parameter, use current date
+		return time.Now().In(currentLocation).Format("20060102"), nil, true
+	}
+
+	var parsedTime time.Time
+	validFormat := false
+
+	// Check if it's epoch timestamp
+	if epochTime, err := strconv.ParseInt(timeParam, 10, 64); err == nil {
+		// Convert epoch to time
+		parsedTime = time.Unix(epochTime/1000, 0).In(currentLocation)
+		validFormat = true
+	} else if strings.Contains(timeParam, "-") {
+		// Assume YYYY-MM-DD format
+		parsedTime, err = time.Parse("2006-01-02", timeParam)
+		if err == nil {
+			validFormat = true
+		}
+	}
+
+	if !validFormat {
+		// Invalid format
+		fieldErrors := map[string][]string{
+			"time": {"Invalid field value for field \"time\"."},
+		}
+		return "", fieldErrors, false
+	}
+
+	// Set time to midnight for accurate comparison
+	currentTime := time.Now().In(currentLocation)
+	todayMidnight := time.Date(currentTime.Year(), currentTime.Month(), currentTime.Day(), 0, 0, 0, 0, currentLocation)
+	parsedTimeMidnight := time.Date(parsedTime.Year(), parsedTime.Month(), parsedTime.Day(), 0, 0, 0, 0, currentLocation)
+
+	if parsedTimeMidnight.After(todayMidnight) {
+		fieldErrors := map[string][]string{
+			"time": {"Invalid field value for field \"time\"."},
+		}
+		return "", fieldErrors, false
+	}
+
+	// Valid date, use it
+	return parsedTime.Format("20060102"), nil, true
+}
+
+func (api *RestAPI) processRouteStops(ctx context.Context, agencyID string, routeID string, serviceIDs []string) (models.RouteEntry, []models.Stop, error) {
+	allStops := make(map[string]bool)
+	allPolylines := make([]models.Polyline, 0, 100)
 	var stopGroupings []models.StopGrouping
+
+	// Get trips for route that are active on the service date
+	trips, err := api.GtfsManager.GtfsDB.Queries.GetTripsForRouteInActiveServiceIDs(ctx, gtfsdb.GetTripsForRouteInActiveServiceIDsParams{
+		RouteID:    routeID,
+		ServiceIds: serviceIDs,
+	})
+
+	if err != nil {
+		return models.RouteEntry{}, nil, err
+	}
 
 	if len(trips) == 0 {
 		// Fallback: get all trips for this route regardless of service date
 		allTrips, err := api.GtfsManager.GtfsDB.Queries.GetAllTripsForRoute(ctx, routeID)
 		if err != nil {
-			api.serverErrorResponse(w, r, err)
-			return
+			return models.RouteEntry{}, nil, err
 		}
-		// Group trips by direction_id and trip_headsign
 		processTripGroups(ctx, api, agencyID, routeID, allTrips, &stopGroupings, allStops, &allPolylines)
 	} else {
 		// Process trips for the current service date
@@ -62,11 +135,34 @@ func (api *RestAPI) stopsForRouteHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	allStopsIds := formatStopIDs(agencyID, allStops)
-	stopsList := make([]models.Stop, 0, len(allStopsIds))
-	for stopID, _ := range allStops {
-		stop, _ := api.GtfsManager.GtfsDB.Queries.GetStop(ctx, stopID)
-		routeIds, _ := api.GtfsManager.GtfsDB.Queries.GetRouteIDsForStop(ctx, stop.ID)
-		// TODO calculate stop direction
+	stopsList, err := buildStopsList(ctx, api, agencyID, allStops)
+	if err != nil {
+		return models.RouteEntry{}, nil, err
+	}
+
+	result := models.RouteEntry{
+		Polylines:     allPolylines,
+		RouteID:       utils.FormCombinedID(agencyID, routeID),
+		StopGroupings: stopGroupings,
+		StopIds:       allStopsIds,
+	}
+
+	return result, stopsList, nil
+}
+
+func buildStopsList(ctx context.Context, api *RestAPI, agencyID string, allStops map[string]bool) ([]models.Stop, error) {
+	stopsList := make([]models.Stop, 0, len(allStops))
+	for stopID := range allStops {
+		stop, err := api.GtfsManager.GtfsDB.Queries.GetStop(ctx, stopID)
+		if err != nil {
+			continue
+		}
+
+		routeIds, err := api.GtfsManager.GtfsDB.Queries.GetRouteIDsForStop(ctx, stop.ID)
+		if err != nil {
+			continue
+		}
+
 		routeIdsString := make([]string, len(routeIds))
 		for i, id := range routeIds {
 			routeIdsString[i] = id.(string)
@@ -74,7 +170,7 @@ func (api *RestAPI) stopsForRouteHandler(w http.ResponseWriter, r *http.Request)
 
 		stopsList = append(stopsList, models.Stop{
 			Code:               stop.Code.String,
-			Direction:          "Direction",
+			Direction:          "Direction", // TODO calculate stop direction
 			ID:                 utils.FormCombinedID(agencyID, stop.ID),
 			Lat:                stop.Lat,
 			LocationType:       int(stop.LocationType.Int64),
@@ -85,13 +181,10 @@ func (api *RestAPI) stopsForRouteHandler(w http.ResponseWriter, r *http.Request)
 			WheelchairBoarding: utils.MapWheelchairBoarding(gtfs.WheelchairBoarding(stop.WheelchairBoarding.Int64)),
 		})
 	}
-	result := models.RouteEntry{
-		Polylines:     allPolylines,
-		RouteID:       utils.FormCombinedID(agencyID, routeID),
-		StopGroupings: stopGroupings,
-		StopIds:       allStopsIds,
-	}
+	return stopsList, nil
+}
 
+func (api *RestAPI) buildAndSendResponse(w http.ResponseWriter, r *http.Request, result models.RouteEntry, stopsList []models.Stop, currentAgency gtfs.Agency) {
 	agencyRef := models.NewAgencyReference(
 		currentAgency.Id,
 		currentAgency.Name,
@@ -107,7 +200,7 @@ func (api *RestAPI) stopsForRouteHandler(w http.ResponseWriter, r *http.Request)
 
 	references := models.ReferencesModel{
 		Agencies:   []models.AgencyReference{agencyRef},
-		Routes:     utils.GetAllRoutesRefs(api.GtfsManager.GtfsDB.Queries, ctx),
+		Routes:     utils.GetAllRoutesRefs(api.GtfsManager.GtfsDB.Queries, context.Background()),
 		Situations: []interface{}{},
 		StopTimes:  []interface{}{},
 		Stops:      stopsList,
@@ -143,21 +236,26 @@ func processTripGroups(
 	}
 
 	for key, tripsInGroup := range tripGroups {
-		repTrip := tripsInGroup[0]
-		stopsList, err := api.GtfsManager.GtfsDB.Queries.GetOrderedStopIDsForTrip(ctx, repTrip.ID)
+		representativeTrip := tripsInGroup[0]
+		stopsList, err := api.GtfsManager.GtfsDB.Queries.GetOrderedStopIDsForTrip(ctx, representativeTrip.ID)
+		if err != nil {
+			continue
+		}
+
 		stopIDs := make(map[string]bool)
 		for _, stopID := range stopsList {
 			stopIDs[stopID] = true
 			allStops[stopID] = true
 		}
-		if err != nil {
-			continue
-		}
+
 		shape, err := api.GtfsManager.GtfsDB.Queries.GetShapesGroupedByTripHeadSign(ctx,
 			gtfsdb.GetShapesGroupedByTripHeadSignParams{
 				RouteID:      routeID,
-				TripHeadsign: repTrip.TripHeadsign,
+				TripHeadsign: representativeTrip.TripHeadsign,
 			})
+		if err != nil {
+			continue
+		}
 
 		polylines := generatePolylines(shape)
 		*allPolylines = append(*allPolylines, polylines...)
@@ -200,7 +298,7 @@ func generatePolylines(shapes []gtfsdb.GetShapesGroupedByTripHeadSignRow) []mode
 
 func formatStopIDs(agencyID string, stops map[string]bool) []string {
 	var stopIDs []string
-	for key, _ := range stops {
+	for key := range stops {
 		stopID := utils.FormCombinedID(agencyID, key)
 		stopIDs = append(stopIDs, stopID)
 	}
