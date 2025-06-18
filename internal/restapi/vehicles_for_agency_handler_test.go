@@ -331,14 +331,15 @@ func createTestApiWithRealTimeData(t *testing.T) (*RestAPI, func()) {
 
 	app := &app.Application{
 		Config: appconf.Config{
-			Env:     appconf.EnvFlagToEnvironment("test"),
-			ApiKeys: []string{"TEST"},
+			Env:       appconf.EnvFlagToEnvironment("test"),
+			ApiKeys:   []string{"TEST"},
+			RateLimit: 100, // Higher rate limit for this test
 		},
 		GtfsConfig:  gtfsConfig,
 		GtfsManager: gtfsManager,
 	}
 
-	api := &RestAPI{Application: app}
+	api := NewRestAPI(app)
 
 	// Cleanup function to close the server
 	cleanup := func() {

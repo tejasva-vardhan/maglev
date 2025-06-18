@@ -15,6 +15,14 @@ All commands are managed through the Makefile:
 - `make watch` - Run with Air for live reloading during development
 - `make clean` - Clean build artifacts
 
+## Important: Requirements to make a commit
+
+Before committing any code, you must always run all of these steps, and have them all succeed:
+
+1. Run `make lint` and fix any linting issues that are identified
+2. Run `make test` and fix any failing tests
+3. Run `go fmt ./...` and commit all of the formatting changes
+
 ## Architecture Overview
 
 This is a Go 1.24.2+ application that provides a REST API for OneBusAway transit data. The architecture follows a layered design:
@@ -47,7 +55,7 @@ This is a Go 1.24.2+ application that provides a REST API for OneBusAway transit
 The project uses SQLite with sqlc for type-safe database access:
 
 - Schema: `gtfsdb/schema.sql`
-- Queries: `gtfsdb/query.sql` 
+- Queries: `gtfsdb/query.sql`
 - Generated code: `gtfsdb/query.sql.go` and `gtfsdb/models.go`
 - Configuration: `gtfsdb/sqlc.yml`
 
@@ -75,7 +83,7 @@ The GTFS Manager provides two types of data access:
 
 **Database Queries** (via sqlc):
 - `GetRoute(ctx, id)` - Single route by ID
-- `GetAgency(ctx, id)` - Single agency by ID  
+- `GetAgency(ctx, id)` - Single agency by ID
 - Access via: `api.GtfsManager.GtfsDB.Queries.GetRoute()`, etc.
 - **Important**: No `FindRoute()` method exists - use database queries for route lookups
 
@@ -122,7 +130,7 @@ for _, ref := range agencyRefs {
 
 Map GTFS-RT CurrentStatus enum to OneBusAway strings:
 - `0` (INCOMING_AT) → `"INCOMING_AT"` / `"approaching"`
-- `1` (STOPPED_AT) → `"STOPPED_AT"` / `"stopped"`  
+- `1` (STOPPED_AT) → `"STOPPED_AT"` / `"stopped"`
 - `2` (IN_TRANSIT_TO) → `"IN_TRANSIT_TO"` / `"in_progress"`
 - Default → `"SCHEDULED"` / `"scheduled"`
 
@@ -148,22 +156,22 @@ For testing GTFS-RT functionality, use HTTP test servers to serve local `.pb` fi
 ```go
 func createTestApiWithRealTimeData(t *testing.T) (*RestAPI, func()) {
     mux := http.NewServeMux()
-    
+
     mux.HandleFunc("/vehicle-positions", func(w http.ResponseWriter, r *http.Request) {
         data, err := os.ReadFile(filepath.Join("../../testdata", "agency-vehicle-positions.pb"))
         require.NoError(t, err)
         w.Header().Set("Content-Type", "application/x-protobuf")
         w.Write(data)
     })
-    
+
     server := httptest.NewServer(mux)
-    
+
     gtfsConfig := gtfs.Config{
         GtfsURL:              filepath.Join("../../testdata", "agency.zip"),
         VehiclePositionsURL:  server.URL + "/vehicle-positions",
         TripUpdatesURL:       server.URL + "/trip-updates",
     }
-    
+
     // ... rest of setup
     return api, server.Close
 }

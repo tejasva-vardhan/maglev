@@ -30,7 +30,14 @@ func (api *RestAPI) stopsForRouteHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	ctx := context.Background()
+	ctx := r.Context()
+
+	// Check if context is already cancelled
+	if ctx.Err() != nil {
+		api.serverErrorResponse(w, r, ctx.Err())
+		return
+	}
+
 	serviceIDs, err := api.GtfsManager.GtfsDB.Queries.GetActiveServiceIDsForDate(ctx, formattedDate)
 	if err != nil {
 		api.serverErrorResponse(w, r, err)
@@ -43,7 +50,7 @@ func (api *RestAPI) stopsForRouteHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	api.buildAndSendResponse(w, r, result, stopsList, *currentAgency)
+	api.buildAndSendResponse(w, r, ctx, result, stopsList, *currentAgency)
 }
 
 func (api *RestAPI) handleCommonErrors(w http.ResponseWriter, r *http.Request, agencyID string, routeID string) *gtfs.Agency {
@@ -184,7 +191,7 @@ func buildStopsList(ctx context.Context, api *RestAPI, agencyID string, allStops
 	return stopsList, nil
 }
 
-func (api *RestAPI) buildAndSendResponse(w http.ResponseWriter, r *http.Request, result models.RouteEntry, stopsList []models.Stop, currentAgency gtfs.Agency) {
+func (api *RestAPI) buildAndSendResponse(w http.ResponseWriter, r *http.Request, ctx context.Context, result models.RouteEntry, stopsList []models.Stop, currentAgency gtfs.Agency) {
 	agencyRef := models.NewAgencyReference(
 		currentAgency.Id,
 		currentAgency.Name,
@@ -200,7 +207,7 @@ func (api *RestAPI) buildAndSendResponse(w http.ResponseWriter, r *http.Request,
 
 	references := models.ReferencesModel{
 		Agencies:   []models.AgencyReference{agencyRef},
-		Routes:     utils.GetAllRoutesRefs(api.GtfsManager.GtfsDB.Queries, context.Background()),
+		Routes:     utils.GetAllRoutesRefs(api.GtfsManager.GtfsDB.Queries, ctx),
 		Situations: []interface{}{},
 		StopTimes:  []interface{}{},
 		Stops:      stopsList,

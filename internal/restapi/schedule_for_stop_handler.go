@@ -11,6 +11,15 @@ import (
 func (api *RestAPI) scheduleForStopHandler(w http.ResponseWriter, r *http.Request) {
 	queryParamID := utils.ExtractIDFromParams(r)
 
+	// Validate ID
+	if err := utils.ValidateID(queryParamID); err != nil {
+		fieldErrors := map[string][]string{
+			"id": {err.Error()},
+		}
+		api.validationErrorResponse(w, r, fieldErrors)
+		return
+	}
+
 	agencyID, stopID, err := utils.ExtractAgencyIDAndCodeID(queryParamID)
 	if err != nil {
 		api.serverErrorResponse(w, r, err)
@@ -21,6 +30,16 @@ func (api *RestAPI) scheduleForStopHandler(w http.ResponseWriter, r *http.Reques
 
 	// Get the date parameter or use current date
 	dateParam := r.URL.Query().Get("date")
+
+	// Validate date parameter
+	if err := utils.ValidateDate(dateParam); err != nil {
+		fieldErrors := map[string][]string{
+			"date": {err.Error()},
+		}
+		api.validationErrorResponse(w, r, fieldErrors)
+		return
+	}
+
 	var date int64
 	if dateParam != "" {
 		// Parse YYYY-MM-DD format
@@ -80,7 +99,7 @@ func (api *RestAPI) scheduleForStopHandler(w http.ResponseWriter, r *http.Reques
 		)
 
 		routeScheduleMap[combinedRouteID] = append(routeScheduleMap[combinedRouteID], stopTime)
-		
+
 		// Store the trip headsign for this route
 		if row.TripHeadsign.Valid && row.TripHeadsign.String != "" {
 			routeHeadsignMap[combinedRouteID] = row.TripHeadsign.String

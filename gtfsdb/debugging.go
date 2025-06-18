@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"github.com/jamespfennell/gtfs"
 	"log"
+	"log/slog"
+	"maglev.onebusaway.org/internal/logging"
 	"strings"
 )
 
@@ -20,7 +22,9 @@ func PrintSimpleSchema(db *sql.DB) error { // nolint:unused
 	if err != nil {
 		return err
 	}
-	defer rows.Close() // nolint:errcheck
+	defer logging.SafeCloseWithLogging(rows,
+		slog.Default().With(slog.String("component", "debugging")),
+		"database_rows")
 
 	log.Println("DATABASE SCHEMA:")
 	log.Println("----------------")
@@ -53,15 +57,17 @@ func (c *Client) staticDataCounts(staticData *gtfs.Static) map[string]int {
 func (c *Client) TableCounts() (map[string]int, error) {
 	rows, err := c.DB.Query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
 	if err != nil {
-		log.Fatalf("Failed to query table names: %v", err)
+		return nil, fmt.Errorf("failed to query table names: %w", err)
 	}
-	defer rows.Close() // nolint:errcheck
+	defer logging.SafeCloseWithLogging(rows,
+		slog.Default().With(slog.String("component", "debugging")),
+		"database_rows")
 	var tables []string
 
 	for rows.Next() {
 		var tableName string
 		if err := rows.Scan(&tableName); err != nil {
-			log.Fatalf("Failed to scan table name: %v", err)
+			return nil, fmt.Errorf("failed to scan table name: %w", err)
 		}
 		tables = append(tables, tableName)
 	}

@@ -10,6 +10,15 @@ import (
 func (api *RestAPI) stopHandler(w http.ResponseWriter, r *http.Request) {
 	queryParamID := utils.ExtractIDFromParams(r)
 
+	// Validate ID
+	if err := utils.ValidateID(queryParamID); err != nil {
+		fieldErrors := map[string][]string{
+			"id": {err.Error()},
+		}
+		api.validationErrorResponse(w, r, fieldErrors)
+		return
+	}
+
 	agencyID, stopID, err := utils.ExtractAgencyIDAndCodeID(queryParamID)
 	if err != nil {
 		api.serverErrorResponse(w, r, err)
