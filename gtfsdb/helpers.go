@@ -34,6 +34,9 @@ func createDB(config Config) (*sql.DB, error) {
 		return nil, fmt.Errorf("error performing database migration: %w", err)
 	}
 
+	// Configure connection pool settings
+	configureConnectionPool(db)
+
 	return db, nil
 }
 
@@ -482,4 +485,16 @@ func (c *Client) buldInsertCalendarDates(ctx context.Context, calendarDates []Cr
 		}
 	}
 	return tx.Commit()
+}
+
+// configureConnectionPool applies connection pool settings to the database
+func configureConnectionPool(db *sql.DB) {
+	// Set maximum number of open connections to 25
+	db.SetMaxOpenConns(25)
+	
+	// Set maximum number of idle connections to 5
+	db.SetMaxIdleConns(5)
+	
+	// Set maximum lifetime of connections to 5 minutes
+	db.SetConnMaxLifetime(5 * time.Minute)
 }
