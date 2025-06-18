@@ -312,7 +312,6 @@ SELECT stop_id
 FROM stop_times
 WHERE trip_id = ?
 ORDER BY stop_sequence;
-    route_id = ?;
 -- name: GetScheduleForStop :many
 SELECT
     st.trip_id,

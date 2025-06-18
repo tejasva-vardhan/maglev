@@ -93,7 +93,6 @@ func (c *Client) processAndStoreGTFSDataWithSource(b []byte, source string) erro
 	}
 	// If err == sql.ErrNoRows, this is the first import, continue normally
 
-
 	var staticCounts map[string]int
 
 	staticData, err := gtfs.ParseStatic(b, gtfs.ParseStaticOptions{})
@@ -290,33 +289,6 @@ func (c *Client) processAndStoreGTFSDataWithSource(b []byte, source string) erro
 		log.Println("Import metadata updated successfully")
 	}
 
-	return nil
-}
-
-// clearAllGTFSData clears all GTFS data from the database in the correct order to respect foreign key constraints
-func (c *Client) clearAllGTFSData(ctx context.Context) error {
-	// Delete in reverse order of dependencies to avoid foreign key constraint violations
-	if err := c.Queries.ClearStopTimes(ctx); err != nil {
-		return fmt.Errorf("error clearing stop_times: %w", err)
-	}
-	if err := c.Queries.ClearShapes(ctx); err != nil {
-		return fmt.Errorf("error clearing shapes: %w", err)
-	}
-	if err := c.Queries.ClearTrips(ctx); err != nil {
-		return fmt.Errorf("error clearing trips: %w", err)
-	}
-	if err := c.Queries.ClearCalendar(ctx); err != nil {
-		return fmt.Errorf("error clearing calendar: %w", err)
-	}
-	if err := c.Queries.ClearStops(ctx); err != nil {
-		return fmt.Errorf("error clearing stops: %w", err)
-	}
-	if err := c.Queries.ClearRoutes(ctx); err != nil {
-		return fmt.Errorf("error clearing routes: %w", err)
-	}
-	if err := c.Queries.ClearAgencies(ctx); err != nil {
-		return fmt.Errorf("error clearing agencies: %w", err)
-	}
 	var allCalendarDateParams []CreateCalendarDateParams
 
 	for _, service := range staticData.Services {
@@ -349,6 +321,33 @@ func (c *Client) clearAllGTFSData(ctx context.Context) error {
 		}
 	}
 
+	return nil
+}
+
+// clearAllGTFSData clears all GTFS data from the database in the correct order to respect foreign key constraints
+func (c *Client) clearAllGTFSData(ctx context.Context) error {
+	// Delete in reverse order of dependencies to avoid foreign key constraint violations
+	if err := c.Queries.ClearStopTimes(ctx); err != nil {
+		return fmt.Errorf("error clearing stop_times: %w", err)
+	}
+	if err := c.Queries.ClearShapes(ctx); err != nil {
+		return fmt.Errorf("error clearing shapes: %w", err)
+	}
+	if err := c.Queries.ClearTrips(ctx); err != nil {
+		return fmt.Errorf("error clearing trips: %w", err)
+	}
+	if err := c.Queries.ClearCalendar(ctx); err != nil {
+		return fmt.Errorf("error clearing calendar: %w", err)
+	}
+	if err := c.Queries.ClearStops(ctx); err != nil {
+		return fmt.Errorf("error clearing stops: %w", err)
+	}
+	if err := c.Queries.ClearRoutes(ctx); err != nil {
+		return fmt.Errorf("error clearing routes: %w", err)
+	}
+	if err := c.Queries.ClearAgencies(ctx); err != nil {
+		return fmt.Errorf("error clearing agencies: %w", err)
+	}
 	return nil
 }
 
