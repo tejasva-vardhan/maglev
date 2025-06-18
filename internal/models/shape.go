@@ -15,8 +15,3 @@ type ShapeEntry struct {
 	Length int    `json:"length"`
 	Levels string `json:"levels"`
 }
-
-type ShapeResponse struct {
-	Entry      ShapeEntry  `json:"entry"`
-	References interface{} `json:"references"`
-}

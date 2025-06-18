@@ -8,6 +8,7 @@ package gtfsdb
 import (
 	"context"
 	"database/sql"
+	"strings"
 )
 
 const clearAgencies = `-- name: ClearAgencies :exec
@@ -182,6 +183,25 @@ func (q *Queries) CreateCalendar(ctx context.Context, arg CreateCalendarParams) 
 		&i.StartDate,
 		&i.EndDate,
 	)
+	return i, err
+}
+
+const createCalendarDate = `-- name: CreateCalendarDate :one
+INSERT
+OR REPLACE INTO calendar_dates(service_id, date, exception_type)
+VALUES (?, ?, ?) RETURNING service_id, date, exception_type
+`
+
+type CreateCalendarDateParams struct {
+	ServiceID     string
+	Date          string
+	ExceptionType int64
+}
+
+func (q *Queries) CreateCalendarDate(ctx context.Context, arg CreateCalendarDateParams) (CalendarDate, error) {
+	row := q.queryRow(ctx, q.createCalendarDateStmt, createCalendarDate, arg.ServiceID, arg.Date, arg.ExceptionType)
+	var i CalendarDate
+	err := row.Scan(&i.ServiceID, &i.Date, &i.ExceptionType)
 	return i, err
 }
 
@@ -466,6 +486,53 @@ func (q *Queries) CreateTrip(ctx context.Context, arg CreateTripParams) (Trip, e
 	return i, err
 }
 
+const getActiveServiceIDsForDate = `-- name: GetActiveServiceIDsForDate :many
+WITH formatted_date AS (
+    SELECT STRFTIME('%w', SUBSTR(?1, 1, 4) || '-' || SUBSTR(?1, 5, 2) || '-' || SUBSTR(?1, 7, 2)) AS weekday
+)
+SELECT DISTINCT c.id AS service_id
+FROM calendar c, formatted_date fd
+WHERE c.start_date <= ?1
+  AND c.end_date >= ?1
+  AND (
+    (fd.weekday = '0' AND c.sunday = 1) OR
+    (fd.weekday = '1' AND c.monday = 1) OR
+    (fd.weekday = '2' AND c.tuesday = 1) OR
+    (fd.weekday = '3' AND c.wednesday = 1) OR
+    (fd.weekday = '4' AND c.thursday = 1) OR
+    (fd.weekday = '5' AND c.friday = 1) OR
+    (fd.weekday = '6' AND c.saturday = 1)
+    )
+UNION
+SELECT DISTINCT service_id
+FROM calendar_dates
+WHERE date = ?1
+  AND exception_type = 1
+`
+
+func (q *Queries) GetActiveServiceIDsForDate(ctx context.Context, targetDate interface{}) ([]string, error) {
+	rows, err := q.query(ctx, q.getActiveServiceIDsForDateStmt, getActiveServiceIDsForDate, targetDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var service_id string
+		if err := rows.Scan(&service_id); err != nil {
+			return nil, err
+		}
+		items = append(items, service_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getAgency = `-- name: GetAgency :one
 SELECT
     id, name, url, timezone, lang, phone, fare_url, email
@@ -568,6 +635,47 @@ func (q *Queries) GetAllShapes(ctx context.Context) ([]Shape, error) {
 	return items, nil
 }
 
+const getAllTripsForRoute = `-- name: GetAllTripsForRoute :many
+SELECT DISTINCT id, route_id, service_id, trip_headsign, trip_short_name, direction_id, block_id, shape_id, wheelchair_accessible, bikes_allowed
+FROM trips t
+WHERE t.route_id = ?1
+ORDER BY t.direction_id, t.trip_headsign
+`
+
+func (q *Queries) GetAllTripsForRoute(ctx context.Context, routeID string) ([]Trip, error) {
+	rows, err := q.query(ctx, q.getAllTripsForRouteStmt, getAllTripsForRoute, routeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Trip
+	for rows.Next() {
+		var i Trip
+		if err := rows.Scan(
+			&i.ID,
+			&i.RouteID,
+			&i.ServiceID,
+			&i.TripHeadsign,
+			&i.TripShortName,
+			&i.DirectionID,
+			&i.BlockID,
+			&i.ShapeID,
+			&i.WheelchairAccessible,
+			&i.BikesAllowed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getImportMetadata = `-- name: GetImportMetadata :one
 SELECT
     id, file_hash, import_time, file_source
@@ -587,6 +695,36 @@ func (q *Queries) GetImportMetadata(ctx context.Context) (ImportMetadatum, error
 		&i.FileSource,
 	)
 	return i, err
+}
+
+const getOrderedStopIDsForTrip = `-- name: GetOrderedStopIDsForTrip :many
+SELECT stop_id
+FROM stop_times
+WHERE trip_id = ?
+ORDER BY stop_sequence
+`
+
+func (q *Queries) GetOrderedStopIDsForTrip(ctx context.Context, tripID string) ([]string, error) {
+	rows, err := q.query(ctx, q.getOrderedStopIDsForTripStmt, getOrderedStopIDsForTrip, tripID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var stop_id string
+		if err := rows.Scan(&stop_id); err != nil {
+			return nil, err
+		}
+		items = append(items, stop_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getRoute = `-- name: GetRoute :one
@@ -652,7 +790,7 @@ func (q *Queries) GetRouteIDsForAgency(ctx context.Context, id string) ([]string
 
 const getRouteIDsForStop = `-- name: GetRouteIDsForStop :many
 SELECT DISTINCT
-    routes.agency_id || '_' || routes.id AS route_id
+    (routes.agency_id || '_' || routes.id) AS route_id
 FROM
     stop_times
     JOIN trips ON stop_times.trip_id = trips.id
@@ -731,7 +869,7 @@ func (q *Queries) GetRoutesForStop(ctx context.Context, stopID string) ([]Route,
 }
 
 const getScheduleForStop = `-- name: GetScheduleForStop :many
-SELECT 
+SELECT
     st.trip_id,
     st.arrival_time,
     st.departure_time,
@@ -741,13 +879,13 @@ SELECT
     t.trip_headsign,
     r.id as route_id,
     r.agency_id
-FROM 
+FROM
     stop_times st
     JOIN trips t ON st.trip_id = t.id
     JOIN routes r ON t.route_id = r.id
-WHERE 
+WHERE
     st.stop_id = ?
-ORDER BY 
+ORDER BY
     r.id, st.arrival_time
 `
 
@@ -834,6 +972,54 @@ func (q *Queries) GetShapeByID(ctx context.Context, shapeID string) ([]Shape, er
 	return items, nil
 }
 
+const getShapesGroupedByTripHeadSign = `-- name: GetShapesGroupedByTripHeadSign :many
+SELECT DISTINCT s.lat, s.lon, s.shape_pt_sequence
+FROM shapes s
+         JOIN (
+    SELECT shape_id
+    FROM trips
+    WHERE route_id = ?1
+      AND trip_headsign = ?2
+      AND shape_id IS NOT NULL
+    LIMIT 1
+) t ON s.shape_id = t.shape_id
+ORDER BY s.shape_pt_sequence
+`
+
+type GetShapesGroupedByTripHeadSignParams struct {
+	RouteID      string
+	TripHeadsign sql.NullString
+}
+
+type GetShapesGroupedByTripHeadSignRow struct {
+	Lat             float64
+	Lon             float64
+	ShapePtSequence int64
+}
+
+func (q *Queries) GetShapesGroupedByTripHeadSign(ctx context.Context, arg GetShapesGroupedByTripHeadSignParams) ([]GetShapesGroupedByTripHeadSignRow, error) {
+	rows, err := q.query(ctx, q.getShapesGroupedByTripHeadSignStmt, getShapesGroupedByTripHeadSign, arg.RouteID, arg.TripHeadsign)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetShapesGroupedByTripHeadSignRow
+	for rows.Next() {
+		var i GetShapesGroupedByTripHeadSignRow
+		if err := rows.Scan(&i.Lat, &i.Lon, &i.ShapePtSequence); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getStop = `-- name: GetStop :one
 SELECT
     id, code, name, "desc", lat, lon, zone_id, url, location_type, timezone, wheelchair_boarding, platform_code
@@ -893,6 +1079,71 @@ func (q *Queries) GetStopIDsForAgency(ctx context.Context) ([]string, error) {
 	return items, nil
 }
 
+const getStopIDsForRoute = `-- name: GetStopIDsForRoute :many
+SELECT DISTINCT
+    stop_times.stop_id
+FROM
+    stop_times
+        JOIN trips ON stop_times.trip_id = trips.id
+WHERE
+    trips.route_id = ?
+`
+
+func (q *Queries) GetStopIDsForRoute(ctx context.Context, routeID string) ([]string, error) {
+	rows, err := q.query(ctx, q.getStopIDsForRouteStmt, getStopIDsForRoute, routeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var stop_id string
+		if err := rows.Scan(&stop_id); err != nil {
+			return nil, err
+		}
+		items = append(items, stop_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getStopIDsForTrip = `-- name: GetStopIDsForTrip :many
+SELECT DISTINCT
+    stop_times.stop_id
+FROM
+    stop_times
+WHERE
+    stop_times.trip_id = ?
+`
+
+func (q *Queries) GetStopIDsForTrip(ctx context.Context, tripID string) ([]string, error) {
+	rows, err := q.query(ctx, q.getStopIDsForTripStmt, getStopIDsForTrip, tripID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var stop_id string
+		if err := rows.Scan(&stop_id); err != nil {
+			return nil, err
+		}
+		items = append(items, stop_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTrip = `-- name: GetTrip :one
 SELECT
     id, route_id, service_id, trip_headsign, trip_short_name, direction_id, block_id, shape_id, wheelchair_accessible, bikes_allowed
@@ -918,6 +1169,64 @@ func (q *Queries) GetTrip(ctx context.Context, id string) (Trip, error) {
 		&i.BikesAllowed,
 	)
 	return i, err
+}
+
+const getTripsForRouteInActiveServiceIDs = `-- name: GetTripsForRouteInActiveServiceIDs :many
+SELECT DISTINCT id, route_id, service_id, trip_headsign, trip_short_name, direction_id, block_id, shape_id, wheelchair_accessible, bikes_allowed
+FROM trips t
+WHERE t.route_id = ?1
+  AND t.service_id IN (/*SLICE:('service_ids')*/?)
+ORDER BY t.direction_id, t.trip_headsign
+`
+
+type GetTripsForRouteInActiveServiceIDsParams struct {
+	RouteID    string
+	ServiceIds []string
+}
+
+func (q *Queries) GetTripsForRouteInActiveServiceIDs(ctx context.Context, arg GetTripsForRouteInActiveServiceIDsParams) ([]Trip, error) {
+	query := getTripsForRouteInActiveServiceIDs
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.RouteID)
+	if len(arg.ServiceIds) > 0 {
+		for _, v := range arg.ServiceIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:('service_ids')*/?", strings.Repeat(",?", len(arg.ServiceIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:('service_ids')*/?", "NULL", 1)
+	}
+	rows, err := q.query(ctx, nil, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Trip
+	for rows.Next() {
+		var i Trip
+		if err := rows.Scan(
+			&i.ID,
+			&i.RouteID,
+			&i.ServiceID,
+			&i.TripHeadsign,
+			&i.TripShortName,
+			&i.DirectionID,
+			&i.BlockID,
+			&i.ShapeID,
+			&i.WheelchairAccessible,
+			&i.BikesAllowed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listAgencies = `-- name: ListAgencies :many

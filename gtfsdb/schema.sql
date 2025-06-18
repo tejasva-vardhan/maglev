@@ -191,6 +191,15 @@ CREATE TABLE IF NOT EXISTS stop_times
     PRIMARY KEY (trip_id, stop_sequence)
 );
 
+
+-- migrate
+CREATE TABLE IF NOT EXISTS calendar_dates
+(
+    service_id     TEXT    NOT NULL,
+    date           TEXT    NOT NULL,
+    exception_type INTEGER NOT NULL,
+    PRIMARY KEY (service_id, date)
+);
 -- migrate
 
 CREATE INDEX IF NOT EXISTS idx_routes_agency_id ON routes(agency_id);

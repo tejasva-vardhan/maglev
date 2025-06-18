@@ -289,6 +289,38 @@ func (c *Client) processAndStoreGTFSDataWithSource(b []byte, source string) erro
 		log.Println("Import metadata updated successfully")
 	}
 
+	var allCalendarDateParams []CreateCalendarDateParams
+
+	for _, service := range staticData.Services {
+		// Process added dates (exception type 1)
+		for _, date := range service.AddedDates {
+			params := CreateCalendarDateParams{
+				ServiceID:     service.Id,
+				Date:          date.Format("20060102"),
+				ExceptionType: 1,
+			}
+			allCalendarDateParams = append(allCalendarDateParams, params)
+		}
+
+		// Process removed dates (exception type 2)
+		for _, date := range service.RemovedDates {
+			params := CreateCalendarDateParams{
+				ServiceID:     service.Id,
+				Date:          date.Format("20060102"),
+				ExceptionType: 2,
+			}
+			allCalendarDateParams = append(allCalendarDateParams, params)
+		}
+	}
+
+	// Insert calendar dates into the database
+	if len(allCalendarDateParams) > 0 {
+		err = c.buldInsertCalendarDates(ctx, allCalendarDateParams)
+		if err != nil {
+			log.Fatalf("Unable to create calendar dates: %v\n", err)
+		}
+	}
+
 	return nil
 }
 
@@ -424,6 +456,26 @@ func (c *Client) bulkInsertShapes(ctx context.Context, shapes []CreateShapeParam
 	qtx := queries.WithTx(tx)
 	for _, params := range shapes {
 		_, err := qtx.CreateShape(ctx, params)
+		if err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (c *Client) buldInsertCalendarDates(ctx context.Context, calendarDates []CreateCalendarDateParams) error {
+	db := c.DB
+	queries := c.Queries
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() // nolint:errcheck
+
+	qtx := queries.WithTx(tx)
+	for _, params := range calendarDates {
+		_, err := qtx.CreateCalendarDate(ctx, params)
 		if err != nil {
 			return err
 		}

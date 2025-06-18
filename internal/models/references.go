@@ -6,7 +6,7 @@ type ReferencesModel struct {
 	Routes     []interface{}     `json:"routes"`
 	Situations []interface{}     `json:"situations"`
 	StopTimes  []interface{}     `json:"stopTimes"`
-	Stops      []interface{}     `json:"stops"`
+	Stops      []Stop            `json:"stops"`
 	Trips      []interface{}     `json:"trips"`
 }
 
@@ -17,7 +17,7 @@ func NewEmptyReferences() ReferencesModel {
 		Routes:     []interface{}{},
 		Situations: []interface{}{},
 		StopTimes:  []interface{}{},
-		Stops:      []interface{}{},
+		Stops:      []Stop{},
 		Trips:      []interface{}{},
 	}
 }
