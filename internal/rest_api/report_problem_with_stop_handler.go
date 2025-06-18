@@ -27,15 +27,14 @@ func (api *RestAPI) reportProblemWithStopHandler(w http.ResponseWriter, r *http.
 	userLocationAccuracy := query.Get("userLocationAccuracy")
 
 	// TODO: Add storage logic for the problem report, I leave it as a log statement for now
-	logger := logging.FromContext(r.Context())
+	logger := logging.FromContext(r.Context()).With(slog.String("component", "problem_reporting"))
 	logging.LogOperation(logger, "problem_report_received_for_stop",
 		slog.String("stop_id", stopID),
 		slog.String("code", code),
 		slog.String("user_comment", userComment),
 		slog.String("user_lat", userLat),
 		slog.String("user_lon", userLon),
-		slog.String("user_location_accuracy", userLocationAccuracy),
-		slog.String("component", "problem_reporting"))
+		slog.String("user_location_accuracy", userLocationAccuracy))
 
 	api.sendResponse(w, r, models.NewOKResponse(struct{}{}))
 }

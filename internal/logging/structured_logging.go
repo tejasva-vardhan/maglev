@@ -22,6 +22,7 @@ func NewStructuredLogger(w io.Writer, level slog.Level) *slog.Logger {
 // LogError logs an error with structured context
 func LogError(logger *slog.Logger, message string, err error, attrs ...slog.Attr) {
 	if logger == nil {
+		slog.Default().Error("nil logger provided to LogError", slog.String("message", message))
 		return
 	}
 
@@ -38,12 +39,13 @@ func LogError(logger *slog.Logger, message string, err error, attrs ...slog.Attr
 // LogOperation logs an operation with structured context
 func LogOperation(logger *slog.Logger, operation string, attrs ...slog.Attr) {
 	if logger == nil {
+		slog.Default().Info("nil logger provided to LogOperation", slog.String("operation", operation))
 		return
 	}
 
 	args := make([]any, 0, len(attrs))
 	for _, attr := range attrs {
-		// Skip zero-value durations
+		// Skip zero-value durations to avoid cluttering logs with meaningless timing data
 		if attr.Key == "duration" && attr.Value.Duration() == 0 {
 			continue
 		}
@@ -56,6 +58,7 @@ func LogOperation(logger *slog.Logger, operation string, attrs ...slog.Attr) {
 // LogHTTPRequest logs HTTP request details
 func LogHTTPRequest(logger *slog.Logger, method, path string, status int, durationMs float64, attrs ...slog.Attr) {
 	if logger == nil {
+		slog.Default().Info("nil logger provided to LogHTTPRequest", slog.String("path", path))
 		return
 	}
 
@@ -92,6 +95,7 @@ func FromContext(ctx context.Context) *slog.Logger {
 // ReplaceLogPrint replaces log.Print calls with structured logging
 func ReplaceLogPrint(logger *slog.Logger, message string) {
 	if logger == nil {
+		slog.Default().Info("nil logger provided to ReplaceLogPrint", slog.String("message", message))
 		return
 	}
 	logger.Info(message)

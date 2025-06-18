@@ -3,14 +3,15 @@ package gtfs
 import (
 	"context"
 	"fmt"
-	"github.com/jamespfennell/gtfs"
 	"io"
 	"log/slog"
-	"maglev.onebusaway.org/gtfsdb"
-	"maglev.onebusaway.org/internal/logging"
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/jamespfennell/gtfs"
+	"maglev.onebusaway.org/gtfsdb"
+	"maglev.onebusaway.org/internal/logging"
 )
 
 func rawGtfsData(source string, isLocalFile bool) ([]byte, error) {

@@ -7,12 +7,13 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"fmt"
-	"github.com/jamespfennell/gtfs"
 	"log/slog"
-	"maglev.onebusaway.org/internal/appconf"
-	"maglev.onebusaway.org/internal/logging"
 	"strings"
 	"time"
+
+	"github.com/jamespfennell/gtfs"
+	"maglev.onebusaway.org/internal/appconf"
+	"maglev.onebusaway.org/internal/logging"
 )
 
 //go:embed schema.sql

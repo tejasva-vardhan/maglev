@@ -2,13 +2,14 @@ package gtfs
 
 import (
 	"context"
-	"github.com/jamespfennell/gtfs"
 	"io"
 	"log/slog"
-	"maglev.onebusaway.org/internal/logging"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/jamespfennell/gtfs"
+	"maglev.onebusaway.org/internal/logging"
 )
 
 // GetRealTimeTrips returns the real-time trip updates
@@ -52,7 +53,7 @@ func loadRealtimeData(ctx context.Context, source string, headers map[string]str
 }
 
 func (manager *Manager) updateGTFSRealtime(ctx context.Context, config Config) {
-	logger := logging.FromContext(ctx)
+	logger := logging.FromContext(ctx).With(slog.String("component", "gtfs_realtime"))
 
 	headers := map[string]string{}
 	if config.RealTimeAuthHeaderKey != "" && config.RealTimeAuthHeaderValue != "" {
@@ -70,8 +71,7 @@ func (manager *Manager) updateGTFSRealtime(ctx context.Context, config Config) {
 		tripData, tripErr = loadRealtimeData(ctx, config.TripUpdatesURL, headers)
 		if tripErr != nil {
 			logging.LogError(logger, "Error loading GTFS-RT trip updates data", tripErr,
-				slog.String("url", config.TripUpdatesURL),
-				slog.String("component", "gtfs_realtime"))
+				slog.String("url", config.TripUpdatesURL))
 		}
 	}()
 
@@ -82,8 +82,7 @@ func (manager *Manager) updateGTFSRealtime(ctx context.Context, config Config) {
 		vehicleData, vehicleErr = loadRealtimeData(ctx, config.VehiclePositionsURL, headers)
 		if vehicleErr != nil {
 			logging.LogError(logger, "Error loading GTFS-RT vehicle positions data", vehicleErr,
-				slog.String("url", config.VehiclePositionsURL),
-				slog.String("component", "gtfs_realtime"))
+				slog.String("url", config.VehiclePositionsURL))
 		}
 	}()
 
