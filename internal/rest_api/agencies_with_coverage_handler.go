@@ -1,13 +1,19 @@
 package restapi
 
 import (
-	"context"
 	"maglev.onebusaway.org/internal/models"
 	"net/http"
 )
 
 func (api *RestAPI) agenciesWithCoverageHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := context.Background()
+	ctx := r.Context()
+	
+	// Check if context is already cancelled
+	if ctx.Err() != nil {
+		api.serverErrorResponse(w, r, ctx.Err())
+		return
+	}
+	
 	agencies, err := api.GtfsManager.GtfsDB.Queries.ListAgencies(ctx)
 	if err != nil {
 		api.serverErrorResponse(w, r, err)

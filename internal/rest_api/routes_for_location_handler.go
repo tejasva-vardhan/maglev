@@ -1,7 +1,6 @@
 package restapi
 
 import (
-	"context"
 	"net/http"
 	"strings"
 
@@ -48,10 +47,17 @@ func (api *RestAPI) routesForLocationHandler(w http.ResponseWriter, r *http.Requ
 			radius = 10000
 		}
 	}
+	
+	ctx := r.Context()
+	
+	// Check if context is already cancelled
+	if ctx.Err() != nil {
+		api.serverErrorResponse(w, r, ctx.Err())
+		return
+	}
 
-	stops := api.GtfsManager.GetStopsForLocation(lat, lon, radius, latSpan, lonSpan, query, 50, true)
-
-	ctx := context.Background()
+	stops := api.GtfsManager.GetStopsForLocation(ctx, lat, lon, radius, latSpan, lonSpan, query, 50, true)
+	
 	var results = []models.Route{}
 	routeIDs := map[string]bool{}
 	agencyIDs := map[string]bool{}

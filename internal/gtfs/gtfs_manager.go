@@ -139,7 +139,7 @@ type stopWithDistance struct {
 	distance float64
 }
 
-func (manager *Manager) GetStopsForLocation(lat, lon float64, radius float64, latSpan, lonSpan float64, query string, maxCount int, isForRoutes bool) []*gtfs.Stop {
+func (manager *Manager) GetStopsForLocation(ctx context.Context, lat, lon float64, radius float64, latSpan, lonSpan float64, query string, maxCount int, isForRoutes bool) []*gtfs.Stop {
 	const epsilon = 1e-6
 
 	if radius == 0 {
@@ -176,8 +176,12 @@ func (manager *Manager) GetStopsForLocation(lat, lon float64, radius float64, la
 		maxLon = lon + lonRadiusDegrees
 	}
 
+	// Check if context is already cancelled
+	if ctx.Err() != nil {
+		return []*gtfs.Stop{}
+	}
+	
 	// Use spatial index query for initial filtering
-	ctx := context.Background()
 	dbStops, err := manager.GtfsDB.Queries.GetStopsWithinBounds(ctx, gtfsdb.GetStopsWithinBoundsParams{
 		Lat:   minLat,
 		Lat_2: maxLat,
