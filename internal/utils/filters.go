@@ -48,7 +48,7 @@ func GetAllRoutesRefs(q *gtfsdb.Queries, ctx context.Context) []interface{} {
 	var refs []interface{}
 	for _, r := range routes {
 		refs = append(refs, models.NewRoute(
-			r.ID, r.AgencyID, r.ShortName.String, r.LongName.String,
+			FormCombinedID(r.AgencyID, r.ID), r.AgencyID, r.ShortName.String, r.LongName.String,
 			r.Desc.String, models.RouteType(r.Type), r.Url.String,
 			r.Color.String, r.TextColor.String, r.ShortName.String,
 		))
