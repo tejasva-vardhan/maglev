@@ -229,6 +229,15 @@ FROM
 WHERE
     stop_times.stop_id = ?;
 
+-- name: GetStopsWithinBounds :many
+SELECT 
+    *
+FROM 
+    stops
+WHERE 
+    lat >= ? AND lat <= ?
+    AND lon >= ? AND lon <= ?;
+
 -- name: GetAllShapes :many
 SELECT
     *

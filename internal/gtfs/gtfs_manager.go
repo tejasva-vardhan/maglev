@@ -138,32 +138,73 @@ func (manager *Manager) GetStopsForLocation(lat, lon float64, radius float64, la
 
 	var candidates []stopWithDistance
 
-	for i := range manager.gtfsData.Stops {
-		stop := &manager.gtfsData.Stops[i]
-		if stop.Latitude == nil || stop.Longitude == nil {
+	// Calculate bounding box for spatial query
+	// Convert radius in meters to approximate degrees
+	// 1 degree latitude ≈ 111km, 1 degree longitude varies by latitude
+	latDegreeInMeters := 111000.0
+	lonDegreeInMeters := 111000.0 * math.Cos(lat*math.Pi/180)
+
+	var minLat, maxLat, minLon, maxLon float64
+
+	if latSpan > 0 && lonSpan > 0 {
+		// Use provided spans
+		minLat = lat - latSpan - epsilon
+		maxLat = lat + latSpan + epsilon
+		minLon = lon - lonSpan - epsilon
+		maxLon = lon + lonSpan + epsilon
+	} else {
+		// Calculate from radius
+		latRadiusDegrees := radius / latDegreeInMeters
+		lonRadiusDegrees := radius / lonDegreeInMeters
+
+		minLat = lat - latRadiusDegrees
+		maxLat = lat + latRadiusDegrees
+		minLon = lon - lonRadiusDegrees
+		maxLon = lon + lonRadiusDegrees
+	}
+
+	// Use spatial index query for initial filtering
+	ctx := context.Background()
+	dbStops, err := manager.GtfsDB.Queries.GetStopsWithinBounds(ctx, gtfsdb.GetStopsWithinBoundsParams{
+		Lat:   minLat,
+		Lat_2: maxLat,
+		Lon:   minLon,
+		Lon_2: maxLon,
+	})
+	if err != nil {
+		// TODO: add logging.
+		return []*gtfs.Stop{}
+	}
+
+	// Process results from database query
+	for _, dbStop := range dbStops {
+		// Find corresponding stop in memory
+		var gtfsStop *gtfs.Stop
+		for i := range manager.gtfsData.Stops {
+			if manager.gtfsData.Stops[i].Id == dbStop.ID {
+				gtfsStop = &manager.gtfsData.Stops[i]
+				break
+			}
+		}
+
+		if gtfsStop == nil || gtfsStop.Latitude == nil || gtfsStop.Longitude == nil {
 			continue
 		}
 
 		if query != "" && !isForRoutes {
-			if stop.Code == query {
-				distance := utils.Haversine(lat, lon, *stop.Latitude, *stop.Longitude)
+			if gtfsStop.Code == query {
+				distance := utils.Haversine(lat, lon, *gtfsStop.Latitude, *gtfsStop.Longitude)
 				if distance <= radius {
-					return []*gtfs.Stop{stop}
+					return []*gtfs.Stop{gtfsStop}
 				}
 			}
 			continue
 		}
 
-		if latSpan > 0 && lonSpan > 0 {
-			if math.Abs(*stop.Latitude-lat) <= latSpan+epsilon && math.Abs(*stop.Longitude-lon) <= lonSpan+epsilon {
-				distance := utils.Haversine(lat, lon, *stop.Latitude, *stop.Longitude)
-				candidates = append(candidates, stopWithDistance{stop, distance})
-			}
-		} else {
-			distance := utils.Haversine(lat, lon, *stop.Latitude, *stop.Longitude)
-			if distance <= radius {
-				candidates = append(candidates, stopWithDistance{stop, distance})
-			}
+		// Calculate precise distance for final filtering
+		distance := utils.Haversine(lat, lon, *gtfsStop.Latitude, *gtfsStop.Longitude)
+		if distance <= radius {
+			candidates = append(candidates, stopWithDistance{gtfsStop, distance})
 		}
 	}
 

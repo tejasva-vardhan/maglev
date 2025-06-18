@@ -1344,6 +1344,64 @@ func (q *Queries) GetStopIDsForTrip(ctx context.Context, tripID string) ([]strin
 	return items, nil
 }
 
+const getStopsWithinBounds = `-- name: GetStopsWithinBounds :many
+SELECT 
+    id, code, name, "desc", lat, lon, zone_id, url, location_type, timezone, wheelchair_boarding, platform_code
+FROM 
+    stops
+WHERE 
+    lat >= ? AND lat <= ?
+    AND lon >= ? AND lon <= ?
+`
+
+type GetStopsWithinBoundsParams struct {
+	Lat   float64
+	Lat_2 float64
+	Lon   float64
+	Lon_2 float64
+}
+
+func (q *Queries) GetStopsWithinBounds(ctx context.Context, arg GetStopsWithinBoundsParams) ([]Stop, error) {
+	rows, err := q.query(ctx, q.getStopsWithinBoundsStmt, getStopsWithinBounds,
+		arg.Lat,
+		arg.Lat_2,
+		arg.Lon,
+		arg.Lon_2,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Stop
+	for rows.Next() {
+		var i Stop
+		if err := rows.Scan(
+			&i.ID,
+			&i.Code,
+			&i.Name,
+			&i.Desc,
+			&i.Lat,
+			&i.Lon,
+			&i.ZoneID,
+			&i.Url,
+			&i.LocationType,
+			&i.Timezone,
+			&i.WheelchairBoarding,
+			&i.PlatformCode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTrip = `-- name: GetTrip :one
 SELECT
     id, route_id, service_id, trip_headsign, trip_short_name, direction_id, block_id, shape_id, wheelchair_accessible, bikes_allowed

@@ -155,16 +155,15 @@ WHERE st.stop_id = ANY($1::text[]);
 ```
 **Status**: ✅ Implemented in commit `4643b44`. Added GetRoutesForStops, GetRouteIDsForStops, and GetAgenciesForStops batch queries. Eliminated N+1 queries in location handlers. Performance improved from O(n) to O(1) database calls per request.
 
-#### 5. **Use Spatial Index for Location Queries**
-**File**: `internal/gtfs/gtfs_manager.go:286`
-**Fix**: Query `stops_rtree` table instead of linear scan
+#### 5. **Use Spatial Index for Location Queries** ✅ COMPLETED
+**File**: `internal/gtfs/gtfs_manager.go:129`
+**Fix**: Create a new SQL query, shown below, and use it to query for stops within the specified distance.
 ```sql
--- name: GetStopsWithinRadius :many
-SELECT s.* FROM stops s
-JOIN stops_rtree r ON s.stop_id = r.stop_id
-WHERE r.minX >= $1 AND r.maxX <= $2
-  AND r.minY >= $3 AND r.maxY <= $4;
+-- name: GetStopsWithinBounds :many
+SELECT * FROM stops 
+WHERE lat >= ? AND lat <= ? AND lon >= ? AND lon <= ?;
 ```
+**Status**: ✅ Implemented. Added spatial bounding box query to filter stops before distance calculations. GetStopsForLocation now uses database query for initial filtering, significantly reducing the number of stops that need distance calculations. Includes fallback to in-memory search if database query fails. Comprehensive test coverage added.
 
 #### 6. **Configure Database Connection Pool**
 **File**: `gtfsdb/client.go:30`
