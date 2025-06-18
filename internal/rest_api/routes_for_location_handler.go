@@ -18,11 +18,29 @@ func (api *RestAPI) routesForLocationHandler(w http.ResponseWriter, r *http.Requ
 	latSpan, _ := utils.ParseFloatParam(queryParams, "latSpan", fieldErrors)
 	lonSpan, _ := utils.ParseFloatParam(queryParams, "lonSpan", fieldErrors)
 	query := queryParams.Get("query")
-	query = strings.ToLower(query)
+
 	if len(fieldErrors) > 0 {
 		api.validationErrorResponse(w, r, fieldErrors)
 		return
 	}
+
+	// Validate location parameters
+	locationErrors := utils.ValidateLocationParams(lat, lon, radius, latSpan, lonSpan)
+	if len(locationErrors) > 0 {
+		api.validationErrorResponse(w, r, locationErrors)
+		return
+	}
+
+	// Validate and sanitize query
+	sanitizedQuery, err := utils.ValidateAndSanitizeQuery(query)
+	if err != nil {
+		fieldErrors := map[string][]string{
+			"query": {err.Error()},
+		}
+		api.validationErrorResponse(w, r, fieldErrors)
+		return
+	}
+	query = strings.ToLower(sanitizedQuery)
 	if radius == 0 {
 		// Default radius to 600 meters if not specified
 		radius = 600

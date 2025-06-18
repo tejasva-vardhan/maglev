@@ -26,6 +26,24 @@ func (api *RestAPI) stopsForLocationHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// Validate location parameters
+	locationErrors := utils.ValidateLocationParams(lat, lon, radius, latSpan, lonSpan)
+	if len(locationErrors) > 0 {
+		api.validationErrorResponse(w, r, locationErrors)
+		return
+	}
+
+	// Validate and sanitize query
+	sanitizedQuery, err := utils.ValidateAndSanitizeQuery(query)
+	if err != nil {
+		fieldErrors := map[string][]string{
+			"query": {err.Error()},
+		}
+		api.validationErrorResponse(w, r, fieldErrors)
+		return
+	}
+	query = sanitizedQuery
+
 	stops := api.GtfsManager.GetStopsForLocation(lat, lon, radius, latSpan, lonSpan, query, 100, false)
 
 	ctx := context.Background()
