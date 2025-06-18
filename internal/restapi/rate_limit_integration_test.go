@@ -23,25 +23,25 @@ func TestRateLimitingIntegration(t *testing.T) {
 			name:          "Agency endpoint with normal API key",
 			endpoint:      "/api/where/agency/raba.json",
 			apiKey:        "TEST",
-			requestCount:  110, // Over the 100/second limit
-			expectBlocked: 10,
-			expectAllowed: 100,
+			requestCount:  10, // Over the 5/second limit
+			expectBlocked: 5,
+			expectAllowed: 5,
 		},
 		{
 			name:          "Stops for location with exempted key",
 			endpoint:      "/api/where/stops-for-location.json?lat=38.9&lon=-77.0",
 			apiKey:        "org.onebusaway.iphone",
-			requestCount:  150, // Well over the limit
-			expectBlocked: 0,   // Should all be allowed due to exemption
-			expectAllowed: 150,
+			requestCount:  15, // Well over the limit
+			expectBlocked: 0,  // Should all be allowed due to exemption
+			expectAllowed: 15,
 		},
 		{
 			name:          "Current time endpoint rate limiting",
 			endpoint:      "/api/where/current-time.json",
 			apiKey:        "test-rate-limit",
-			requestCount:  105,
+			requestCount:  10,
 			expectBlocked: 5,
-			expectAllowed: 100,
+			expectAllowed: 5,
 		},
 	}
 
@@ -91,7 +91,7 @@ func TestRateLimitingPerAPIKey(t *testing.T) {
 
 	// Use up the limit for TEST key by making requests rapidly
 	hitLimit := false
-	for i := 0; i < 105; i++ {
+	for i := 0; i < 10; i++ {
 		response, _ := serveApiAndRetrieveEndpoint(t, api, endpoint+"?key=TEST")
 		if response.StatusCode == http.StatusTooManyRequests {
 			hitLimit = true
@@ -99,7 +99,7 @@ func TestRateLimitingPerAPIKey(t *testing.T) {
 		}
 	}
 
-	assert.True(t, hitLimit, "TEST key should hit rate limit within 105 requests")
+	assert.True(t, hitLimit, "TEST key should hit rate limit within 10 requests")
 
 	// TEST key should now be rate limited
 	response, _ := serveApiAndRetrieveEndpoint(t, api, endpoint+"?key=TEST")
@@ -120,7 +120,7 @@ func TestRateLimitingExemption(t *testing.T) {
 	exemptKey := "org.onebusaway.iphone"
 
 	// Make many requests with the exempted key - all should succeed
-	for i := 0; i < 200; i++ {
+	for i := 0; i < 20; i++ {
 		response, _ := serveApiAndRetrieveEndpoint(t, api, endpoint+"?key="+exemptKey)
 		assert.Equal(t, http.StatusOK, response.StatusCode,
 			"Exempted key request %d should always succeed", i+1)
@@ -133,8 +133,8 @@ func TestRateLimitingHeaders(t *testing.T) {
 	endpoint := "/api/where/current-time.json?key=test-headers"
 
 	// Use up the rate limit by making requests rapidly
-	// Make 105 requests to ensure we exceed the 100 limit even with some refill
-	for i := 0; i < 105; i++ {
+	// Make 10 requests to ensure we exceed the 5 limit even with some refill
+	for i := 0; i < 10; i++ {
 		response, _ := serveApiAndRetrieveEndpoint(t, api, endpoint)
 
 		// Once we hit rate limit, check the headers
@@ -149,7 +149,7 @@ func TestRateLimitingHeaders(t *testing.T) {
 		}
 	}
 
-	t.Fatal("Expected to hit rate limit within 105 requests")
+	t.Fatal("Expected to hit rate limit within 10 requests")
 }
 
 func TestRateLimitingRefill(t *testing.T) {
@@ -191,11 +191,11 @@ func TestRateLimitingErrorResponse(t *testing.T) {
 	endpoint := "/api/where/current-time.json?key=test-error-format"
 
 	// Use up the rate limit by making requests rapidly
-	// Make 105 requests to ensure we exceed the 100 limit even with some refill
+	// Make 10 requests to ensure we exceed the 5 limit even with some refill
 	var response *http.Response
 	var model models.ResponseModel
 
-	for i := 0; i < 105; i++ {
+	for i := 0; i < 10; i++ {
 		response, model = serveApiAndRetrieveEndpoint(t, api, endpoint)
 
 		// Once we hit rate limit, check the error response
@@ -208,7 +208,7 @@ func TestRateLimitingErrorResponse(t *testing.T) {
 		}
 	}
 
-	t.Fatal("Expected to hit rate limit within 105 requests")
+	t.Fatal("Expected to hit rate limit within 10 requests")
 }
 
 // Helper function to check if a string contains a substring

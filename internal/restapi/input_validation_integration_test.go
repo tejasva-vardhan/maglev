@@ -6,15 +6,43 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"maglev.onebusaway.org/internal/app"
+	"maglev.onebusaway.org/internal/appconf"
+	"maglev.onebusaway.org/internal/gtfs"
 )
 
+// createTestApiForValidationTests creates a test API with higher rate limit for validation tests
+func createTestApiForValidationTests(t *testing.T) *RestAPI {
+	gtfsConfig := gtfs.Config{
+		GtfsURL:      filepath.Join("../../testdata", "raba.zip"),
+		GTFSDataPath: ":memory:",
+	}
+	gtfsManager, err := gtfs.InitGTFSManager(gtfsConfig)
+	require.NoError(t, err)
+
+	app := &app.Application{
+		Config: appconf.Config{
+			Env:       appconf.EnvFlagToEnvironment("test"),
+			ApiKeys:   []string{"TEST", "test", "test-rate-limit", "test-headers", "test-refill", "test-error-format", "org.onebusaway.iphone"},
+			RateLimit: 100, // Higher rate limit for validation tests
+		},
+		GtfsConfig:  gtfsConfig,
+		GtfsManager: gtfsManager,
+	}
+
+	api := NewRestAPI(app)
+
+	return api
+}
+
 func TestInputValidationIntegration(t *testing.T) {
-	api := createTestApi(t)
+	api := createTestApiForValidationTests(t)
 
 	tests := []struct {
 		name           string
@@ -222,7 +250,7 @@ func TestValidInputsPassThrough(t *testing.T) {
 }
 
 func TestEdgeCaseValidation(t *testing.T) {
-	api := createTestApi(t)
+	api := createTestApiForValidationTests(t)
 
 	tests := []struct {
 		name           string

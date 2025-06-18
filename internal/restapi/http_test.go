@@ -32,14 +32,15 @@ func createTestApi(t *testing.T) *RestAPI {
 
 	app := &app.Application{
 		Config: appconf.Config{
-			Env:     appconf.EnvFlagToEnvironment("test"),
-			ApiKeys: []string{"TEST", "test", "test-rate-limit", "test-headers", "test-refill", "test-error-format", "org.onebusaway.iphone"},
+			Env:       appconf.EnvFlagToEnvironment("test"),
+			ApiKeys:   []string{"TEST", "test", "test-rate-limit", "test-headers", "test-refill", "test-error-format", "org.onebusaway.iphone"},
+			RateLimit: 5, // Low rate limit for testing
 		},
 		GtfsConfig:  gtfsConfig,
 		GtfsManager: gtfsManager,
 	}
 
-	api := &RestAPI{Application: app}
+	api := NewRestAPI(app)
 
 	return api
 }

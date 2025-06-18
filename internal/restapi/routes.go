@@ -3,18 +3,9 @@ package restapi
 import (
 	"net/http"
 	"net/http/pprof"
-	"time"
 )
 
 type handlerFunc func(w http.ResponseWriter, r *http.Request)
-
-// Global rate limiter shared across all routes
-var globalRateLimiter func(http.Handler) http.Handler
-
-func init() {
-	// Create rate limiter: 100 requests per second per API key
-	globalRateLimiter = NewRateLimitMiddleware(100, time.Second)
-}
 
 // rateLimitAndValidateAPIKey combines rate limiting, API key validation, and compression
 func rateLimitAndValidateAPIKey(api *RestAPI, finalHandler handlerFunc) http.Handler {
@@ -26,8 +17,14 @@ func rateLimitAndValidateAPIKey(api *RestAPI, finalHandler handlerFunc) http.Han
 	// Apply compression first (innermost)
 	compressedHandler := CompressionMiddleware(finalHandlerHttp)
 
-	// Then rate limiting
-	rateLimitedHandler := globalRateLimiter(compressedHandler)
+	// Then rate limiting - use the shared rate limiter instance
+	var rateLimitedHandler http.Handler
+	if api.rateLimiter != nil {
+		rateLimitedHandler = api.rateLimiter(compressedHandler)
+	} else {
+		// Fallback for tests that don't use NewRestAPI constructor
+		rateLimitedHandler = compressedHandler
+	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// First validate API key
