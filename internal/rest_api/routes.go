@@ -3,6 +3,7 @@ package restapi
 import (
 	"net/http"
 	"net/http/pprof"
+	"time"
 )
 
 type handlerFunc func(w http.ResponseWriter, r *http.Request)
@@ -14,6 +15,34 @@ func validateAPIKey(api *RestAPI, finalHandler handlerFunc) http.Handler {
 			return
 		}
 		finalHandler(w, r)
+	})
+}
+
+// Global rate limiter shared across all routes
+var globalRateLimiter func(http.Handler) http.Handler
+
+func init() {
+	// Create rate limiter: 100 requests per second per API key
+	globalRateLimiter = NewRateLimitMiddleware(100, time.Second)
+}
+
+// rateLimitAndValidateAPIKey combines rate limiting with API key validation
+func rateLimitAndValidateAPIKey(api *RestAPI, finalHandler handlerFunc) http.Handler {
+	// Create the handler chain: API key validation -> rate limiting -> final handler
+	// This order ensures we rate limit per valid API key
+	finalHandlerHttp := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		finalHandler(w, r)
+	})
+	rateLimitedHandler := globalRateLimiter(finalHandlerHttp)
+	
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// First validate API key
+		if api.RequestHasInvalidAPIKey(r) {
+			api.invalidAPIKeyResponse(w, r)
+			return
+		}
+		// Then apply rate limiting
+		rateLimitedHandler.ServeHTTP(w, r)
 	})
 }
 
@@ -29,20 +58,20 @@ func registerPprofHandlers(mux *http.ServeMux) { // nolint:unused
 }
 
 func (api *RestAPI) SetRoutes(mux *http.ServeMux) {
-	mux.Handle("GET /api/where/agencies-with-coverage.json", validateAPIKey(api, api.agenciesWithCoverageHandler))
-	mux.Handle("GET /api/where/agency/{id}", validateAPIKey(api, api.agencyHandler))
-	mux.Handle("GET /api/where/current-time.json", validateAPIKey(api, api.currentTimeHandler))
-	mux.Handle("GET /api/where/routes-for-agency/{id}", validateAPIKey(api, api.routesForAgencyHandler))
-	mux.Handle("GET /api/where/vehicles-for-agency/{id}", validateAPIKey(api, api.vehiclesForAgencyHandler))
-	mux.Handle("GET /api/where/stops-for-location.json", validateAPIKey(api, api.stopsForLocationHandler))
-	mux.Handle("GET /api/where/stop-ids-for-agency/{id}", validateAPIKey(api, api.stopIDsForAgencyHandler))
-	mux.Handle("GET /api/where/report-problem-with-trip/{id}", validateAPIKey(api, api.reportProblemWithTripHandler))
-	mux.Handle("GET /api/where/report-problem-with-stop/{id}", validateAPIKey(api, api.reportProblemWithStopHandler))
-	mux.Handle("GET /api/where/trip/{id}", validateAPIKey(api, api.tripHandler))
-	mux.Handle("GET /api/where/route-ids-for-agency/{id}", validateAPIKey(api, api.routeIDsForAgencyHandler))
-	mux.Handle("GET /api/where/stop/{id}", validateAPIKey(api, api.stopHandler))
-	mux.Handle("GET /api/where/shape/{id}", validateAPIKey(api, api.shapesHandler))
-	mux.Handle("GET /api/where/routes-for-location.json", validateAPIKey(api, api.routesForLocationHandler))
-	mux.Handle("GET /api/where/stops-for-route/{id}", validateAPIKey(api, api.stopsForRouteHandler))
-	mux.Handle("GET /api/where/schedule-for-stop/{id}", validateAPIKey(api, api.scheduleForStopHandler))
+	mux.Handle("GET /api/where/agencies-with-coverage.json", rateLimitAndValidateAPIKey(api, api.agenciesWithCoverageHandler))
+	mux.Handle("GET /api/where/agency/{id}", rateLimitAndValidateAPIKey(api, api.agencyHandler))
+	mux.Handle("GET /api/where/current-time.json", rateLimitAndValidateAPIKey(api, api.currentTimeHandler))
+	mux.Handle("GET /api/where/routes-for-agency/{id}", rateLimitAndValidateAPIKey(api, api.routesForAgencyHandler))
+	mux.Handle("GET /api/where/vehicles-for-agency/{id}", rateLimitAndValidateAPIKey(api, api.vehiclesForAgencyHandler))
+	mux.Handle("GET /api/where/stops-for-location.json", rateLimitAndValidateAPIKey(api, api.stopsForLocationHandler))
+	mux.Handle("GET /api/where/stop-ids-for-agency/{id}", rateLimitAndValidateAPIKey(api, api.stopIDsForAgencyHandler))
+	mux.Handle("GET /api/where/report-problem-with-trip/{id}", rateLimitAndValidateAPIKey(api, api.reportProblemWithTripHandler))
+	mux.Handle("GET /api/where/report-problem-with-stop/{id}", rateLimitAndValidateAPIKey(api, api.reportProblemWithStopHandler))
+	mux.Handle("GET /api/where/trip/{id}", rateLimitAndValidateAPIKey(api, api.tripHandler))
+	mux.Handle("GET /api/where/route-ids-for-agency/{id}", rateLimitAndValidateAPIKey(api, api.routeIDsForAgencyHandler))
+	mux.Handle("GET /api/where/stop/{id}", rateLimitAndValidateAPIKey(api, api.stopHandler))
+	mux.Handle("GET /api/where/shape/{id}", rateLimitAndValidateAPIKey(api, api.shapesHandler))
+	mux.Handle("GET /api/where/routes-for-location.json", rateLimitAndValidateAPIKey(api, api.routesForLocationHandler))
+	mux.Handle("GET /api/where/stops-for-route/{id}", rateLimitAndValidateAPIKey(api, api.stopsForRouteHandler))
+	mux.Handle("GET /api/where/schedule-for-stop/{id}", rateLimitAndValidateAPIKey(api, api.scheduleForStopHandler))
 }
