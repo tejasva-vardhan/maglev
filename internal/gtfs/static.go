@@ -110,6 +110,9 @@ func (manager *Manager) updateStaticGTFS() { // nolint
 }
 
 func (manager *Manager) setStaticGTFS(staticData *gtfs.Static) {
+	manager.staticMutex.Lock()
+	defer manager.staticMutex.Unlock()
+	
 	manager.gtfsData = staticData
 	manager.lastUpdated = time.Now()
 

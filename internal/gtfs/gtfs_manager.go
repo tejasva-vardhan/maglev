@@ -26,6 +26,7 @@ type Manager struct {
 	realTimeTrips    []gtfs.Trip
 	realTimeVehicles []gtfs.Vehicle
 	realTimeMutex    sync.RWMutex
+	staticMutex      sync.RWMutex // Protects gtfsData and lastUpdated
 	config           Config
 	shutdownChan     chan struct{}
 	wg               sync.WaitGroup
@@ -84,22 +85,32 @@ func (manager *Manager) Shutdown() {
 }
 
 func (manager *Manager) GetAgencies() []gtfs.Agency {
+	manager.staticMutex.RLock()
+	defer manager.staticMutex.RUnlock()
 	return manager.gtfsData.Agencies
 }
 
 func (manager *Manager) GetTrips() []gtfs.ScheduledTrip {
+	manager.staticMutex.RLock()
+	defer manager.staticMutex.RUnlock()
 	return manager.gtfsData.Trips
 }
 
 func (manager *Manager) GetStaticData() *gtfs.Static {
+	manager.staticMutex.RLock()
+	defer manager.staticMutex.RUnlock()
 	return manager.gtfsData
 }
 
 func (manager *Manager) GetStops() []gtfs.Stop {
+	manager.staticMutex.RLock()
+	defer manager.staticMutex.RUnlock()
 	return manager.gtfsData.Stops
 }
 
 func (manager *Manager) FindAgency(id string) *gtfs.Agency {
+	manager.staticMutex.RLock()
+	defer manager.staticMutex.RUnlock()
 	for _, agency := range manager.gtfsData.Agencies {
 		if agency.Id == id {
 			return &agency
@@ -110,6 +121,8 @@ func (manager *Manager) FindAgency(id string) *gtfs.Agency {
 
 // RoutesForAgencyID retrieves all routes associated with the specified agency ID from the GTFS data.
 func (manager *Manager) RoutesForAgencyID(agencyID string) []*gtfs.Route {
+	manager.staticMutex.RLock()
+	defer manager.staticMutex.RUnlock()
 	var agencyRoutes []*gtfs.Route
 
 	for i := range manager.gtfsData.Routes {
@@ -180,12 +193,14 @@ func (manager *Manager) GetStopsForLocation(lat, lon float64, radius float64, la
 	for _, dbStop := range dbStops {
 		// Find corresponding stop in memory
 		var gtfsStop *gtfs.Stop
+		manager.staticMutex.RLock()
 		for i := range manager.gtfsData.Stops {
 			if manager.gtfsData.Stops[i].Id == dbStop.ID {
 				gtfsStop = &manager.gtfsData.Stops[i]
 				break
 			}
 		}
+		manager.staticMutex.RUnlock()
 
 		if gtfsStop == nil || gtfsStop.Latitude == nil || gtfsStop.Longitude == nil {
 			continue
@@ -242,6 +257,8 @@ func (manager *Manager) VehiclesForAgencyID(agencyID string) []gtfs.Vehicle {
 }
 
 func (manager *Manager) PrintStatistics() {
+	manager.staticMutex.RLock()
+	defer manager.staticMutex.RUnlock()
 	fmt.Printf("Source: %s (Local File: %v)\n", manager.gtfsSource, manager.isLocalFile)
 	fmt.Printf("Last Updated: %s\n", manager.lastUpdated)
 	fmt.Println("Stops Count: ", len(manager.gtfsData.Stops))
