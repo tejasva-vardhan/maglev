@@ -21,7 +21,7 @@ func TestSafeClose(t *testing.T) {
 		// Create a test server that returns a response
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("test response"))
+			_, _ = w.Write([]byte("test response"))
 		}))
 		defer server.Close()
 

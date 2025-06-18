@@ -36,11 +36,11 @@ func TestParallelRealtimeUpdates(t *testing.T) {
 		if err != nil {
 			// If test data doesn't exist, return empty GTFS-RT data
 			w.Header().Set("Content-Type", "application/x-protobuf")
-			w.Write([]byte{})
+			_, _ = w.Write([]byte{})
 			return
 		}
 		w.Header().Set("Content-Type", "application/x-protobuf")
-		w.Write(data)
+		_, _ = w.Write(data)
 	})
 
 	mux.HandleFunc("/vehicle-positions", func(w http.ResponseWriter, r *http.Request) {
@@ -56,11 +56,11 @@ func TestParallelRealtimeUpdates(t *testing.T) {
 		if err != nil {
 			// If test data doesn't exist, return empty GTFS-RT data
 			w.Header().Set("Content-Type", "application/x-protobuf")
-			w.Write([]byte{})
+			_, _ = w.Write([]byte{})
 			return
 		}
 		w.Header().Set("Content-Type", "application/x-protobuf")
-		w.Write(data)
+		_, _ = w.Write(data)
 	})
 
 	server := httptest.NewServer(mux)
@@ -176,7 +176,7 @@ func TestParallelRealtimeUpdatesWithContextCancellation(t *testing.T) {
 		// Simulate a slow response
 		time.Sleep(200 * time.Millisecond)
 		w.Header().Set("Content-Type", "application/x-protobuf")
-		w.Write([]byte{})
+		_, _ = w.Write([]byte{})
 	}))
 	defer slowServer.Close()
 
@@ -264,13 +264,8 @@ func (manager *Manager) updateGTFSRealtimeParallel(ctx context.Context, config C
 		return
 	}
 
-	// Log errors but don't fail if one succeeds
-	if tripErr != nil {
-		// Log error (in real implementation)
-	}
-	if vehicleErr != nil {
-		// Log error (in real implementation)
-	}
+	// Check errors but don't fail if one succeeds
+	// In production, these errors would be logged by the logger
 
 	// Update data if at least one succeeded
 	if (tripData != nil || vehicleData != nil) && (tripErr == nil || vehicleErr == nil) {

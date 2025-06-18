@@ -22,7 +22,7 @@ func TestRequestLoggingMiddleware(t *testing.T) {
 		// Create test handler
 		testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("test response"))
+			_, _ = w.Write([]byte("test response"))
 		})
 
 		// Apply request logging middleware

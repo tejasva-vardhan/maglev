@@ -112,11 +112,12 @@ func (rl *RateLimitMiddleware) rateLimitHandler(next http.Handler) http.Handler 
 func (rl *RateLimitMiddleware) sendRateLimitExceeded(w http.ResponseWriter, r *http.Request) {
 	// Calculate retry-after based on rate limit
 	var retryAfter time.Duration
-	if rl.rateLimit == 0 {
+	switch rl.rateLimit {
+	case 0:
 		retryAfter = time.Hour // For zero rate limit, suggest retrying much later
-	} else if rl.rateLimit == rate.Inf {
+	case rate.Inf:
 		retryAfter = time.Second // Should not happen, but fallback
-	} else {
+	default:
 		retryAfter = time.Duration(1) / time.Duration(rl.rateLimit)
 	}
 
@@ -142,10 +143,10 @@ func (rl *RateLimitMiddleware) sendRateLimitExceeded(w http.ResponseWriter, r *h
 			},
 		},
 		"currentTime": time.Now().UnixMilli(),
-		"version":     "2",
+		"version":     2,
 	}
 
-	json.NewEncoder(w).Encode(errorResponse)
+	_ = json.NewEncoder(w).Encode(errorResponse)
 }
 
 // cleanup periodically removes old, unused limiters to prevent memory leaks

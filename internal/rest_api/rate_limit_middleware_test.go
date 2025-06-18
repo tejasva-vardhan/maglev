@@ -223,9 +223,10 @@ func TestRateLimitMiddleware_ConcurrentRequests(t *testing.T) {
 	rateLimitedCount := 0
 
 	for _, code := range results {
-		if code == http.StatusOK {
+		switch code {
+		case http.StatusOK:
 			successCount++
-		} else if code == http.StatusTooManyRequests {
+		case http.StatusTooManyRequests:
 			rateLimitedCount++
 		}
 	}
