@@ -108,15 +108,16 @@ The application follows a layered approach:
 
 ### 🚨 Critical Issues (Fix Immediately)
 
-#### 1. **Remove All `log.Fatal()` Calls**
+#### 1. **Remove All `log.Fatal()` Calls** ✅ COMPLETED
 **Files**: `gtfsdb/helpers.go`, `gtfsdb/client.go`
 **Fix**: Replace with error returns and proper error handling
 ```go
 // BAD: log.Fatal("Unable to create DB", err)
 // GOOD: return nil, fmt.Errorf("unable to create DB: %w", err)
 ```
+**Status**: ✅ Implemented in commit `41417ae`. All log.Fatal() calls replaced with proper error returns. NewClient() now returns error instead of crashing. Comprehensive tests added for error scenarios.
 
-#### 2. **Add Graceful Shutdown**
+#### 2. **Add Graceful Shutdown** ✅ COMPLETED
 **File**: `cmd/api/main.go`
 **Fix**: Implement signal handling for clean shutdown
 ```go
@@ -124,8 +125,9 @@ ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SI
 defer stop()
 // Use ctx for server shutdown
 ```
+**Status**: ✅ Implemented in commit `c129128`. Added signal handling for SIGTERM/SIGINT with 30s timeout. Background goroutines properly shut down via shutdown channels and sync.WaitGroup. Resources cleaned up gracefully.
 
-#### 3. **Add Security Headers Middleware**
+#### 3. **Add Security Headers Middleware** ✅ COMPLETED
 **File**: Create `internal/rest_api/security_middleware.go`
 **Fix**: Add CORS and security headers to all responses
 ```go
@@ -138,10 +140,11 @@ func securityHeaders(next http.Handler) http.Handler {
     })
 }
 ```
+**Status**: ✅ Implemented in commit `edb32d0`. Added comprehensive security headers (HSTS, CSP, XSS protection, etc.) and CORS support. Middleware applied globally to all routes. Includes proper OPTIONS preflight handling.
 
 ### ⚡ Performance Issues (High Priority)
 
-#### 4. **Fix N+1 Query Problems**
+#### 4. **Fix N+1 Query Problems** ✅ COMPLETED
 **Files**: `internal/rest_api/routes_for_location_handler.go:41`, `internal/rest_api/stops_for_location_handler.go:33,49`
 **Fix**: Create batch queries in `gtfsdb/query.sql`
 ```sql
@@ -150,6 +153,7 @@ SELECT DISTINCT r.* FROM routes r
 JOIN stop_times st ON r.route_id = st.route_id
 WHERE st.stop_id = ANY($1::text[]);
 ```
+**Status**: ✅ Implemented in commit `4643b44`. Added GetRoutesForStops, GetRouteIDsForStops, and GetAgenciesForStops batch queries. Eliminated N+1 queries in location handlers. Performance improved from O(n) to O(1) database calls per request.
 
 #### 5. **Use Spatial Index for Location Queries**
 **File**: `internal/gtfs/gtfs_manager.go:286`
