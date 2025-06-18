@@ -171,7 +171,7 @@ func (api *RestAPI) vehiclesForAgencyHandler(w http.ResponseWriter, r *http.Requ
 		Routes:     routeRefList,
 		Situations: []interface{}{},
 		StopTimes:  []interface{}{},
-		Stops:      []interface{}{},
+		Stops:      []models.Stop{},
 		Trips:      tripRefList,
 	}
 
