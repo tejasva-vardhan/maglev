@@ -74,9 +74,12 @@ func main() {
 	api.SetRoutes(mux)
 	webUI.SetWebUIRoutes(mux)
 
+	// Wrap with security middleware
+	handler := api.WithSecurityHeaders(mux)
+
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
-		Handler:      mux,
+		Handler:      handler,
 		IdleTimeout:  time.Minute,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
