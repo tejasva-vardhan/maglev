@@ -115,7 +115,7 @@ func TestHandleDeferredError(t *testing.T) {
 
 		err := testFunc()
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "cleanup_operation")
+		assert.Contains(t, err.Error(), "deferred cleanup_operation")
 
 		output := buf.String()
 		assert.Contains(t, output, `"level":"ERROR"`)

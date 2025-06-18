@@ -9,7 +9,7 @@ import (
 	"maglev.onebusaway.org/internal/appconf"
 	"maglev.onebusaway.org/internal/gtfs"
 	"maglev.onebusaway.org/internal/logging"
-	"maglev.onebusaway.org/internal/rest_api"
+	"maglev.onebusaway.org/internal/restapi"
 	"maglev.onebusaway.org/internal/webui"
 	"net/http"
 	"os"
