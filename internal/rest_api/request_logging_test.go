@@ -253,4 +253,22 @@ func TestRequestLoggingWithContext(t *testing.T) {
 	})
 }
 
-// Helper functions are now implemented in request_logging_middleware.go
+// createHandlerWithRequestLogging creates an API handler with request logging enabled for testing
+func createHandlerWithRequestLogging(api *RestAPI, logger *slog.Logger) http.Handler {
+	// Create a simple test handler
+	mux := http.NewServeMux()
+
+	// Add the current time endpoint for testing
+	mux.HandleFunc("/api/where/current-time.json", func(w http.ResponseWriter, r *http.Request) {
+		// Check API key for authentication
+		if api.RequestHasInvalidAPIKey(r) {
+			api.invalidAPIKeyResponse(w, r)
+			return
+		}
+		api.currentTimeHandler(w, r)
+	})
+
+	// Apply request logging middleware
+	requestLogger := NewRequestLoggingMiddleware(logger)
+	return requestLogger(mux)
+}

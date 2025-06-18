@@ -52,22 +52,3 @@ func NewRequestLoggingMiddleware(logger *slog.Logger) func(http.Handler) http.Ha
 	}
 }
 
-// createHandlerWithRequestLogging creates an API handler with request logging enabled
-func createHandlerWithRequestLogging(api *RestAPI, logger *slog.Logger) http.Handler {
-	// Create a simple test handler
-	mux := http.NewServeMux()
-
-	// Add the current time endpoint for testing
-	mux.HandleFunc("/api/where/current-time.json", func(w http.ResponseWriter, r *http.Request) {
-		// Check API key for authentication
-		if api.RequestHasInvalidAPIKey(r) {
-			api.invalidAPIKeyResponse(w, r)
-			return
-		}
-		api.currentTimeHandler(w, r)
-	})
-
-	// Apply request logging middleware
-	requestLogger := NewRequestLoggingMiddleware(logger)
-	return requestLogger(mux)
-}
