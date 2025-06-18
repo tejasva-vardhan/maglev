@@ -26,14 +26,19 @@ func init() {
 	globalRateLimiter = NewRateLimitMiddleware(100, time.Second)
 }
 
-// rateLimitAndValidateAPIKey combines rate limiting with API key validation
+// rateLimitAndValidateAPIKey combines rate limiting, API key validation, and compression
 func rateLimitAndValidateAPIKey(api *RestAPI, finalHandler handlerFunc) http.Handler {
-	// Create the handler chain: API key validation -> rate limiting -> final handler
-	// This order ensures we rate limit per valid API key
+	// Create the handler chain: API key validation -> rate limiting -> compression -> final handler
+	// This order ensures we rate limit per valid API key and compress responses
 	finalHandlerHttp := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		finalHandler(w, r)
 	})
-	rateLimitedHandler := globalRateLimiter(finalHandlerHttp)
+	
+	// Apply compression first (innermost)
+	compressedHandler := applyGzipMiddleware(finalHandlerHttp)
+	
+	// Then rate limiting
+	rateLimitedHandler := globalRateLimiter(compressedHandler)
 	
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// First validate API key
@@ -41,7 +46,7 @@ func rateLimitAndValidateAPIKey(api *RestAPI, finalHandler handlerFunc) http.Han
 			api.invalidAPIKeyResponse(w, r)
 			return
 		}
-		// Then apply rate limiting
+		// Then apply rate limiting and compression
 		rateLimitedHandler.ServeHTTP(w, r)
 	})
 }

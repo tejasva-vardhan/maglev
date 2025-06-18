@@ -106,140 +106,7 @@ The application follows a layered approach:
 
 ## Top Recommendations for Junior Engineers/LLMs
 
-### 🚨 Critical Issues (Fix Immediately)
-
-#### 1. **Remove All `log.Fatal()` Calls** ✅ COMPLETED
-**Files**: `gtfsdb/helpers.go`, `gtfsdb/client.go`
-**Fix**: Replace with error returns and proper error handling
-```go
-// BAD: log.Fatal("Unable to create DB", err)
-// GOOD: return nil, fmt.Errorf("unable to create DB: %w", err)
-```
-**Status**: ✅ Implemented in commit `41417ae`. All log.Fatal() calls replaced with proper error returns. NewClient() now returns error instead of crashing. Comprehensive tests added for error scenarios.
-
-#### 2. **Add Graceful Shutdown** ✅ COMPLETED
-**File**: `cmd/api/main.go`
-**Fix**: Implement signal handling for clean shutdown
-```go
-ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-defer stop()
-// Use ctx for server shutdown
-```
-**Status**: ✅ Implemented in commit `c129128`. Added signal handling for SIGTERM/SIGINT with 30s timeout. Background goroutines properly shut down via shutdown channels and sync.WaitGroup. Resources cleaned up gracefully.
-
-#### 3. **Add Security Headers Middleware** ✅ COMPLETED
-**File**: Create `internal/rest_api/security_middleware.go`
-**Fix**: Add CORS and security headers to all responses
-```go
-func securityHeaders(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        w.Header().Set("X-Content-Type-Options", "nosniff")
-        w.Header().Set("X-Frame-Options", "DENY")
-        // Add other headers
-        next.ServeHTTP(w, r)
-    })
-}
-```
-**Status**: ✅ Implemented in commit `edb32d0`. Added comprehensive security headers (HSTS, CSP, XSS protection, etc.) and CORS support. Middleware applied globally to all routes. Includes proper OPTIONS preflight handling.
-
-### ⚡ Performance Issues (High Priority)
-
-#### 4. **Fix N+1 Query Problems** ✅ COMPLETED
-**Files**: `internal/rest_api/routes_for_location_handler.go:41`, `internal/rest_api/stops_for_location_handler.go:33,49`
-**Fix**: Create batch queries in `gtfsdb/query.sql`
-```sql
--- name: GetRoutesForStops :many
-SELECT DISTINCT r.* FROM routes r
-JOIN stop_times st ON r.route_id = st.route_id
-WHERE st.stop_id = ANY($1::text[]);
-```
-**Status**: ✅ Implemented in commit `4643b44`. Added GetRoutesForStops, GetRouteIDsForStops, and GetAgenciesForStops batch queries. Eliminated N+1 queries in location handlers. Performance improved from O(n) to O(1) database calls per request.
-
-#### 5. **Use Spatial Index for Location Queries** ✅ COMPLETED
-**File**: `internal/gtfs/gtfs_manager.go:129`
-**Fix**: Create a new SQL query, shown below, and use it to query for stops within the specified distance.
-```sql
--- name: GetStopsWithinBounds :many
-SELECT * FROM stops 
-WHERE lat >= ? AND lat <= ? AND lon >= ? AND lon <= ?;
-```
-**Status**: ✅ Implemented. Added spatial bounding box query to filter stops before distance calculations. GetStopsForLocation now uses database query for initial filtering, significantly reducing the number of stops that need distance calculations. Includes fallback to in-memory search if database query fails. Comprehensive test coverage added.
-
-#### 6. **Configure Database Connection Pool**
-**File**: `gtfsdb/client.go:30`
-**Fix**: Add connection pool settings
-```go
-db.SetMaxOpenConns(25)
-db.SetMaxIdleConns(5)
-db.SetConnMaxLifetime(5 * time.Minute)
-```
-
-### 🔒 Security Issues (High Priority)
-
-#### 8. **Add Input Validation**
-**Files**: All REST API handlers
-**Fix**: Validate and sanitize all user inputs
-```go
-func validateQuery(query string) error {
-    if len(query) > 100 {
-        return errors.New("query too long")
-    }
-    // Add more validation
-    return nil
-}
-```
-
-#### 9. **Implement Rate Limiting**
-**File**: Create `internal/rest_api/rate_limit_middleware.go`
-**Fix**: Add rate limiting per API key, exempting the key `org.onebusaway.iphone`
-```go
-// Use golang.org/x/time/rate package
-limiter := rate.NewLimiter(rate.Every(time.Second), 100)
-```
-
-### 🐛 Reliability Issues (Medium Priority)
-
-#### 10. **Add Mutex for Static GTFS Updates**
-**File**: `internal/gtfs/manager.go:241`
-**Fix**: Protect gtfsData updates with mutex
-```go
-func (m *Manager) setStaticGTFS(data *gtfs.Static) {
-    m.mu.Lock()
-    defer m.mu.Unlock()
-    m.gtfsData = data
-}
-```
-
-#### 11. **Handle Context Cancellation Properly**
-**Files**: All database query calls
-**Fix**: Check context errors and log them
-```go
-if ctx.Err() != nil {
-    logger.Error("context cancelled", "error", ctx.Err())
-    return nil, ctx.Err()
-}
-```
-
-#### 12. **Close Resources Properly**
-**File**: `cmd/api/main.go`
-**Fix**: Defer database close and stop goroutines
-```go
-defer app.GtfsDB.Close()
-// Add shutdown channel to stop update goroutines
-```
-
 ### 📈 Optimization Opportunities (Medium Priority)
-
-#### 14. **Parallelize Real-Time Updates**
-**File**: `internal/gtfs/manager.go:182`
-**Fix**: Fetch trip updates and vehicle positions concurrently
-```go
-var wg sync.WaitGroup
-wg.Add(2)
-go func() { defer wg.Done(); /* fetch trips */ }()
-go func() { defer wg.Done(); /* fetch vehicles */ }()
-wg.Wait()
-```
 
 #### 15. **Add Response Compression**
 **File**: `internal/rest_api/routes.go`
@@ -250,17 +117,6 @@ apiRoutes = gzhttp.GzipHandler(apiRoutes)
 ```
 
 ### 🧪 Testing & Monitoring (Lower Priority)
-
-#### 16. **Add Health Check Endpoint**
-**File**: `internal/rest_api/health_handler.go`
-**Fix**: Create `/health` endpoint checking database and GTFS data
-```go
-func healthHandler(app *app.Application) http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
-        // Check DB connection, data freshness
-    }
-}
-```
 
 #### 17. **Implement Structured Logging**
 **Files**: All error handling locations
@@ -281,10 +137,6 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 ```
 
 ### 📝 Quick Wins (Easy Fixes)
-
-#### 19. **Remove Hardcoded Default URLs**
-**File**: `cmd/api/main.go`
-**Fix**: Move defaults to configuration file
 
 #### 20. **Add Missing Error Checks**
 **Files**: Various locations with `// nolint`
