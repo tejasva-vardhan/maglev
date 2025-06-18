@@ -32,6 +32,13 @@ type Calendar struct {
 	EndDate   string
 }
 
+type ImportMetadatum struct {
+	ID         int64
+	FileHash   string
+	ImportTime int64
+	FileSource string
+}
+
 type Route struct {
 	ID                string
 	AgencyID          string

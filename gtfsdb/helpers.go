@@ -2,8 +2,10 @@ package gtfsdb
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	_ "embed"
+	"encoding/hex"
 	"fmt"
 	"github.com/jamespfennell/gtfs"
 	"log"
@@ -49,7 +51,7 @@ func performDatabaseMigration(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-func (c *Client) processAndStoreGTFSData(b []byte) error {
+func (c *Client) processAndStoreGTFSDataWithSource(b []byte, source string) error {
 	startTime := time.Now()
 	defer func() {
 		endTime := time.Now()
@@ -60,7 +62,37 @@ func (c *Client) processAndStoreGTFSData(b []byte) error {
 			log.Println("Importing GTFS data took", c.importRuntime.String())
 		}
 	}()
-	
+
+	// Calculate hash of the GTFS data
+	hash := sha256.Sum256(b)
+	hashStr := hex.EncodeToString(hash[:])
+
+	ctx := context.Background()
+
+	// Check if we already have this data imported
+	existingMetadata, err := c.Queries.GetImportMetadata(ctx)
+	if err == nil {
+		// We have existing metadata, check if hash matches
+		if existingMetadata.FileHash == hashStr && existingMetadata.FileSource == source {
+			if c.config.verbose {
+				log.Println("GTFS data unchanged, skipping import")
+			}
+			return nil
+		}
+		// Hash differs, we need to clear existing data and reimport
+		if c.config.verbose {
+			log.Println("GTFS data changed, clearing existing data and reimporting")
+		}
+		err = c.clearAllGTFSData(ctx)
+		if err != nil {
+			return fmt.Errorf("error clearing existing GTFS data: %w", err)
+		}
+	} else if err != nil && err != sql.ErrNoRows {
+		// Some other error occurred
+		return fmt.Errorf("error checking import metadata: %w", err)
+	}
+	// If err == sql.ErrNoRows, this is the first import, continue normally
+
 	var staticCounts map[string]int
 
 	staticData, err := gtfs.ParseStatic(b, gtfs.ParseStaticOptions{})
@@ -79,8 +111,6 @@ func (c *Client) processAndStoreGTFSData(b []byte) error {
 
 		fmt.Print("========\n\n")
 	}
-
-	ctx := context.Background()
 
 	for _, a := range staticData.Agencies {
 		params := CreateAgencyParams{
@@ -242,6 +272,50 @@ func (c *Client) processAndStoreGTFSData(b []byte) error {
 		}
 	}
 
+	// Update import metadata to record successful import
+	if c.config.verbose {
+		log.Printf("Updating import metadata: hash=%s, source=%s", hashStr[:8], source)
+	}
+	_, err = c.Queries.UpsertImportMetadata(ctx, UpsertImportMetadataParams{
+		FileHash:   hashStr,
+		ImportTime: time.Now().Unix(),
+		FileSource: source,
+	})
+	if err != nil {
+		log.Printf("Error updating import metadata: %v", err)
+		return fmt.Errorf("error updating import metadata: %w", err)
+	}
+	if c.config.verbose {
+		log.Println("Import metadata updated successfully")
+	}
+
+	return nil
+}
+
+// clearAllGTFSData clears all GTFS data from the database in the correct order to respect foreign key constraints
+func (c *Client) clearAllGTFSData(ctx context.Context) error {
+	// Delete in reverse order of dependencies to avoid foreign key constraint violations
+	if err := c.Queries.ClearStopTimes(ctx); err != nil {
+		return fmt.Errorf("error clearing stop_times: %w", err)
+	}
+	if err := c.Queries.ClearShapes(ctx); err != nil {
+		return fmt.Errorf("error clearing shapes: %w", err)
+	}
+	if err := c.Queries.ClearTrips(ctx); err != nil {
+		return fmt.Errorf("error clearing trips: %w", err)
+	}
+	if err := c.Queries.ClearCalendar(ctx); err != nil {
+		return fmt.Errorf("error clearing calendar: %w", err)
+	}
+	if err := c.Queries.ClearStops(ctx); err != nil {
+		return fmt.Errorf("error clearing stops: %w", err)
+	}
+	if err := c.Queries.ClearRoutes(ctx); err != nil {
+		return fmt.Errorf("error clearing routes: %w", err)
+	}
+	if err := c.Queries.ClearAgencies(ctx); err != nil {
+		return fmt.Errorf("error clearing agencies: %w", err)
+	}
 	return nil
 }
 

@@ -237,3 +237,63 @@ FROM
     shapes
 WHERE
     shape_id = ?;
+
+-- name: GetScheduleForStop :many
+SELECT 
+    st.trip_id,
+    st.arrival_time,
+    st.departure_time,
+    st.stop_headsign,
+    t.service_id,
+    t.route_id,
+    t.trip_headsign,
+    r.id as route_id,
+    r.agency_id
+FROM 
+    stop_times st
+    JOIN trips t ON st.trip_id = t.id
+    JOIN routes r ON t.route_id = r.id
+WHERE 
+    st.stop_id = ?
+ORDER BY 
+    r.id, st.arrival_time;
+
+-- name: GetImportMetadata :one
+SELECT
+    *
+FROM
+    import_metadata
+WHERE
+    id = 1;
+
+-- name: UpsertImportMetadata :one
+INSERT
+OR REPLACE INTO import_metadata (
+    id,
+    file_hash,
+    import_time,
+    file_source
+)
+VALUES
+    (1, ?, ?, ?) RETURNING *;
+
+-- name: ClearStopTimes :exec
+DELETE FROM stop_times;
+
+-- name: ClearShapes :exec  
+DELETE FROM shapes;
+
+-- name: ClearTrips :exec
+DELETE FROM trips;
+
+-- name: ClearCalendar :exec
+DELETE FROM calendar;
+
+-- name: ClearStops :exec
+DELETE FROM stops;
+
+-- name: ClearRoutes :exec
+DELETE FROM routes;
+
+-- name: ClearAgencies :exec
+DELETE FROM agencies;

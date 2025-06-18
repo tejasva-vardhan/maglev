@@ -53,7 +53,7 @@ func (c *Client) DownloadAndStore(ctx context.Context, url string) error {
 		return err
 	}
 
-	err = c.processAndStoreGTFSData(b)
+	err = c.processAndStoreGTFSDataWithSource(b, url)
 
 	return err
 }
@@ -65,7 +65,7 @@ func (c *Client) ImportFromFile(ctx context.Context, path string) error {
 		return err
 	}
 
-	err = c.processAndStoreGTFSData(data)
+	err = c.processAndStoreGTFSDataWithSource(data, path)
 
 	return err
 }

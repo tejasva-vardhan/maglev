@@ -183,6 +183,74 @@ Real-time data testing can dramatically improve coverage:
 
 Test the complete vehicle processing pipeline including timestamp conversion, location mapping, status translation, and reference building.
 
+## GTFS Time Handling
+
+### Time Storage and Conversion
+
+GTFS stop_times data follows this conversion chain:
+
+1. **GTFS File Format**: Times are stored as "HH:MM:SS" strings (e.g., "08:30:00")
+2. **GTFS Library**: Parsed into `time.Duration` values (nanoseconds internally)
+3. **Database Storage**: Stored as `int64` nanoseconds since midnight in SQLite
+4. **API Response**: Converted to Unix epoch timestamps in milliseconds
+
+### Converting GTFS Times to API Timestamps
+
+To convert database time values to API timestamps:
+
+```go
+// Database stores time.Duration as int64 nanoseconds since midnight
+// Convert to Unix timestamp in milliseconds for a specific date
+startOfDay := time.Unix(date/1000, 0).Truncate(24 * time.Hour)
+arrivalDuration := time.Duration(row.ArrivalTime)
+arrivalTimeMs := startOfDay.Add(arrivalDuration).UnixMilli()
+```
+
+**Key Points**:
+- Database `arrival_time` and `departure_time` are nanoseconds since midnight
+- API responses need Unix epoch timestamps in milliseconds
+- Always use the target date to calculate the proper epoch time
+- GTFS times can exceed 24 hours (e.g., "25:30:00" for 1:30 AM next day)
+
+## New Endpoint Implementation Workflow
+
+### 1. Research and Planning
+- Fetch official API documentation from https://developer.onebusaway.org/api/where/methods
+- Examine production API responses to understand exact JSON structure
+- Check existing similar endpoints for patterns and data access methods
+
+### 2. Database Queries
+- Add new sqlc queries to `gtfsdb/query.sql` if needed
+- Run `make models` to regenerate Go code after query changes
+- Test queries directly in SQLite to verify data availability
+
+### 3. Models and Data Structures
+- Create model structs in `internal/models/` matching API response format
+- Include constructor functions following existing patterns (e.g., `NewScheduleStopTime`)
+- Ensure JSON tags match production API field names exactly
+
+### 4. Handler Implementation
+- Follow existing handler patterns in `internal/rest_api/`
+- Use `utils.ExtractIDFromParams()` and `utils.ExtractAgencyIDAndCodeID()` for ID parsing
+- Build reference maps to deduplicate agencies, routes, etc.
+- Convert reference maps to slices for final response
+- Use `models.NewEntryResponse()` or `models.NewListResponse()` for response structure
+
+### 5. Route Registration
+- Add route to `internal/rest_api/routes.go` with `validateAPIKey` wrapper
+- Follow pattern: `/api/where/{endpoint}/{id}` for single resource endpoints
+
+### 6. Testing Strategy
+- Use `createTestApi(t)` for test setup with RABA test data
+- Use `serveApiAndRetrieveEndpoint(t, api, endpoint)` for integration testing
+- Test both success and error cases (invalid IDs, missing data)
+- Ensure tests pass with existing test data rather than requiring specific agency data
+
+### 7. Data Validation
+- Check that test stops/routes have actual schedule data before testing
+- Use SQLite queries to verify data availability: `SELECT COUNT(*) FROM stop_times WHERE stop_id = '...'`
+- Handle cases where stops exist but have no schedule data (return empty arrays, not errors)
+
 ## REST API Documentation
 
 The official REST API documentation is available at: https://developer.onebusaway.org/api/where/methods

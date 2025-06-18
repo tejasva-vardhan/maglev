@@ -204,3 +204,13 @@ CREATE INDEX IF NOT EXISTS idx_stop_times_trip_id ON stop_times(trip_id);
 CREATE INDEX IF NOT EXISTS idx_stop_times_stop_id ON stop_times(stop_id);
 -- migrate
 CREATE INDEX IF NOT EXISTS idx_stop_times_stop_id_trip_id ON stop_times(stop_id, trip_id);
+
+-- migrate
+
+CREATE TABLE IF NOT EXISTS import_metadata
+(
+    id           INTEGER PRIMARY KEY CHECK (id = 1), -- Only allow one row
+    file_hash    TEXT NOT NULL,
+    import_time  INTEGER NOT NULL,
+    file_source  TEXT NOT NULL
+);
