@@ -49,14 +49,15 @@ func TestConditionalImport_InitialImport(t *testing.T) {
 		verbose: true,
 	}
 
-	client := NewClient(config)
-	defer client.Close()
+	client, err := NewClient(config)
+	require.NoError(t, err, "Failed to create client")
+	defer func() { _ = client.Close() }()
 
 	ctx := context.Background()
 	originalData, _ := createTestData(t)
 
 	// Perform initial import
-	err := client.processAndStoreGTFSDataWithSource(originalData, "test-source")
+	err = client.processAndStoreGTFSDataWithSource(originalData, "test-source")
 	require.NoError(t, err, "Initial import should succeed")
 
 	// Verify metadata was stored
@@ -81,14 +82,15 @@ func TestConditionalImport_SkipUnchangedData(t *testing.T) {
 		verbose: true,
 	}
 
-	client := NewClient(config)
-	defer client.Close()
+	client, err := NewClient(config)
+	require.NoError(t, err, "Failed to create client")
+	defer func() { _ = client.Close() }()
 
 	ctx := context.Background()
 	originalData, _ := createTestData(t)
 
 	// Perform initial import
-	err := client.processAndStoreGTFSDataWithSource(originalData, "test-source")
+	err = client.processAndStoreGTFSDataWithSource(originalData, "test-source")
 	require.NoError(t, err, "Initial import should succeed")
 
 	// Get initial metadata
@@ -134,14 +136,15 @@ func TestConditionalImport_ReloadChangedData(t *testing.T) {
 		verbose: true,
 	}
 
-	client := NewClient(config)
-	defer client.Close()
+	client, err := NewClient(config)
+	require.NoError(t, err, "Failed to create client")
+	defer func() { _ = client.Close() }()
 
 	ctx := context.Background()
 	originalData, modifiedData := createTestData(t)
 
 	// Perform initial import
-	err := client.processAndStoreGTFSDataWithSource(originalData, "test-source")
+	err = client.processAndStoreGTFSDataWithSource(originalData, "test-source")
 	require.NoError(t, err, "Initial import should succeed")
 
 	// Get initial metadata
@@ -176,14 +179,15 @@ func TestConditionalImport_DifferentSources(t *testing.T) {
 		verbose: true,
 	}
 
-	client := NewClient(config)
-	defer client.Close()
+	client, err := NewClient(config)
+	require.NoError(t, err, "Failed to create client")
+	defer func() { _ = client.Close() }()
 
 	ctx := context.Background()
 	originalData, _ := createTestData(t)
 
 	// Perform initial import with source A
-	err := client.processAndStoreGTFSDataWithSource(originalData, "source-a")
+	err = client.processAndStoreGTFSDataWithSource(originalData, "source-a")
 	require.NoError(t, err, "Initial import should succeed")
 
 	// Get initial metadata
@@ -211,14 +215,15 @@ func TestConditionalImport_FileImport(t *testing.T) {
 		verbose: true,
 	}
 
-	client := NewClient(config)
-	defer client.Close()
+	client, err := NewClient(config)
+	require.NoError(t, err, "Failed to create client")
+	defer func() { _ = client.Close() }()
 
 	ctx := context.Background()
 	testFilePath := getTestFixturePath(t, "raba.zip")
 
 	// Perform initial import from file
-	err := client.ImportFromFile(ctx, testFilePath)
+	err = client.ImportFromFile(ctx, testFilePath)
 	require.NoError(t, err, "File import should succeed")
 
 	// Verify metadata was stored with file path as source
@@ -252,14 +257,15 @@ func TestClearAllGTFSData(t *testing.T) {
 		verbose: true,
 	}
 
-	client := NewClient(config)
-	defer client.Close()
+	client, err := NewClient(config)
+	require.NoError(t, err, "Failed to create client")
+	defer func() { _ = client.Close() }()
 
 	ctx := context.Background()
 	originalData, _ := createTestData(t)
 
 	// Perform initial import
-	err := client.processAndStoreGTFSDataWithSource(originalData, "test-source")
+	err = client.processAndStoreGTFSDataWithSource(originalData, "test-source")
 	require.NoError(t, err, "Initial import should succeed")
 
 	// Verify data exists

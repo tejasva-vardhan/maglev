@@ -38,11 +38,12 @@ func rawGtfsData(source string, isLocalFile bool) ([]byte, error) {
 
 func buildGtfsDB(config Config, isLocalFile bool) (*gtfsdb.Client, error) {
 	dbConfig := gtfsdb.NewConfig(config.GTFSDataPath, config.Env, config.Verbose)
-	client := gtfsdb.NewClient(dbConfig)
+	client, err := gtfsdb.NewClient(dbConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GTFS database client: %w", err)
+	}
 
 	ctx := context.Background()
-
-	var err error
 
 	if isLocalFile {
 		err = client.ImportFromFile(ctx, config.GtfsURL)

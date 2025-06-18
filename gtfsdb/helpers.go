@@ -20,7 +20,7 @@ var ddl string
 // createDB creates a new SQLite database with tables for static GTFS data
 func createDB(config Config) (*sql.DB, error) {
 	if config.Env == appconf.Test && config.DBPath != ":memory:" {
-		log.Fatal("DB is being created in a file.", config.DBPath)
+		return nil, fmt.Errorf("test database must use in-memory storage, got path: %s", config.DBPath)
 	}
 
 	db, err := sql.Open("sqlite", config.DBPath)
@@ -126,7 +126,7 @@ func (c *Client) processAndStoreGTFSDataWithSource(b []byte, source string) erro
 
 		_, err := c.Queries.CreateAgency(ctx, params)
 		if err != nil {
-			log.Fatal("Unable to create agency", err)
+			return fmt.Errorf("unable to create agency: %w", err)
 		}
 	}
 
@@ -153,7 +153,7 @@ func (c *Client) processAndStoreGTFSDataWithSource(b []byte, source string) erro
 		_, err := c.Queries.CreateRoute(ctx, route)
 
 		if err != nil {
-			log.Fatal("Unable to create route: ", err)
+			return fmt.Errorf("unable to create route: %w", err)
 		}
 	}
 
@@ -178,7 +178,7 @@ func (c *Client) processAndStoreGTFSDataWithSource(b []byte, source string) erro
 	}
 	err = c.bulkInsertStops(ctx, allStopParams)
 	if err != nil {
-		log.Fatalf("Unable to create stops: %v\n", err)
+		return fmt.Errorf("unable to create stops: %w", err)
 	}
 
 	for _, s := range staticData.Services {
@@ -197,7 +197,7 @@ func (c *Client) processAndStoreGTFSDataWithSource(b []byte, source string) erro
 
 		_, err := c.Queries.CreateCalendar(ctx, params)
 		if err != nil {
-			log.Fatal("Unable to create calendar: ", err)
+			return fmt.Errorf("unable to create calendar: %w", err)
 		}
 	}
 
@@ -219,7 +219,7 @@ func (c *Client) processAndStoreGTFSDataWithSource(b []byte, source string) erro
 	}
 	err = c.bulkInsertTrips(ctx, allTripParams)
 	if err != nil {
-		log.Fatalf("Unable to create trips: %v\n", err)
+		return fmt.Errorf("unable to create trips: %w", err)
 	}
 
 	var allStopTimeParams []CreateStopTimeParams
@@ -242,7 +242,7 @@ func (c *Client) processAndStoreGTFSDataWithSource(b []byte, source string) erro
 	}
 	err = c.bulkInsertStopTimes(ctx, allStopTimeParams)
 	if err != nil {
-		log.Fatalf("Unable to create stop times: %v\n", err)
+		return fmt.Errorf("unable to create stop times: %w", err)
 	}
 
 	var allShapeParams []CreateShapeParams
@@ -259,13 +259,14 @@ func (c *Client) processAndStoreGTFSDataWithSource(b []byte, source string) erro
 	}
 	err = c.bulkInsertShapes(ctx, allShapeParams)
 	if err != nil {
-		log.Fatalf("Unable to create shapes: %v\n", err)
+		return fmt.Errorf("unable to create shapes: %w", err)
 	}
 
 	if c.config.verbose {
 		counts, err := c.TableCounts()
 		if err != nil {
-			log.Fatalf("Failed to get table counts: %v", err)
+			log.Printf("Error getting table counts: %v", err)
+			return fmt.Errorf("failed to get table counts: %w", err)
 		}
 		for k, v := range counts {
 			fmt.Printf("%s: %d (Static matches? %v)\n", k, v, v == staticCounts[k])
