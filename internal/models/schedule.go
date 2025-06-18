@@ -26,9 +26,9 @@ type StopRouteSchedule struct {
 
 // ScheduleForStopEntry represents the main data entry for schedule-for-stop
 type ScheduleForStopEntry struct {
-	Date                int64               `json:"date"`
-	StopID              string              `json:"stopId"`
-	StopRouteSchedules  []StopRouteSchedule `json:"stopRouteSchedules"`
+	Date               int64               `json:"date"`
+	StopID             string              `json:"stopId"`
+	StopRouteSchedules []StopRouteSchedule `json:"stopRouteSchedules"`
 }
 
 // NewScheduleStopTime creates a new ScheduleStopTime

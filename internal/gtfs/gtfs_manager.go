@@ -27,6 +27,9 @@ type Manager struct {
 	realTimeVehicles []gtfs.Vehicle
 	realTimeMutex    sync.RWMutex
 	config           Config
+	shutdownChan     chan struct{}
+	wg               sync.WaitGroup
+	shutdownOnce     sync.Once
 }
 
 // InitGTFSManager initializes the Manager with the GTFS data from the given source
@@ -40,9 +43,10 @@ func InitGTFSManager(config Config) (*Manager, error) {
 	}
 
 	manager := &Manager{
-		gtfsSource:  config.GtfsURL,
-		isLocalFile: isLocalFile,
-		config:      config,
+		gtfsSource:   config.GtfsURL,
+		isLocalFile:  isLocalFile,
+		config:       config,
+		shutdownChan: make(chan struct{}),
 	}
 	manager.setStaticGTFS(staticData)
 
@@ -53,6 +57,7 @@ func InitGTFSManager(config Config) (*Manager, error) {
 	manager.GtfsDB = gtfsDB
 
 	if !isLocalFile {
+		manager.wg.Add(1)
 		go manager.updateStaticGTFS()
 	}
 
@@ -60,10 +65,22 @@ func InitGTFSManager(config Config) (*Manager, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel() // Ensure the context is canceled when done
 		manager.updateGTFSRealtime(ctx, config)
+		manager.wg.Add(1)
 		go manager.updateGTFSRealtimePeriodically(config)
 	}
 
 	return manager, nil
+}
+
+// Shutdown gracefully shuts down the manager and its background goroutines
+func (manager *Manager) Shutdown() {
+	manager.shutdownOnce.Do(func() {
+		close(manager.shutdownChan)
+		manager.wg.Wait()
+		if manager.GtfsDB != nil {
+			_ = manager.GtfsDB.Close()
+		}
+	})
 }
 
 func (manager *Manager) GetAgencies() []gtfs.Agency {

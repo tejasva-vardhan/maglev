@@ -80,7 +80,7 @@ func (api *RestAPI) scheduleForStopHandler(w http.ResponseWriter, r *http.Reques
 		)
 
 		routeScheduleMap[combinedRouteID] = append(routeScheduleMap[combinedRouteID], stopTime)
-		
+
 		// Store the trip headsign for this route
 		if row.TripHeadsign.Valid && row.TripHeadsign.String != "" {
 			routeHeadsignMap[combinedRouteID] = row.TripHeadsign.String

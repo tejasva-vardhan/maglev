@@ -32,7 +32,7 @@ func loadRealtimeData(ctx context.Context, source string, headers map[string]str
 	for key, value := range headers {
 		req.Header.Add(key, value)
 	}
-	
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -79,6 +79,8 @@ func (manager *Manager) updateGTFSRealtime(ctx context.Context, config Config) {
 }
 
 func (manager *Manager) updateGTFSRealtimePeriodically(config Config) {
+	defer manager.wg.Done()
+
 	// Update every 30 seconds
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -93,6 +95,9 @@ func (manager *Manager) updateGTFSRealtimePeriodically(config Config) {
 			log.Println("Updating GTFS-RT data")
 			manager.updateGTFSRealtime(ctx, config)
 			cancel() // Ensure the context is canceled when done
+		case <-manager.shutdownChan:
+			log.Println("Shutting down real-time updates")
+			return
 		}
 	}
 }

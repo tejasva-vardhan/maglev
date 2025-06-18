@@ -109,7 +109,7 @@ The application follows a layered approach:
 ### 🚨 Critical Issues (Fix Immediately)
 
 #### 1. **Remove All `log.Fatal()` Calls**
-**Files**: `gtfsdb/helpers.go`, `gtfsdb/client.go`  
+**Files**: `gtfsdb/helpers.go`, `gtfsdb/client.go`
 **Fix**: Replace with error returns and proper error handling
 ```go
 // BAD: log.Fatal("Unable to create DB", err)
@@ -117,7 +117,7 @@ The application follows a layered approach:
 ```
 
 #### 2. **Add Graceful Shutdown**
-**File**: `cmd/api/main.go`  
+**File**: `cmd/api/main.go`
 **Fix**: Implement signal handling for clean shutdown
 ```go
 ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -126,7 +126,7 @@ defer stop()
 ```
 
 #### 3. **Add Security Headers Middleware**
-**File**: Create `internal/rest_api/security_middleware.go`  
+**File**: Create `internal/rest_api/security_middleware.go`
 **Fix**: Add CORS and security headers to all responses
 ```go
 func securityHeaders(next http.Handler) http.Handler {
@@ -142,28 +142,28 @@ func securityHeaders(next http.Handler) http.Handler {
 ### ⚡ Performance Issues (High Priority)
 
 #### 4. **Fix N+1 Query Problems**
-**Files**: `internal/rest_api/routes_for_location_handler.go:41`, `internal/rest_api/stops_for_location_handler.go:33,49`  
+**Files**: `internal/rest_api/routes_for_location_handler.go:41`, `internal/rest_api/stops_for_location_handler.go:33,49`
 **Fix**: Create batch queries in `gtfsdb/query.sql`
 ```sql
 -- name: GetRoutesForStops :many
-SELECT DISTINCT r.* FROM routes r 
-JOIN stop_times st ON r.route_id = st.route_id 
+SELECT DISTINCT r.* FROM routes r
+JOIN stop_times st ON r.route_id = st.route_id
 WHERE st.stop_id = ANY($1::text[]);
 ```
 
 #### 5. **Use Spatial Index for Location Queries**
-**File**: `internal/gtfs/gtfs_manager.go:286`  
+**File**: `internal/gtfs/gtfs_manager.go:286`
 **Fix**: Query `stops_rtree` table instead of linear scan
 ```sql
 -- name: GetStopsWithinRadius :many
 SELECT s.* FROM stops s
 JOIN stops_rtree r ON s.stop_id = r.stop_id
-WHERE r.minX >= $1 AND r.maxX <= $2 
+WHERE r.minX >= $1 AND r.maxX <= $2
   AND r.minY >= $3 AND r.maxY <= $4;
 ```
 
 #### 6. **Configure Database Connection Pool**
-**File**: `gtfsdb/client.go:30`  
+**File**: `gtfsdb/client.go:30`
 **Fix**: Add connection pool settings
 ```go
 db.SetMaxOpenConns(25)
@@ -173,18 +173,8 @@ db.SetConnMaxLifetime(5 * time.Minute)
 
 ### 🔒 Security Issues (High Priority)
 
-#### 7. **Move Secrets to Environment Variables**
-**File**: `cmd/api/main.go`  
-**Fix**: Load API keys from environment instead of command line
-```go
-apiKeys := strings.Split(os.Getenv("API_KEYS"), ",")
-if len(apiKeys) == 0 {
-    apiKeys = []string{os.Getenv("DEFAULT_API_KEY")}
-}
-```
-
 #### 8. **Add Input Validation**
-**Files**: All REST API handlers  
+**Files**: All REST API handlers
 **Fix**: Validate and sanitize all user inputs
 ```go
 func validateQuery(query string) error {
@@ -197,8 +187,8 @@ func validateQuery(query string) error {
 ```
 
 #### 9. **Implement Rate Limiting**
-**File**: Create `internal/rest_api/rate_limit_middleware.go`  
-**Fix**: Add rate limiting per API key
+**File**: Create `internal/rest_api/rate_limit_middleware.go`
+**Fix**: Add rate limiting per API key, exempting the key `org.onebusaway.iphone`
 ```go
 // Use golang.org/x/time/rate package
 limiter := rate.NewLimiter(rate.Every(time.Second), 100)
@@ -207,7 +197,7 @@ limiter := rate.NewLimiter(rate.Every(time.Second), 100)
 ### 🐛 Reliability Issues (Medium Priority)
 
 #### 10. **Add Mutex for Static GTFS Updates**
-**File**: `internal/gtfs/manager.go:241`  
+**File**: `internal/gtfs/manager.go:241`
 **Fix**: Protect gtfsData updates with mutex
 ```go
 func (m *Manager) setStaticGTFS(data *gtfs.Static) {
@@ -218,7 +208,7 @@ func (m *Manager) setStaticGTFS(data *gtfs.Static) {
 ```
 
 #### 11. **Handle Context Cancellation Properly**
-**Files**: All database query calls  
+**Files**: All database query calls
 **Fix**: Check context errors and log them
 ```go
 if ctx.Err() != nil {
@@ -228,7 +218,7 @@ if ctx.Err() != nil {
 ```
 
 #### 12. **Close Resources Properly**
-**File**: `cmd/api/main.go`  
+**File**: `cmd/api/main.go`
 **Fix**: Defer database close and stop goroutines
 ```go
 defer app.GtfsDB.Close()
@@ -237,19 +227,8 @@ defer app.GtfsDB.Close()
 
 ### 📈 Optimization Opportunities (Medium Priority)
 
-#### 13. **Add Simple In-Memory Cache**
-**File**: Create `internal/cache/cache.go`  
-**Fix**: Cache static data like agencies and routes
-```go
-type Cache struct {
-    agencies sync.Map
-    routes   sync.Map
-    ttl      time.Duration
-}
-```
-
 #### 14. **Parallelize Real-Time Updates**
-**File**: `internal/gtfs/manager.go:182`  
+**File**: `internal/gtfs/manager.go:182`
 **Fix**: Fetch trip updates and vehicle positions concurrently
 ```go
 var wg sync.WaitGroup
@@ -260,7 +239,7 @@ wg.Wait()
 ```
 
 #### 15. **Add Response Compression**
-**File**: `internal/rest_api/routes.go`  
+**File**: `internal/rest_api/routes.go`
 **Fix**: Add gzip middleware
 ```go
 import "github.com/klauspost/compress/gzhttp"
@@ -270,7 +249,7 @@ apiRoutes = gzhttp.GzipHandler(apiRoutes)
 ### 🧪 Testing & Monitoring (Lower Priority)
 
 #### 16. **Add Health Check Endpoint**
-**File**: `internal/rest_api/health_handler.go`  
+**File**: `internal/rest_api/health_handler.go`
 **Fix**: Create `/health` endpoint checking database and GTFS data
 ```go
 func healthHandler(app *app.Application) http.HandlerFunc {
@@ -281,16 +260,16 @@ func healthHandler(app *app.Application) http.HandlerFunc {
 ```
 
 #### 17. **Implement Structured Logging**
-**Files**: All error handling locations  
+**Files**: All error handling locations
 **Fix**: Use slog consistently
 ```go
-logger.Error("failed to fetch data", 
+logger.Error("failed to fetch data",
     slog.String("url", url),
     slog.Error(err))
 ```
 
 #### 18. **Add Request Logging Middleware**
-**File**: `internal/rest_api/logging_middleware.go`  
+**File**: `internal/rest_api/logging_middleware.go`
 **Fix**: Log all requests with duration
 ```go
 func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
@@ -301,22 +280,9 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 ### 📝 Quick Wins (Easy Fixes)
 
 #### 19. **Remove Hardcoded Default URLs**
-**File**: `cmd/api/main.go`  
+**File**: `cmd/api/main.go`
 **Fix**: Move defaults to configuration file
 
 #### 20. **Add Missing Error Checks**
-**Files**: Various locations with `// nolint`  
+**Files**: Various locations with `// nolint`
 **Fix**: Handle errors instead of ignoring them
-
-## Implementation Priority
-
-1. **Week 1**: Critical issues (#1-3) - System stability
-2. **Week 2**: Performance issues (#4-6) - Query optimization
-3. **Week 3**: Security issues (#7-9) - Protection mechanisms
-4. **Week 4**: Reliability issues (#10-12) - Resource management
-5. **Month 2**: Optimizations (#13-15) and Testing/Monitoring (#16-18)
-6. **Ongoing**: Quick wins as encountered
-
-## Conclusion
-
-The Maglev codebase demonstrates solid architectural foundations but requires immediate attention to critical issues around error handling, security, and performance. Addressing these issues systematically will result in a production-ready transit data service capable of handling real-world traffic loads.

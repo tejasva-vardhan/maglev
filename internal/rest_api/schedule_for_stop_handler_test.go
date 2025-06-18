@@ -21,21 +21,21 @@ func TestScheduleForStopHandler(t *testing.T) {
 	stopID := utils.FormCombinedID(agencies[0].Id, stops[0].Id)
 
 	tests := []struct {
-		name           string
-		stopID         string
-		expectedStatus int
+		name                string
+		stopID              string
+		expectedStatus      int
 		expectValidResponse bool
 	}{
 		{
-			name:           "Valid stop",
-			stopID:         stopID,
-			expectedStatus: http.StatusOK,
+			name:                "Valid stop",
+			stopID:              stopID,
+			expectedStatus:      http.StatusOK,
 			expectValidResponse: true,
 		},
 		{
-			name:           "Invalid stop ID",
-			stopID:         "nonexistent_stop",
-			expectedStatus: http.StatusNotFound,
+			name:                "Invalid stop ID",
+			stopID:              "nonexistent_stop",
+			expectedStatus:      http.StatusNotFound,
 			expectValidResponse: false,
 		},
 	}
