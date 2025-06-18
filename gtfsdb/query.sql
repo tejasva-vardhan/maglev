@@ -371,3 +371,46 @@ DELETE FROM routes;
 
 -- name: ClearAgencies :exec
 DELETE FROM agencies;
+
+-- Batch queries to solve N+1 problems
+
+-- name: GetRoutesForStops :many
+SELECT DISTINCT
+    routes.*,
+    stop_times.stop_id
+FROM
+    stop_times
+    JOIN trips ON stop_times.trip_id = trips.id
+    JOIN routes ON trips.route_id = routes.id
+WHERE
+    stop_times.stop_id IN (sqlc.slice('stop_ids'));
+
+-- name: GetRouteIDsForStops :many
+SELECT DISTINCT
+    routes.agency_id || '_' || routes.id AS route_id,
+    stop_times.stop_id
+FROM
+    stop_times
+    JOIN trips ON stop_times.trip_id = trips.id
+    JOIN routes ON trips.route_id = routes.id
+WHERE
+    stop_times.stop_id IN (sqlc.slice('stop_ids'));
+
+-- name: GetAgenciesForStops :many
+SELECT DISTINCT
+    a.id,
+    a.name,
+    a.url,
+    a.timezone,
+    a.lang,
+    a.phone,
+    a.fare_url,
+    a.email,
+    stop_times.stop_id
+FROM
+    stop_times
+    JOIN trips ON stop_times.trip_id = trips.id
+    JOIN routes ON trips.route_id = routes.id
+    JOIN agencies a ON routes.agency_id = a.id
+WHERE
+    stop_times.stop_id IN (sqlc.slice('stop_ids'));

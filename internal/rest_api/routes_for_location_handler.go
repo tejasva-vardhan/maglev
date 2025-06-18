@@ -2,10 +2,11 @@ package restapi
 
 import (
 	"context"
-	"maglev.onebusaway.org/internal/models"
-	"maglev.onebusaway.org/internal/utils"
 	"net/http"
 	"strings"
+
+	"maglev.onebusaway.org/internal/models"
+	"maglev.onebusaway.org/internal/utils"
 )
 
 func (api *RestAPI) routesForLocationHandler(w http.ResponseWriter, r *http.Request) {
@@ -37,33 +38,56 @@ func (api *RestAPI) routesForLocationHandler(w http.ResponseWriter, r *http.Requ
 	routeIDs := map[string]bool{}
 	agencyIDs := map[string]bool{}
 
+	// Extract stop IDs for batch query
+	stopIDs := make([]string, 0, len(stops))
 	for _, stop := range stops {
-		routes, err := api.GtfsManager.GtfsDB.Queries.GetRoutesForStop(ctx, stop.Id)
-		if err != nil || len(routes) == 0 {
+		stopIDs = append(stopIDs, stop.Id)
+	}
+
+	if len(stopIDs) == 0 {
+		// Return empty response if no stops found
+		agencies := utils.FilterAgencies(api.GtfsManager.GetAgencies(), agencyIDs)
+		references := models.ReferencesModel{
+			Agencies:   agencies,
+			Routes:     []interface{}{},
+			Situations: []interface{}{},
+			StopTimes:  []interface{}{},
+			Stops:      []models.Stop{},
+			Trips:      []interface{}{},
+		}
+		response := models.NewListResponseWithRange(results, references, true)
+		api.sendResponse(w, r, response)
+		return
+	}
+
+	// Batch query to get all routes for all stops
+	routesForStops, err := api.GtfsManager.GtfsDB.Queries.GetRoutesForStops(ctx, stopIDs)
+	if err != nil {
+		api.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// Process routes and filter by query if provided
+	for _, routeRow := range routesForStops {
+		if query != "" && strings.ToLower(routeRow.ShortName.String) != query {
 			continue
 		}
-
-		for _, route := range routes {
-			if query != "" && strings.ToLower(route.ShortName.String) != query {
-				continue
-			}
-			agencyIDs[route.AgencyID] = true
-			if !routeIDs[route.ID] {
-				results = append(results, models.NewRoute(
-					utils.FormCombinedID(route.AgencyID, route.ID),
-					route.AgencyID,
-					route.ShortName.String,
-					route.LongName.String,
-					route.Desc.String,
-					models.RouteType(route.Type),
-					route.Url.String,
-					route.Color.String,
-					route.TextColor.String,
-					route.ShortName.String,
-				))
-			}
-			routeIDs[route.ID] = true
+		agencyIDs[routeRow.AgencyID] = true
+		if !routeIDs[routeRow.ID] {
+			results = append(results, models.NewRoute(
+				utils.FormCombinedID(routeRow.AgencyID, routeRow.ID),
+				routeRow.AgencyID,
+				routeRow.ShortName.String,
+				routeRow.LongName.String,
+				routeRow.Desc.String,
+				models.RouteType(routeRow.Type),
+				routeRow.Url.String,
+				routeRow.Color.String,
+				routeRow.TextColor.String,
+				routeRow.ShortName.String,
+			))
 		}
+		routeIDs[routeRow.ID] = true
 	}
 
 	agencies := utils.FilterAgencies(api.GtfsManager.GetAgencies(), agencyIDs)
