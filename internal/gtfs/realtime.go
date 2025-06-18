@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -52,30 +53,49 @@ func (manager *Manager) updateGTFSRealtime(ctx context.Context, config Config) {
 	if config.RealTimeAuthHeaderKey != "" && config.RealTimeAuthHeaderValue != "" {
 		headers[config.RealTimeAuthHeaderKey] = config.RealTimeAuthHeaderValue
 	}
-	tripData, tripErr := loadRealtimeData(ctx, config.TripUpdatesURL, headers)
 
+	var wg sync.WaitGroup
+	var tripData, vehicleData *gtfs.Realtime
+	var tripErr, vehicleErr error
+
+	// Fetch trip updates in parallel
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		tripData, tripErr = loadRealtimeData(ctx, config.TripUpdatesURL, headers)
+		if tripErr != nil {
+			log.Printf("Error loading GTFS-RT trip updates data from %s: %v", config.TripUpdatesURL, tripErr)
+		}
+	}()
+
+	// Fetch vehicle positions in parallel
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		vehicleData, vehicleErr = loadRealtimeData(ctx, config.VehiclePositionsURL, headers)
+		if vehicleErr != nil {
+			log.Printf("Error loading GTFS-RT vehicle positions data from %s: %v", config.VehiclePositionsURL, vehicleErr)
+		}
+	}()
+
+	// Wait for both to complete
+	wg.Wait()
+
+	// Check for context cancellation
 	if ctx.Err() != nil {
 		return
 	}
 
-	vehicleData, vehicleErr := loadRealtimeData(ctx, config.VehiclePositionsURL, headers)
-
-	if tripErr != nil {
-		log.Printf("Error loading GTFS-RT trip updates data from %s: %v", config.TripUpdatesURL, tripErr)
-	}
-	if vehicleErr != nil {
-		log.Printf("Error loading GTFS-RT vehicle positions data from %s: %v", config.VehiclePositionsURL, vehicleErr)
-	}
-
-	if tripErr != nil || vehicleErr != nil || ctx.Err() != nil {
-		return
-	}
-
+	// Update data if at least one fetch succeeded
 	manager.realTimeMutex.Lock()
 	defer manager.realTimeMutex.Unlock()
 
-	manager.realTimeTrips = tripData.Trips
-	manager.realTimeVehicles = vehicleData.Vehicles
+	if tripData != nil && tripErr == nil {
+		manager.realTimeTrips = tripData.Trips
+	}
+	if vehicleData != nil && vehicleErr == nil {
+		manager.realTimeVehicles = vehicleData.Vehicles
+	}
 }
 
 func (manager *Manager) updateGTFSRealtimePeriodically(config Config) {
