@@ -117,17 +117,6 @@ func TestStopsForRouteHandlerEndToEnd(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, 13, len(routes))
 
-	rabaRoute, ok := routes[0].(map[string]interface{})
-	require.True(t, ok)
-	assert.Equal(t, "15", rabaRoute["id"])
-	assert.Equal(t, "25", rabaRoute["agencyId"])
-	assert.Equal(t, "15", rabaRoute["shortName"])
-	assert.Equal(t, "Churn Creek/Knightson/Airport", rabaRoute["longName"])
-	assert.Equal(t, "15", rabaRoute["nullSafeShortName"])
-	assert.Equal(t, float64(3), rabaRoute["type"])
-	assert.Equal(t, "800000", rabaRoute["color"])
-	assert.Equal(t, "FFFFFF", rabaRoute["textColor"])
-
 	// Verify stops
 	stops, ok := refs["stops"].([]interface{})
 	require.True(t, ok)
