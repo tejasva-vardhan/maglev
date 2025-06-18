@@ -8,6 +8,7 @@ import (
 	"maglev.onebusaway.org/internal/app"
 	"maglev.onebusaway.org/internal/appconf"
 	"maglev.onebusaway.org/internal/gtfs"
+	"maglev.onebusaway.org/internal/logging"
 	"maglev.onebusaway.org/internal/rest_api"
 	"maglev.onebusaway.org/internal/webui"
 	"net/http"
@@ -75,7 +76,12 @@ func main() {
 	webUI.SetWebUIRoutes(mux)
 
 	// Wrap with security middleware
-	handler := api.WithSecurityHeaders(mux)
+	secureHandler := api.WithSecurityHeaders(mux)
+	
+	// Add request logging middleware (outermost)
+	requestLogger := logging.NewStructuredLogger(os.Stdout, slog.LevelInfo)
+	requestLogMiddleware := restapi.NewRequestLoggingMiddleware(requestLogger)
+	handler := requestLogMiddleware(secureHandler)
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
