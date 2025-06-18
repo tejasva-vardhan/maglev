@@ -2,9 +2,10 @@ package gtfs
 
 import (
 	"context"
+	"log/slog"
 	"github.com/jamespfennell/gtfs"
 	"io"
-	"log"
+	"maglev.onebusaway.org/internal/logging"
 	"net/http"
 	"sync"
 	"time"
@@ -49,6 +50,8 @@ func loadRealtimeData(ctx context.Context, source string, headers map[string]str
 }
 
 func (manager *Manager) updateGTFSRealtime(ctx context.Context, config Config) {
+	logger := logging.FromContext(ctx)
+	
 	headers := map[string]string{}
 	if config.RealTimeAuthHeaderKey != "" && config.RealTimeAuthHeaderValue != "" {
 		headers[config.RealTimeAuthHeaderKey] = config.RealTimeAuthHeaderValue
@@ -64,7 +67,9 @@ func (manager *Manager) updateGTFSRealtime(ctx context.Context, config Config) {
 		defer wg.Done()
 		tripData, tripErr = loadRealtimeData(ctx, config.TripUpdatesURL, headers)
 		if tripErr != nil {
-			log.Printf("Error loading GTFS-RT trip updates data from %s: %v", config.TripUpdatesURL, tripErr)
+			logging.LogError(logger, "Error loading GTFS-RT trip updates data", tripErr,
+				slog.String("url", config.TripUpdatesURL),
+				slog.String("component", "gtfs_realtime"))
 		}
 	}()
 
@@ -74,7 +79,9 @@ func (manager *Manager) updateGTFSRealtime(ctx context.Context, config Config) {
 		defer wg.Done()
 		vehicleData, vehicleErr = loadRealtimeData(ctx, config.VehiclePositionsURL, headers)
 		if vehicleErr != nil {
-			log.Printf("Error loading GTFS-RT vehicle positions data from %s: %v", config.VehiclePositionsURL, vehicleErr)
+			logging.LogError(logger, "Error loading GTFS-RT vehicle positions data", vehicleErr,
+				slog.String("url", config.VehiclePositionsURL),
+				slog.String("component", "gtfs_realtime"))
 		}
 	}()
 
@@ -101,6 +108,9 @@ func (manager *Manager) updateGTFSRealtime(ctx context.Context, config Config) {
 func (manager *Manager) updateGTFSRealtimePeriodically(config Config) {
 	defer manager.wg.Done()
 
+	// Create a logger for this goroutine
+	logger := slog.Default().With(slog.String("component", "gtfs_realtime_updater"))
+
 	// Update every 30 seconds
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -110,13 +120,14 @@ func (manager *Manager) updateGTFSRealtimePeriodically(config Config) {
 		case <-ticker.C:
 			// Create a context with timeout for the download
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			ctx = logging.WithLogger(ctx, logger)
 
 			// Download realtime data
-			log.Println("Updating GTFS-RT data")
+			logging.LogOperation(logger, "updating_gtfs_realtime_data")
 			manager.updateGTFSRealtime(ctx, config)
 			cancel() // Ensure the context is canceled when done
 		case <-manager.shutdownChan:
-			log.Println("Shutting down real-time updates")
+			logging.LogOperation(logger, "shutting_down_realtime_updates")
 			return
 		}
 	}

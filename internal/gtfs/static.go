@@ -3,10 +3,11 @@ package gtfs
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"github.com/jamespfennell/gtfs"
 	"io"
-	"log"
 	"maglev.onebusaway.org/gtfsdb"
+	"maglev.onebusaway.org/internal/logging"
 	"net/http"
 	"os"
 	"time"
@@ -74,9 +75,13 @@ func loadGTFSData(source string, isLocalFile bool) (*gtfs.Static, error) {
 func (manager *Manager) updateStaticGTFS() { // nolint
 	defer manager.wg.Done()
 
+	// Create a logger for this goroutine
+	logger := slog.Default().With(slog.String("component", "gtfs_static_updater"))
+
 	// If it's a local file, don't update periodically
 	if manager.isLocalFile {
-		log.Printf("GTFS source is a local file, skipping periodic updates")
+		logging.LogOperation(logger, "gtfs_source_is_local_file_skipping_periodic_updates",
+			slog.String("source", manager.gtfsSource))
 		return
 	}
 
@@ -96,14 +101,17 @@ func (manager *Manager) updateStaticGTFS() { // nolint
 
 			if err != nil {
 				// Log error but don't crash the application
-				log.Printf("Error updating GTFS data: %v", err)
+				logging.LogError(logger, "Error updating GTFS data", err,
+					slog.String("source", manager.gtfsSource))
 				continue
 			}
 
 			// Update the GTFS data in the manager
+			logging.LogOperation(logger, "gtfs_static_data_updated",
+				slog.String("source", manager.gtfsSource))
 			manager.setStaticGTFS(staticData)
 		case <-manager.shutdownChan:
-			log.Println("Shutting down static GTFS updates")
+			logging.LogOperation(logger, "shutting_down_static_gtfs_updates")
 			return
 		}
 	}
@@ -119,6 +127,8 @@ func (manager *Manager) setStaticGTFS(staticData *gtfs.Static) {
 	// perform post-processing here!
 
 	if manager.config.Verbose {
-		log.Printf("GTFS data updated successfully for %v", manager.gtfsSource)
+		logger := slog.Default().With(slog.String("component", "gtfs_manager"))
+		logging.LogOperation(logger, "gtfs_data_updated_successfully",
+			slog.String("source", manager.gtfsSource))
 	}
 }

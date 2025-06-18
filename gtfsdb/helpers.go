@@ -7,9 +7,10 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"github.com/jamespfennell/gtfs"
-	"log"
 	"maglev.onebusaway.org/internal/appconf"
+	"maglev.onebusaway.org/internal/logging"
 	"strings"
 	"time"
 )
@@ -55,6 +56,8 @@ func performDatabaseMigration(ctx context.Context, db *sql.DB) error {
 }
 
 func (c *Client) processAndStoreGTFSDataWithSource(b []byte, source string) error {
+	logger := slog.Default().With(slog.String("component", "gtfs_importer"))
+	
 	startTime := time.Now()
 	defer func() {
 		endTime := time.Now()
@@ -62,7 +65,9 @@ func (c *Client) processAndStoreGTFSDataWithSource(b []byte, source string) erro
 		c.importRuntime = endTime.Sub(startTime)
 
 		if c.config.verbose {
-			log.Println("Importing GTFS data took", c.importRuntime.String())
+			logging.LogOperation(logger, "gtfs_data_import_completed",
+				slog.Duration("duration", c.importRuntime),
+				slog.String("source", source))
 		}
 	}()
 
@@ -78,13 +83,16 @@ func (c *Client) processAndStoreGTFSDataWithSource(b []byte, source string) erro
 		// We have existing metadata, check if hash matches
 		if existingMetadata.FileHash == hashStr && existingMetadata.FileSource == source {
 			if c.config.verbose {
-				log.Println("GTFS data unchanged, skipping import")
+				logging.LogOperation(logger, "gtfs_data_unchanged_skipping_import",
+					slog.String("hash", hashStr[:8]))
 			}
 			return nil
 		}
 		// Hash differs, we need to clear existing data and reimport
 		if c.config.verbose {
-			log.Println("GTFS data changed, clearing existing data and reimporting")
+			logging.LogOperation(logger, "gtfs_data_changed_reimporting",
+				slog.String("old_hash", existingMetadata.FileHash[:8]),
+				slog.String("new_hash", hashStr[:8]))
 		}
 		err = c.clearAllGTFSData(ctx)
 		if err != nil {
@@ -268,7 +276,7 @@ func (c *Client) processAndStoreGTFSDataWithSource(b []byte, source string) erro
 	if c.config.verbose {
 		counts, err := c.TableCounts()
 		if err != nil {
-			log.Printf("Error getting table counts: %v", err)
+			logging.LogError(logger, "Error getting table counts", err)
 			return fmt.Errorf("failed to get table counts: %w", err)
 		}
 		for k, v := range counts {
@@ -278,7 +286,9 @@ func (c *Client) processAndStoreGTFSDataWithSource(b []byte, source string) erro
 
 	// Update import metadata to record successful import
 	if c.config.verbose {
-		log.Printf("Updating import metadata: hash=%s, source=%s", hashStr[:8], source)
+		logging.LogOperation(logger, "updating_import_metadata",
+			slog.String("hash", hashStr[:8]),
+			slog.String("source", source))
 	}
 	_, err = c.Queries.UpsertImportMetadata(ctx, UpsertImportMetadataParams{
 		FileHash:   hashStr,
@@ -286,11 +296,11 @@ func (c *Client) processAndStoreGTFSDataWithSource(b []byte, source string) erro
 		FileSource: source,
 	})
 	if err != nil {
-		log.Printf("Error updating import metadata: %v", err)
+		logging.LogError(logger, "Error updating import metadata", err)
 		return fmt.Errorf("error updating import metadata: %w", err)
 	}
 	if c.config.verbose {
-		log.Println("Import metadata updated successfully")
+		logging.LogOperation(logger, "import_metadata_updated_successfully")
 	}
 
 	var allCalendarDateParams []CreateCalendarDateParams
@@ -321,7 +331,8 @@ func (c *Client) processAndStoreGTFSDataWithSource(b []byte, source string) erro
 	if len(allCalendarDateParams) > 0 {
 		err = c.buldInsertCalendarDates(ctx, allCalendarDateParams)
 		if err != nil {
-			log.Fatalf("Unable to create calendar dates: %v\n", err)
+			logging.LogError(logger, "Unable to create calendar dates", err)
+			return fmt.Errorf("unable to create calendar dates: %w", err)
 		}
 	}
 

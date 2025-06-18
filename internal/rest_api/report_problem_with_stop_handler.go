@@ -1,11 +1,12 @@
 package restapi
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 
 	"maglev.onebusaway.org/internal/models"
 	"maglev.onebusaway.org/internal/utils"
+	"maglev.onebusaway.org/internal/logging"
 )
 
 func (api *RestAPI) reportProblemWithStopHandler(w http.ResponseWriter, r *http.Request) {
@@ -26,9 +27,15 @@ func (api *RestAPI) reportProblemWithStopHandler(w http.ResponseWriter, r *http.
 	userLocationAccuracy := query.Get("userLocationAccuracy")
 
 	// TODO: Add storage logic for the problem report, I leave it as a log statement for now
-	log.Printf("Problem report received for stop %s: code=%s, userComment=%s, "+
-		"userLat=%s, userLon=%s, userLocationAccuracy=%s",
-		stopID, code, userComment, userLat, userLon, userLocationAccuracy)
+	logger := logging.FromContext(r.Context())
+	logging.LogOperation(logger, "problem_report_received_for_stop",
+		slog.String("stop_id", stopID),
+		slog.String("code", code),
+		slog.String("user_comment", userComment),
+		slog.String("user_lat", userLat),
+		slog.String("user_lon", userLon),
+		slog.String("user_location_accuracy", userLocationAccuracy),
+		slog.String("component", "problem_reporting"))
 
 	api.sendResponse(w, r, models.NewOKResponse(struct{}{}))
 }
