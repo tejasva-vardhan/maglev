@@ -43,4 +43,5 @@ func (api *RestAPI) SetRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/where/stop/{id}", validateAPIKey(api, api.stopHandler))
 	mux.Handle("GET /api/where/shape/{id}", validateAPIKey(api, api.shapes))
 	mux.Handle("GET /api/where/routes-for-location.json", validateAPIKey(api, api.routesForLocationHandler))
+	mux.Handle("GET /api/where/trip-details/{id}", validateAPIKey(api, api.tripDetailsHandler))
 }
