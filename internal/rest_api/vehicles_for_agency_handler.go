@@ -1,10 +1,11 @@
 package restapi
 
 import (
-	"maglev.onebusaway.org/internal/models"
-	"maglev.onebusaway.org/internal/utils"
 	"net/http"
 	"time"
+
+	"maglev.onebusaway.org/internal/models"
+	"maglev.onebusaway.org/internal/utils"
 )
 
 func (api *RestAPI) vehiclesForAgencyHandler(w http.ResponseWriter, r *http.Request) {
@@ -91,7 +92,7 @@ func (api *RestAPI) vehiclesForAgencyHandler(w http.ResponseWriter, r *http.Requ
 				if obaOrientation < 0 {
 					obaOrientation += 360
 				}
-				tripStatus.Orientation = obaOrientation
+				tripStatus.Orientation = float64(obaOrientation)
 			}
 
 			// Set service date (use current date for now)
