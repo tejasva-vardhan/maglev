@@ -32,6 +32,12 @@ type Calendar struct {
 	EndDate   string
 }
 
+type CalendarDate struct {
+	ServiceID     string
+	Date          string
+	ExceptionType int64
+}
+
 type Route struct {
 	ID                string
 	AgencyID          string
