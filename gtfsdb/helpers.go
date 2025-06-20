@@ -5,11 +5,12 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
-	"github.com/jamespfennell/gtfs"
 	"log"
-	"maglev.onebusaway.org/internal/appconf"
 	"strings"
 	"time"
+
+	"github.com/jamespfennell/gtfs"
+	"maglev.onebusaway.org/internal/appconf"
 )
 
 //go:embed schema.sql
@@ -60,7 +61,6 @@ func (c *Client) processAndStoreGTFSData(b []byte) error {
 			log.Println("Importing GTFS data took", c.importRuntime.String())
 		}
 	}()
-	
 	var staticCounts map[string]int
 
 	staticData, err := gtfs.ParseStatic(b, gtfs.ParseStaticOptions{})
@@ -232,6 +232,30 @@ func (c *Client) processAndStoreGTFSData(b []byte) error {
 		log.Fatalf("Unable to create shapes: %v\n", err)
 	}
 
+	var allCalendarDateParams []CreateCalendarDateParams
+
+	for _, service := range staticData.Services {
+		for _, date := range service.AddedDates {
+			allCalendarDateParams = append(allCalendarDateParams, CreateCalendarDateParams{
+				ServiceID:     service.Id,
+				Date:          date.Format("20060102"),
+				ExceptionType: 1,
+			})
+		}
+		for _, date := range service.RemovedDates {
+			allCalendarDateParams = append(allCalendarDateParams, CreateCalendarDateParams{
+				ServiceID:     service.Id,
+				Date:          date.Format("20060102"),
+				ExceptionType: 2,
+			})
+		}
+	}
+
+	err = c.bulkInsertCalendarDates(ctx, allCalendarDateParams)
+	if err != nil {
+		log.Fatalf("Unable to create calendar dates: %v\n", err)
+	}
+
 	if c.config.verbose {
 		counts, err := c.TableCounts()
 		if err != nil {
@@ -350,6 +374,26 @@ func (c *Client) bulkInsertShapes(ctx context.Context, shapes []CreateShapeParam
 	qtx := queries.WithTx(tx)
 	for _, params := range shapes {
 		_, err := qtx.CreateShape(ctx, params)
+		if err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (c *Client) bulkInsertCalendarDates(ctx context.Context, calendarDates []CreateCalendarDateParams) error {
+	db := c.DB
+	queries := c.Queries
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() // nolint:errcheck
+
+	qtx := queries.WithTx(tx)
+	for _, params := range calendarDates {
+		_, err := qtx.CreateCalendarDate(ctx, params)
 		if err != nil {
 			return err
 		}
