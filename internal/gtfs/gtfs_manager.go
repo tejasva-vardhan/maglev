@@ -183,6 +183,18 @@ func (manager *Manager) VehiclesForAgencyID(agencyID string) []gtfs.Vehicle {
 	return vehicles
 }
 
+func (manager *Manager) GetVehicleForTrip(tripID string) *gtfs.Vehicle {
+	manager.realTimeMutex.RLock()
+	defer manager.realTimeMutex.RUnlock()
+
+	for _, v := range manager.realTimeVehicles {
+		if v.Trip.ID.ID == tripID {
+			return &v
+		}
+	}
+	return nil
+}
+
 func (manager *Manager) PrintStatistics() {
 	fmt.Printf("Source: %s (Local File: %v)\n", manager.gtfsSource, manager.isLocalFile)
 	fmt.Printf("Last Updated: %s\n", manager.lastUpdated)
@@ -190,4 +202,49 @@ func (manager *Manager) PrintStatistics() {
 	fmt.Println("Routes Count: ", len(manager.gtfsData.Routes))
 	fmt.Println("Trips Count: ", len(manager.gtfsData.Trips))
 	fmt.Println("Agencies Count: ", len(manager.gtfsData.Agencies))
+}
+
+func (manager *Manager) IsServiceActiveOnDate(ctx context.Context, serviceID string, date time.Time) (int64, error) {
+	serviceDate := date.Format("20060102")
+
+	exceptions, err := manager.GtfsDB.Queries.GetCalendarDateExceptionsForServiceID(ctx, serviceID)
+	if err != nil {
+		return 0, fmt.Errorf("error fetching exceptions: %w", err)
+	}
+	for _, e := range exceptions {
+		if e.Date == serviceDate {
+			if e.ExceptionType == 1 {
+				return 1, nil
+			}
+			return 0, nil
+		}
+	}
+
+	calendar, err := manager.GtfsDB.Queries.GetCalendarByServiceID(ctx, serviceID)
+	if err != nil {
+		return 0, fmt.Errorf("error fetching calendar for service %s: %w", serviceID, err)
+	}
+
+	if serviceDate < calendar.StartDate || serviceDate > calendar.EndDate {
+		return 0, nil
+	}
+
+	switch date.Weekday() {
+	case time.Sunday:
+		return calendar.Sunday, nil
+	case time.Monday:
+		return calendar.Monday, nil
+	case time.Tuesday:
+		return calendar.Tuesday, nil
+	case time.Wednesday:
+		return calendar.Wednesday, nil
+	case time.Thursday:
+		return calendar.Thursday, nil
+	case time.Friday:
+		return calendar.Friday, nil
+	case time.Saturday:
+		return calendar.Saturday, nil
+	default:
+		return 0, nil
+	}
 }
