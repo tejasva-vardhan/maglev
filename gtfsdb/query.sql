@@ -124,6 +124,16 @@ OR REPLACE INTO trips (
 VALUES
     (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *;
 
+-- name: CreateCalendarDate :one
+INSERT
+OR REPLACE INTO calendar_dates (
+    service_id,
+    date,
+    exception_type
+)
+VALUES
+    (?, ?, ?) RETURNING *;
+
 -- name: ListRoutes :many
 SELECT
     id,
@@ -237,3 +247,55 @@ FROM
     shapes
 WHERE
     shape_id = ?;
+
+-- name: GetStopTimesForTrip :many
+SELECT
+    *
+FROM
+    stop_times
+WHERE
+    trip_id = ?
+ORDER BY
+    stop_sequence;
+
+-- name: GetTripsByBlockID :many
+SELECT
+    id,
+    route_id,
+    service_id,
+    trip_headsign,
+    trip_short_name,
+    direction_id,
+    block_id,
+    shape_id
+FROM
+    trips
+WHERE
+    block_id = ?;
+
+-- name: GetCalendarByServiceID :one
+SELECT
+    *
+FROM
+    calendar
+WHERE
+    id = ?;
+
+-- name: GetCalendarDateExceptionsForServiceID :many
+SELECT
+    *
+FROM
+    calendar_dates
+WHERE
+    service_id = ?;
+
+-- name: GetStopsForRoute :many
+SELECT DISTINCT
+    stops.*
+FROM
+    stop_times
+    JOIN trips ON stop_times.trip_id = trips.id
+    JOIN routes ON trips.route_id = routes.id
+    JOIN stops ON stop_times.stop_id = stops.id
+WHERE
+    routes.id = ?;

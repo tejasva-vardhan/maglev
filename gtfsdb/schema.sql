@@ -193,6 +193,18 @@ CREATE TABLE IF NOT EXISTS stop_times
 
 -- migrate
 
+CREATE TABLE IF NOT EXISTS calendar_dates
+(
+    service_id     TEXT    NOT NULL,
+    date           TEXT    NOT NULL, -- stored in YYYYMMDD format as text
+    exception_type INTEGER NOT NULL, -- 1 = service added, 2 = service removed
+    PRIMARY KEY (service_id, date),
+    FOREIGN KEY (service_id) REFERENCES calendar (id)
+);
+
+
+-- migrate
+
 CREATE INDEX IF NOT EXISTS idx_routes_agency_id ON routes(agency_id);
 -- migrate
 CREATE INDEX IF NOT EXISTS idx_trips_route_id ON trips(route_id);
@@ -204,3 +216,5 @@ CREATE INDEX IF NOT EXISTS idx_stop_times_trip_id ON stop_times(trip_id);
 CREATE INDEX IF NOT EXISTS idx_stop_times_stop_id ON stop_times(stop_id);
 -- migrate
 CREATE INDEX IF NOT EXISTS idx_stop_times_stop_id_trip_id ON stop_times(stop_id, trip_id);
+-- migrate
+CREATE INDEX IF NOT EXISTS idx_calendar_dates_service_id ON calendar_dates(service_id);
