@@ -2,10 +2,11 @@ package utils
 
 import (
 	"fmt"
-	"github.com/jamespfennell/gtfs"
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/jamespfennell/gtfs"
 )
 
 // ExtractCodeID extracts the `code_id` from a string in the format `{agency_id}_{code_id}`.
@@ -37,6 +38,9 @@ func ExtractAgencyIDAndCodeID(combinedID string) (string, string, error) {
 
 // FormCombinedID forms a combined ID in the format `{agency_id}_{code_id}` using the given `agencyID` and `codeID`.
 func FormCombinedID(agencyID, codeID string) string {
+	if codeID == "" || agencyID == "" {
+		return ""
+	}
 	return fmt.Sprintf("%s_%s", agencyID, codeID)
 }
 
