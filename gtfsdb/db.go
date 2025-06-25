@@ -96,6 +96,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getCalendarDateExceptionsForServiceIDStmt, err = db.PrepareContext(ctx, getCalendarDateExceptionsForServiceID); err != nil {
 		return nil, fmt.Errorf("error preparing query GetCalendarDateExceptionsForServiceID: %w", err)
 	}
+	if q.getBlockDetailsStmt, err = db.PrepareContext(ctx, getBlockDetails); err != nil {
+		return nil, fmt.Errorf("error preparing query GetBlockDetails: %w", err)
+	}
 	if q.getImportMetadataStmt, err = db.PrepareContext(ctx, getImportMetadata); err != nil {
 		return nil, fmt.Errorf("error preparing query GetImportMetadata: %w", err)
 	}
@@ -302,6 +305,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getCalendarDateExceptionsForServiceIDStmt: %w", cerr)
 		}
 	}
+	if q.getBlockDetailsStmt != nil {
+		if cerr := q.getBlockDetailsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getBlockDetailsStmt: %w", cerr)
+		}
+	}
 	if q.getImportMetadataStmt != nil {
 		if cerr := q.getImportMetadataStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getImportMetadataStmt: %w", cerr)
@@ -500,6 +508,7 @@ type Queries struct {
 	getBlockIDByTripIDStmt                    *sql.Stmt
 	getCalendarByServiceIDStmt                *sql.Stmt
 	getCalendarDateExceptionsForServiceIDStmt *sql.Stmt
+	getBlockDetailsStmt                       *sql.Stmt
 	getImportMetadataStmt                     *sql.Stmt
 	getOrderedStopIDsForTripStmt              *sql.Stmt
 	getRouteStmt                              *sql.Stmt
@@ -556,6 +565,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		getAllTripsForRouteStmt:        q.getAllTripsForRouteStmt,
 		getBlockIDByTripIDStmt:         q.getBlockIDByTripIDStmt,
 		getCalendarByServiceIDStmt:     q.getCalendarByServiceIDStmt,
+		getBlockDetailsStmt:            q.getBlockDetailsStmt,
 		getCalendarDateExceptionsForServiceIDStmt: q.getCalendarDateExceptionsForServiceIDStmt,
 		getImportMetadataStmt:                     q.getImportMetadataStmt,
 		getOrderedStopIDsForTripStmt:              q.getOrderedStopIDsForTripStmt,
