@@ -3,10 +3,10 @@ package models
 type TripDetails struct {
 	TripID       string      `json:"tripId"`
 	ServiceDate  int64       `json:"serviceDate"`
-	Frequency    *Frequency  `json:"frequency"`
-	Status       *TripStatus `json:"status"`
+	Frequency    *Frequency  `json:"frequency,omitempty"`
+	Status       *TripStatus `json:"status,omitempty"`
 	Schedule     *Schedule   `json:"schedule"`
-	SituationIDs []string    `json:"situationIds"`
+	SituationIDs []string    `json:"situationIds,omitempty"`
 }
 
 func NewTripDetails(trip Trip, tripID string, serviceDate int64, frequency *Frequency, status *TripStatus, schedule *Schedule, situationIDs []string) *TripDetails {

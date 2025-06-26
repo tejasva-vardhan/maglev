@@ -188,7 +188,7 @@ func (manager *Manager) GetVehicleForTrip(tripID string) *gtfs.Vehicle {
 	defer manager.realTimeMutex.RUnlock()
 
 	for _, v := range manager.realTimeVehicles {
-		if v.Trip.ID.ID == tripID {
+		if v.Trip != nil && v.Trip.ID.ID == tripID {
 			return &v
 		}
 	}

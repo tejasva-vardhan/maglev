@@ -124,11 +124,7 @@ func (q *Queries) CreateCalendar(ctx context.Context, arg CreateCalendarParams) 
 
 const createCalendarDate = `-- name: CreateCalendarDate :one
 INSERT
-OR REPLACE INTO calendar_dates (
-    service_id,
-    date,
-    exception_type
-)
+OR REPLACE INTO calendar_dates (service_id, date, exception_type)
 VALUES
     (?, ?, ?) RETURNING service_id, date, exception_type
 `
@@ -529,6 +525,22 @@ func (q *Queries) GetAllShapes(ctx context.Context) ([]Shape, error) {
 	return items, nil
 }
 
+const getBlockIDByTripID = `-- name: GetBlockIDByTripID :one
+SELECT
+    block_id
+FROM
+    trips
+WHERE
+    id = ?
+`
+
+func (q *Queries) GetBlockIDByTripID(ctx context.Context, id string) (sql.NullString, error) {
+	row := q.queryRow(ctx, q.getBlockIDByTripIDStmt, getBlockIDByTripID, id)
+	var block_id sql.NullString
+	err := row.Scan(&block_id)
+	return block_id, err
+}
+
 const getCalendarByServiceID = `-- name: GetCalendarByServiceID :one
 SELECT
     id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date
@@ -740,6 +752,51 @@ WHERE
 
 func (q *Queries) GetShapeByID(ctx context.Context, shapeID string) ([]Shape, error) {
 	rows, err := q.query(ctx, q.getShapeByIDStmt, getShapeByID, shapeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Shape
+	for rows.Next() {
+		var i Shape
+		if err := rows.Scan(
+			&i.ID,
+			&i.ShapeID,
+			&i.Lat,
+			&i.Lon,
+			&i.ShapePtSequence,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getShapePointsByTripID = `-- name: GetShapePointsByTripID :many
+SELECT
+    s.id,
+    s.shape_id,
+    s.lat,
+    s.lon,
+    s.shape_pt_sequence
+FROM
+    shapes s
+    JOIN trips t ON t.shape_id = s.shape_id
+WHERE
+    t.id = ?
+ORDER BY
+    s.shape_pt_sequence ASC
+`
+
+func (q *Queries) GetShapePointsByTripID(ctx context.Context, id string) ([]Shape, error) {
+	rows, err := q.query(ctx, q.getShapePointsByTripIDStmt, getShapePointsByTripID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -992,6 +1049,52 @@ func (q *Queries) GetTripsByBlockID(ctx context.Context, blockID sql.NullString)
 			&i.BlockID,
 			&i.ShapeID,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getTripsByBlockIDOrdered = `-- name: GetTripsByBlockIDOrdered :many
+SELECT
+    t.id,
+    t.block_id,
+    MIN(st.departure_time) AS first_departure_time
+FROM
+    trips t
+    JOIN stop_times st ON st.trip_id = t.id
+WHERE
+    t.block_id = ?
+GROUP BY
+    t.id,
+    t.block_id
+ORDER BY
+    MIN(st.departure_time)
+`
+
+type GetTripsByBlockIDOrderedRow struct {
+	ID                 string
+	BlockID            sql.NullString
+	FirstDepartureTime interface{}
+}
+
+func (q *Queries) GetTripsByBlockIDOrdered(ctx context.Context, blockID sql.NullString) ([]GetTripsByBlockIDOrderedRow, error) {
+	rows, err := q.query(ctx, q.getTripsByBlockIDOrderedStmt, getTripsByBlockIDOrdered, blockID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetTripsByBlockIDOrderedRow
+	for rows.Next() {
+		var i GetTripsByBlockIDOrderedRow
+		if err := rows.Scan(&i.ID, &i.BlockID, &i.FirstDepartureTime); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
