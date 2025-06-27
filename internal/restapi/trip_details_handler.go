@@ -5,6 +5,7 @@ import (
 	"math"
 	"net/http"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/jamespfennell/gtfs"
@@ -12,6 +13,14 @@ import (
 	"maglev.onebusaway.org/internal/models"
 	"maglev.onebusaway.org/internal/utils"
 )
+
+type TripDetailsParams struct {
+	ServiceDate     *time.Time
+	IncludeTrip     bool
+	IncludeSchedule bool
+	IncludeStatus   bool
+	Time            *time.Time
+}
 
 func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 	queryParamID := utils.ExtractIDFromParams(r)
@@ -22,6 +31,8 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+
+	params := api.parseTripdDetailsParams(r)
 
 	trip, err := api.GtfsManager.GtfsDB.Queries.GetTrip(ctx, tripID)
 	if err != nil {
@@ -42,114 +53,49 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	loc, _ := time.LoadLocation(agency.Timezone)
-	now := time.Now().In(loc)
-	serviceDate := now.Truncate(24 * time.Hour)
+
+	var currentTime time.Time
+	if params.Time != nil {
+		currentTime = params.Time.In(loc)
+	} else {
+		currentTime = time.Now().In(loc)
+	}
+
+	var serviceDate time.Time
+	if params.ServiceDate != nil {
+		serviceDate = *params.ServiceDate
+	} else {
+		serviceDate = currentTime.Truncate(24 * time.Hour)
+	}
+
 	serviceDateMillis := serviceDate.Unix() * 1000
 
-	nextTripID, previousTripID, err := api.GetNextAndPreviousTripIDs(ctx, &trip, tripID, agencyID, serviceDate)
-	if err != nil {
-		api.serverErrorResponse(w, r, err)
-		return
+	var nextTripID, previousTripID string
+	var schedule *models.Schedule
+	var status *models.TripStatusForTripDetails
+
+	if params.IncludeTrip || params.IncludeSchedule {
+		nextTripID, previousTripID, err = api.GetNextAndPreviousTripIDs(ctx, &trip, tripID, agencyID, serviceDate)
+		if err != nil {
+			api.serverErrorResponse(w, r, err)
+			return
+		}
+	}
+
+	if params.IncludeStatus {
+		status, _ = api.buildTripStatus(ctx, agencyID, trip.ID, serviceDate, currentTime)
+	}
+
+	if params.IncludeSchedule {
+		schedule, err = api.buildSchedule(ctx, agencyID, tripID, nextTripID, previousTripID, loc)
+		if err != nil {
+			api.serverErrorResponse(w, r, err)
+			return
+		}
 	}
 
 	// TODO: after adding service alerts data, implement this properly
 	situationIDs := []string{}
-
-	status, _ := api.buildTripStatus(ctx, agencyID, trip.ID, serviceDate)
-
-	tripsToInclude := []string{utils.FormCombinedID(agencyID, trip.ID)}
-
-	if nextTripID != "" {
-		tripsToInclude = append(tripsToInclude, nextTripID)
-	}
-	if previousTripID != "" {
-		tripsToInclude = append(tripsToInclude, previousTripID)
-	}
-
-	referencedTrips := []*models.Trip{}
-	referencedStopTimes := []*models.StopTime{}
-
-	for _, tripID := range tripsToInclude {
-
-		_, refTripID, err := utils.ExtractAgencyIDAndCodeID(tripID)
-		if err != nil {
-			continue
-		}
-
-		if refTripID == trip.ID && len(referencedTrips) > 0 {
-			continue
-		}
-
-		refTrip, err := api.GtfsManager.GtfsDB.Queries.GetTrip(ctx, refTripID)
-		if err != nil {
-			continue
-		}
-
-		refRoute, err := api.GtfsManager.GtfsDB.Queries.GetRoute(ctx, refTrip.RouteID)
-		if err != nil {
-			continue
-		}
-
-		var blockID string
-		if refTrip.BlockID.Valid && refTrip.BlockID.String != "" {
-			blockID = utils.FormCombinedID(agencyID, refTrip.BlockID.String)
-		} else {
-			blockID = ""
-		}
-
-		refTripModel := &models.Trip{
-			ID:             tripID,
-			RouteID:        utils.FormCombinedID(agencyID, refTrip.RouteID),
-			ServiceID:      utils.FormCombinedID(agencyID, refTrip.ServiceID),
-			ShapeID:        utils.FormCombinedID(agencyID, refTrip.ShapeID.String),
-			TripHeadsign:   refTrip.TripHeadsign.String,
-			TripShortName:  refTrip.TripShortName.String,
-			DirectionID:    refTrip.DirectionID.Int64,
-			BlockID:        blockID,
-			RouteShortName: refRoute.ShortName.String,
-			TimeZone:       "",
-			PeakOffPeak:    0,
-		}
-
-		referencedTrips = append(referencedTrips, refTripModel)
-
-		refStopTimes, err := api.GtfsManager.GtfsDB.Queries.GetStopTimesForTrip(ctx, refTripID)
-		if err != nil {
-			continue
-		}
-
-		for _, st := range refStopTimes {
-			stopTimeModel := models.StopTime{
-				ArrivalTime:         int(st.ArrivalTime),
-				DepartureTime:       int(st.DepartureTime),
-				StopID:              utils.FormCombinedID(agencyID, st.StopID),
-				StopHeadsign:        st.StopHeadsign.String,
-				DistanceAlongTrip:   st.ShapeDistTraveled.Float64,
-				HistoricalOccupancy: "",
-			}
-			referencedStopTimes = append(referencedStopTimes, &stopTimeModel)
-		}
-	}
-
-	stopTimesVals := make([]models.StopTime, len(referencedStopTimes))
-	for i, st := range referencedStopTimes {
-		if st != nil {
-			stopTimesVals[i] = *st
-		}
-	}
-
-	stopIDs := make([]string, len(stopTimesVals))
-	for i, st := range stopTimesVals {
-		stopIDs[i] = st.StopID
-	}
-
-	schedule := &models.Schedule{
-		StopTimes:      stopTimesVals,
-		TimeZone:       loc.String(),
-		Frequency:      0,
-		NextTripID:     nextTripID,
-		PreviousTripID: previousTripID,
-	}
 
 	tripDetails := &models.TripDetails{
 		TripID:       utils.FormCombinedID(agencyID, trip.ID),
@@ -165,11 +111,28 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 
 	references := models.NewEmptyReferences()
 
-	referencedTripsIface := make([]interface{}, len(referencedTrips))
-	for i, t := range referencedTrips {
-		referencedTripsIface[i] = t
+	if params.IncludeTrip {
+		tripsToInclude := []string{utils.FormCombinedID(agencyID, trip.ID)}
+
+		if nextTripID != "" {
+			tripsToInclude = append(tripsToInclude, nextTripID)
+		}
+		if previousTripID != "" {
+			tripsToInclude = append(tripsToInclude, previousTripID)
+		}
+
+		referencedTrips, err := api.buildReferencedTrips(ctx, agencyID, tripsToInclude, trip)
+		if err != nil {
+			api.serverErrorResponse(w, r, err)
+			return
+		}
+
+		referencedTripsIface := make([]interface{}, len(referencedTrips))
+		for i, t := range referencedTrips {
+			referencedTripsIface[i] = t
+		}
+		references.Trips = referencedTripsIface
 	}
-	references.Trips = referencedTripsIface
 
 	routeModel := models.NewRoute(
 		utils.FormCombinedID(agencyID, route.ID),
@@ -199,65 +162,58 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 	)
 	references.Agencies = append(references.Agencies, agencyModel)
 
-	for _, stopID := range stopIDs {
-
-		_, originalStopID, err := utils.ExtractAgencyIDAndCodeID(stopID)
+	if params.IncludeSchedule && schedule != nil {
+		stops, err := api.buildStopReferences(ctx, agencyID, schedule.StopTimes)
 		if err != nil {
 			api.serverErrorResponse(w, r, err)
 			return
 		}
-
-		stop, err := api.GtfsManager.GtfsDB.Queries.GetStop(ctx, originalStopID)
-		if err != nil {
-			continue
-		}
-
-		routesForStop, err := api.GtfsManager.GtfsDB.Queries.GetRoutesForStop(ctx, originalStopID)
-		if err != nil {
-			api.serverErrorResponse(w, r, err)
-			return
-		}
-
-		combinedRouteIDs := make([]string, len(routesForStop))
-		for i, rt := range routesForStop {
-			combinedRouteIDs[i] = utils.FormCombinedID(agencyID, rt.ID)
-		}
-
-		stopModel := &models.Stop{
-			ID:             utils.FormCombinedID(agencyID, stop.ID),
-			Name:           stop.Name.String,
-			Lat:            stop.Lat,
-			Lon:            stop.Lon,
-			Code:           stop.Code.String,
-			Direction:      "NE", // TODO
-			LocationType:   int(stop.LocationType.Int64),
-			RouteIDs:       combinedRouteIDs,
-			StaticRouteIDs: combinedRouteIDs,
-		}
-		references.Stops = append(references.Stops, *stopModel)
+		references.Stops = stops
 	}
 
 	response := models.NewEntryResponse(tripDetails, references)
 	api.sendResponse(w, r, response)
 }
+
+func (api *RestAPI) buildSchedule(ctx context.Context, agencyID, tripID, nextTripID, previousTripID string, loc *time.Location) (*models.Schedule, error) {
+	stopTimes, err := api.GtfsManager.GtfsDB.Queries.GetStopTimesForTrip(ctx, tripID)
+	if err != nil {
+		return nil, err
+	}
+
+	stopTimesVals := make([]models.StopTime, len(stopTimes))
+	for i, st := range stopTimes {
+		stopTimesVals[i] = models.StopTime{
+			ArrivalTime:         int(st.ArrivalTime),
+			DepartureTime:       int(st.DepartureTime),
+			StopID:              utils.FormCombinedID(agencyID, st.StopID),
+			StopHeadsign:        st.StopHeadsign.String,
+			DistanceAlongTrip:   st.ShapeDistTraveled.Float64,
+			HistoricalOccupancy: "",
+		}
+	}
+
+	return &models.Schedule{
+		StopTimes:      stopTimesVals,
+		TimeZone:       loc.String(),
+		Frequency:      0,
+		NextTripID:     nextTripID,
+		PreviousTripID: previousTripID,
+	}, nil
+}
+
 func (api *RestAPI) buildTripStatus(
 	ctx context.Context,
 	agencyID, tripID string,
 	serviceDate time.Time,
+	currentTime time.Time,
 ) (*models.TripStatusForTripDetails, error) {
 	vehicle := api.GtfsManager.GetVehicleForTrip(tripID)
 
-	var lastUpdateTime, lastLocationUpdateTime int64
 	var occupancyStatus string
 	var vehicleID string
-	var activeTripID string
 
 	if vehicle != nil {
-		if vehicle.Timestamp != nil {
-			lastUpdateTime = vehicle.Timestamp.Unix() * 1000
-			lastLocationUpdateTime = vehicle.Timestamp.Unix() * 1000
-		}
-
 		if vehicle.OccupancyStatus != nil {
 			occupancyStatus = vehicle.OccupancyStatus.String()
 		}
@@ -265,45 +221,20 @@ func (api *RestAPI) buildTripStatus(
 		if vehicle.ID != nil {
 			vehicleID = vehicle.ID.ID
 		}
-
-		if vehicle.Trip.ID.ID != "" {
-			activeTripID = utils.FormCombinedID(agencyID, vehicle.Trip.ID.ID)
-		} else {
-			activeTripID = utils.FormCombinedID(agencyID, tripID)
-		}
 	}
 
 	status := &models.TripStatusForTripDetails{
-		ServiceDate:            serviceDate.Unix() * 1000,
-		ActiveTripID:           activeTripID,
-		Predicted:              true,
-		VehicleID:              vehicleID,
-		LastUpdateTime:         lastUpdateTime,
-		LastLocationUpdateTime: lastLocationUpdateTime,
-		OccupancyStatus:        occupancyStatus,
-		SituationIDs:           []string{}, // TODO:
-
+		ServiceDate:     serviceDate.Unix() * 1000,
+		VehicleID:       vehicleID,
+		OccupancyStatus: occupancyStatus,
+		SituationIDs:    []string{},
 	}
 
-	if vehicle != nil && vehicle.Position != nil {
-		if vehicle.Position.Latitude != nil && vehicle.Position.Longitude != nil {
-			status.Position = models.Location{
-				Lat: *vehicle.Position.Latitude,
-				Lon: *vehicle.Position.Longitude,
-			}
-			status.LastKnownLocation = status.Position
-		}
-		if vehicle.Position.Bearing != nil {
-			status.Orientation = float64(*vehicle.Position.Bearing)
-			status.LastKnownOrientation = float64(*vehicle.Position.Bearing)
-		}
-	}
+	api.buildVehicleStatus(ctx, vehicle, tripID, agencyID, status)
 
 	if vehicle != nil && vehicle.OccupancyPercentage != nil {
 		status.OccupancyCapacity = int(*vehicle.OccupancyPercentage)
 	}
-
-	// TODO: Set status.ScheduleDeviation
 
 	scheduleDeviation := api.calculateScheduleDeviationFromTripUpdates(tripID)
 	status.ScheduleDeviation = scheduleDeviation
@@ -313,7 +244,6 @@ func (api *RestAPI) buildTripStatus(
 		status.BlockTripSequence = blockTripSequence
 	}
 
-	// Distance calculations via shape
 	shapeRows, err := api.GtfsManager.GtfsDB.Queries.GetShapePointsByTripID(ctx, tripID)
 	if err == nil && len(shapeRows) > 1 {
 		shapePoints := make([]gtfs.ShapePoint, len(shapeRows))
@@ -323,7 +253,6 @@ func (api *RestAPI) buildTripStatus(
 				Longitude: sp.Lon,
 			}
 		}
-		// Calculate total distance along the shape
 		status.TotalDistanceAlongTrip = getDistanceAlongShape(shapePoints[0].Latitude, shapePoints[0].Longitude, shapePoints)
 
 		if vehicle != nil && vehicle.Position != nil && vehicle.Position.Latitude != nil && vehicle.Position.Longitude != nil {
@@ -333,7 +262,6 @@ func (api *RestAPI) buildTripStatus(
 
 	stopTimes, err := api.GtfsManager.GtfsDB.Queries.GetStopTimesForTrip(ctx, tripID)
 	if err == nil {
-
 		stopTimesPtrs := make([]*gtfsdb.StopTime, len(stopTimes))
 		for i := range stopTimes {
 			stopTimesPtrs[i] = &stopTimes[i]
@@ -359,10 +287,7 @@ func (api *RestAPI) buildTripStatus(
 			closestStopID, closestOffset = findClosestStop(api, ctx, vehicle.Position, stopTimesPtrs)
 			nextStopID, nextOffset = findNextStop(api, ctx, vehicle.Position, stopTimesPtrs, shapePoints)
 		} else {
-			// No vehicle data - use current time to determine closest/next stops based on schedule
-			currentTime := time.Now()
 			currentTimeSeconds := int64(currentTime.Hour()*3600 + currentTime.Minute()*60 + currentTime.Second())
-
 			closestStopID, closestOffset = findClosestStopByTime(currentTimeSeconds, stopTimesPtrs)
 			nextStopID, nextOffset = findNextStopByTime(currentTimeSeconds, stopTimesPtrs)
 		}
@@ -378,6 +303,96 @@ func (api *RestAPI) buildTripStatus(
 	}
 
 	return status, nil
+}
+
+func (api *RestAPI) buildReferencedTrips(ctx context.Context, agencyID string, tripsToInclude []string, mainTrip gtfsdb.Trip) ([]*models.Trip, error) {
+	referencedTrips := []*models.Trip{}
+
+	for _, tripID := range tripsToInclude {
+		_, refTripID, err := utils.ExtractAgencyIDAndCodeID(tripID)
+		if err != nil {
+			continue
+		}
+
+		if refTripID == mainTrip.ID && len(referencedTrips) > 0 {
+			continue
+		}
+
+		refTrip, err := api.GtfsManager.GtfsDB.Queries.GetTrip(ctx, refTripID)
+		if err != nil {
+			continue
+		}
+
+		refRoute, err := api.GtfsManager.GtfsDB.Queries.GetRoute(ctx, refTrip.RouteID)
+		if err != nil {
+			continue
+		}
+
+		var blockID string
+		if refTrip.BlockID.Valid && refTrip.BlockID.String != "" {
+			blockID = utils.FormCombinedID(agencyID, refTrip.BlockID.String)
+		}
+
+		refTripModel := &models.Trip{
+			ID:             tripID,
+			RouteID:        utils.FormCombinedID(agencyID, refTrip.RouteID),
+			ServiceID:      utils.FormCombinedID(agencyID, refTrip.ServiceID),
+			ShapeID:        utils.FormCombinedID(agencyID, refTrip.ShapeID.String),
+			TripHeadsign:   refTrip.TripHeadsign.String,
+			TripShortName:  refTrip.TripShortName.String,
+			DirectionID:    refTrip.DirectionID.Int64,
+			BlockID:        blockID,
+			RouteShortName: refRoute.ShortName.String,
+			TimeZone:       "",
+			PeakOffPeak:    0,
+		}
+
+		referencedTrips = append(referencedTrips, refTripModel)
+	}
+
+	return referencedTrips, nil
+}
+
+func (api *RestAPI) buildStopReferences(ctx context.Context, agencyID string, stopTimes []models.StopTime) ([]models.Stop, error) {
+	stops := []models.Stop{}
+
+	for _, st := range stopTimes {
+		_, originalStopID, err := utils.ExtractAgencyIDAndCodeID(st.StopID)
+		if err != nil {
+			continue
+		}
+
+		stop, err := api.GtfsManager.GtfsDB.Queries.GetStop(ctx, originalStopID)
+		if err != nil {
+			continue
+		}
+
+		routesForStop, err := api.GtfsManager.GtfsDB.Queries.GetRoutesForStop(ctx, originalStopID)
+		if err != nil {
+			continue
+		}
+
+		combinedRouteIDs := make([]string, len(routesForStop))
+		for i, rt := range routesForStop {
+			combinedRouteIDs[i] = utils.FormCombinedID(agencyID, rt.ID)
+		}
+
+		stopModel := models.Stop{
+			ID:                 utils.FormCombinedID(agencyID, stop.ID),
+			Name:               stop.Name.String,
+			Lat:                stop.Lat,
+			Lon:                stop.Lon,
+			Code:               stop.Code.String,
+			Direction:          "NE", // TODO
+			LocationType:       int(stop.LocationType.Int64),
+			WheelchairBoarding: "UNKNOWN",
+			RouteIDs:           combinedRouteIDs,
+			StaticRouteIDs:     combinedRouteIDs,
+		}
+		stops = append(stops, stopModel)
+	}
+
+	return stops, nil
 }
 
 func (api *RestAPI) GetNextAndPreviousTripIDs(ctx context.Context, trip *gtfsdb.Trip, tripID string, agencyID string, serviceDate time.Time) (nextTripID string, previousTripID string, err error) {
@@ -647,4 +662,113 @@ func (api *RestAPI) calculateScheduleDeviationFromTripUpdates(
 	}
 
 	return int(bestDeviation)
+}
+
+func (api *RestAPI) parseTripdDetailsParams(r *http.Request) TripDetailsParams {
+	params := TripDetailsParams{
+		IncludeTrip:     true,
+		IncludeSchedule: true,
+		IncludeStatus:   true,
+	}
+
+	if serviceDateStr := r.URL.Query().Get("serviceDate"); serviceDateStr != "" {
+		if serviceDateMs, err := strconv.ParseInt(serviceDateStr, 10, 64); err == nil {
+			serviceDate := time.Unix(serviceDateMs/1000, 0)
+			params.ServiceDate = &serviceDate
+		}
+	}
+
+	if includeTripStr := r.URL.Query().Get("includeTrip"); includeTripStr != "" {
+		params.IncludeTrip = includeTripStr == "true"
+	}
+
+	if includeScheduleStr := r.URL.Query().Get("includeSchedule"); includeScheduleStr != "" {
+		params.IncludeSchedule = includeScheduleStr == "true"
+	}
+
+	if includeStatusStr := r.URL.Query().Get("includeStatus"); includeStatusStr != "" {
+		params.IncludeStatus = includeStatusStr == "true"
+	}
+
+	if timeStr := r.URL.Query().Get("time"); timeStr != "" {
+		if timeMs, err := strconv.ParseInt(timeStr, 10, 64); err == nil {
+			timeParam := time.Unix(timeMs/1000, 0)
+			params.Time = &timeParam
+		}
+	}
+
+	return params
+}
+
+func (api *RestAPI) buildVehicleStatus(
+	ctx context.Context,
+	vehicle *gtfs.Vehicle,
+	tripID string,
+	agencyID string,
+	status *models.TripStatusForTripDetails,
+) {
+	if vehicle == nil {
+		status.Phase = "scheduled"
+		status.Status = "SCHEDULED"
+		return
+	}
+
+	if vehicle.Timestamp != nil {
+		timestampMs := vehicle.Timestamp.UnixNano() / int64(time.Millisecond)
+		status.LastLocationUpdateTime = timestampMs
+		status.LastUpdateTime = timestampMs
+	}
+
+	if vehicle.Position != nil && vehicle.Position.Latitude != nil && vehicle.Position.Longitude != nil {
+		position := models.Location{
+			Lat: *vehicle.Position.Latitude,
+			Lon: *vehicle.Position.Longitude,
+		}
+		status.Position = position
+		status.LastKnownLocation = position
+	}
+
+	if vehicle.Position != nil && vehicle.Position.Bearing != nil {
+		obaOrientation := (90 - *vehicle.Position.Bearing)
+		if obaOrientation < 0 {
+			obaOrientation += 360
+		}
+		status.Orientation = float64(obaOrientation)
+		status.LastKnownOrientation = float64(obaOrientation)
+	}
+
+	if vehicle.CurrentStatus != nil {
+		switch *vehicle.CurrentStatus {
+		case 0:
+			status.Status = "INCOMING_AT"
+			status.Phase = "approaching"
+		case 1:
+			status.Status = "STOPPED_AT"
+			status.Phase = "stopped"
+		case 2:
+			status.Status = "IN_TRANSIT_TO"
+			status.Phase = "in_progress"
+		default:
+			status.Status = "SCHEDULED"
+			status.Phase = "scheduled"
+		}
+	} else {
+		status.Status = "SCHEDULED"
+		status.Phase = "scheduled"
+	}
+
+	if vehicle.Trip != nil && vehicle.Trip.ID.ID != "" {
+		status.ActiveTripID = utils.FormCombinedID(agencyID, vehicle.Trip.ID.ID)
+
+		if vehicle.Trip.ID.ID != tripID {
+			status.Status = "DEVIATED"
+			status.Phase = "deviated"
+		}
+	} else {
+		status.ActiveTripID = utils.FormCombinedID(agencyID, tripID)
+	}
+
+	status.Predicted = true
+
+	status.Scheduled = false
 }
