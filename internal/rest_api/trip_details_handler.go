@@ -2,7 +2,6 @@ package restapi
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"net/http"
 	"sort"
@@ -36,7 +35,13 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	loc, _ := time.LoadLocation("America/Los_Angeles") // TODO: Get dynamically from agency if needed
+	agency, err := api.GtfsManager.GtfsDB.Queries.GetAgency(ctx, route.AgencyID)
+	if err != nil {
+		api.serverErrorResponse(w, r, err)
+		return
+	}
+
+	loc, _ := time.LoadLocation(agency.Timezone)
 	now := time.Now().In(loc)
 	serviceDate := now.Truncate(24 * time.Hour)
 	serviceDateMillis := serviceDate.Unix() * 1000
@@ -154,8 +159,6 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 		SituationIDs: situationIDs,
 	}
 
-	fmt.Println("Status is ", status)
-
 	if status != nil {
 		tripDetails.Status = status
 	}
@@ -182,7 +185,6 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 	)
 	references.Routes = append(references.Routes, routeModel)
 
-	agency, err := api.GtfsManager.GtfsDB.Queries.GetAgency(ctx, route.AgencyID)
 	if err == nil {
 		agencyModel := models.NewAgencyReference(
 			agency.ID,
@@ -224,16 +226,15 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		stopModel := &models.Stop{
-			ID:                 utils.FormCombinedID(agencyID, stop.ID),
-			Name:               stop.Name.String,
-			Lat:                stop.Lat,
-			Lon:                stop.Lon,
-			Code:               stop.Code.String,
-			Direction:          "NE",                         // TODO
-			LocationType:       int(stop.LocationType.Int64), // Cast
-			WheelchairBoarding: "UNKNOWN",
-			RouteIDs:           combinedRouteIDs,
-			StaticRouteIDs:     combinedRouteIDs,
+			ID:             utils.FormCombinedID(agencyID, stop.ID),
+			Name:           stop.Name.String,
+			Lat:            stop.Lat,
+			Lon:            stop.Lon,
+			Code:           stop.Code.String,
+			Direction:      "NE", // TODO
+			LocationType:   int(stop.LocationType.Int64),
+			RouteIDs:       combinedRouteIDs,
+			StaticRouteIDs: combinedRouteIDs,
 		}
 		references.Stops = append(references.Stops, stopModel)
 	}
@@ -246,6 +247,7 @@ func (api *RestAPI) buildTripStatus(
 	agencyID, tripID string,
 	serviceDate time.Time,
 ) (*models.TripStatus, error) {
+
 	vehicle := api.GtfsManager.GetVehicleForTrip(tripID)
 
 	var lastUpdateTime, lastLocationUpdateTime int64
@@ -269,6 +271,8 @@ func (api *RestAPI) buildTripStatus(
 
 		if vehicle.Trip.ID.ID != "" {
 			activeTripID = utils.FormCombinedID(agencyID, vehicle.Trip.ID.ID)
+		} else {
+			activeTripID = utils.FormCombinedID(agencyID, tripID)
 		}
 	}
 
@@ -302,10 +306,15 @@ func (api *RestAPI) buildTripStatus(
 		status.OccupancyCapacity = int(*vehicle.OccupancyPercentage)
 	}
 
-	// Schedule deviation
 	// TODO: Set status.ScheduleDeviation
 
-	api.setBlockTripSequence(ctx, tripID, status)
+	scheduleDeviation := api.calculateScheduleDeviationFromTripUpdates(tripID)
+	status.ScheduleDeviation = scheduleDeviation
+
+	blockTripSequence := api.setBlockTripSequence(ctx, tripID, status)
+	if blockTripSequence > 0 {
+		status.BlockTripSequence = blockTripSequence
+	}
 
 	// Distance calculations via shape
 	shapeRows, err := api.GtfsManager.GtfsDB.Queries.GetShapePointsByTripID(ctx, tripID)
@@ -357,8 +366,8 @@ func (api *RestAPI) buildTripStatus(
 			currentTime := time.Now()
 			currentTimeSeconds := int64(currentTime.Hour()*3600 + currentTime.Minute()*60 + currentTime.Second())
 
-			closestStopID, closestOffset = findClosestStopByTime(api, ctx, currentTimeSeconds, stopTimesPtrs)
-			nextStopID, nextOffset = findNextStopByTime(api, ctx, currentTimeSeconds, stopTimesPtrs)
+			closestStopID, closestOffset = findClosestStopByTime(currentTimeSeconds, stopTimesPtrs)
+			nextStopID, nextOffset = findNextStopByTime(currentTimeSeconds, stopTimesPtrs)
 		}
 
 		if closestStopID != "" {
@@ -524,7 +533,7 @@ func findClosestStop(api *RestAPI, ctx context.Context, pos *gtfs.Position, stop
 	return
 }
 
-func findClosestStopByTime(api *RestAPI, ctx context.Context, currentTimeSeconds int64, stopTimes []*gtfsdb.StopTime) (stopID string, offset int) {
+func findClosestStopByTime(currentTimeSeconds int64, stopTimes []*gtfsdb.StopTime) (stopID string, offset int) {
 	var minTimeDiff int64 = math.MaxInt64
 
 	for _, st := range stopTimes {
@@ -548,7 +557,7 @@ func findClosestStopByTime(api *RestAPI, ctx context.Context, currentTimeSeconds
 	return
 }
 
-func findNextStopByTime(api *RestAPI, ctx context.Context, currentTimeSeconds int64, stopTimes []*gtfsdb.StopTime) (stopID string, offset int) {
+func findNextStopByTime(currentTimeSeconds int64, stopTimes []*gtfsdb.StopTime) (stopID string, offset int) {
 	var minTimeDiff int64 = math.MaxInt64
 
 	for _, st := range stopTimes {
@@ -595,20 +604,50 @@ func getDistanceAlongShape(lat, lon float64, shape []gtfs.ShapePoint) float64 {
 	return total
 }
 
-func (api *RestAPI) setBlockTripSequence(ctx context.Context, tripID string, status *models.TripStatus) {
+func (api *RestAPI) setBlockTripSequence(ctx context.Context, tripID string, status *models.TripStatus) int {
 	blockID, err := api.GtfsManager.GtfsDB.Queries.GetBlockIDByTripID(ctx, tripID)
 
 	if err != nil || !blockID.Valid || blockID.String == "" {
-		return
+		return 0
 	}
 
 	blockTrips, err := api.GtfsManager.GtfsDB.Queries.GetTripsByBlockIDOrdered(ctx, blockID)
 	if err == nil {
-		for i, bt := range blockTrips {
+		for _, bt := range blockTrips {
 			if bt.ID == tripID {
-				status.BlockTripSequence = i
-				break
+				return status.BlockTripSequence
 			}
 		}
 	}
+	return 0
+}
+
+func (api *RestAPI) calculateScheduleDeviationFromTripUpdates(
+	tripID string,
+) int {
+	tripUpdates := api.GtfsManager.GetTripUpdatesForTrip(tripID)
+	if len(tripUpdates) == 0 {
+		return 0
+	}
+
+	tripUpdate := tripUpdates[0]
+
+	var bestDeviation int64 = 0
+	var foundRelevantUpdate bool
+
+	for _, stopTimeUpdate := range tripUpdate.StopTimeUpdates {
+		if stopTimeUpdate.Arrival != nil && stopTimeUpdate.Arrival.Delay != nil {
+			bestDeviation = int64(*stopTimeUpdate.Arrival.Delay)
+			foundRelevantUpdate = true
+		} else if stopTimeUpdate.Departure != nil && stopTimeUpdate.Departure.Delay != nil {
+			bestDeviation = int64(*stopTimeUpdate.Departure.Delay)
+			foundRelevantUpdate = true
+		}
+
+		if foundRelevantUpdate {
+			break
+		}
+	}
+
+	return int(bestDeviation)
 }

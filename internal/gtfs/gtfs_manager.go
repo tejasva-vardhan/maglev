@@ -195,6 +195,19 @@ func (manager *Manager) GetVehicleForTrip(tripID string) *gtfs.Vehicle {
 	return nil
 }
 
+func (manager *Manager) GetTripUpdatesForTrip(tripID string) []gtfs.Trip {
+	manager.realTimeMutex.RLock()
+	defer manager.realTimeMutex.RUnlock()
+
+	var updates []gtfs.Trip
+	for _, v := range manager.realTimeTrips {
+		if v.ID.ID == tripID {
+			updates = append(updates, v)
+		}
+	}
+	return updates
+}
+
 func (manager *Manager) PrintStatistics() {
 	fmt.Printf("Source: %s (Local File: %v)\n", manager.gtfsSource, manager.isLocalFile)
 	fmt.Printf("Last Updated: %s\n", manager.lastUpdated)
