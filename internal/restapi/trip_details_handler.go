@@ -185,21 +185,19 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 	)
 	references.Routes = append(references.Routes, routeModel)
 
-	if err == nil {
-		agencyModel := models.NewAgencyReference(
-			agency.ID,
-			agency.Name,
-			agency.Url,
-			agency.Timezone,
-			agency.Lang.String,
-			agency.Phone.String,
-			agency.Email.String,
-			agency.FareUrl.String,
-			"",
-			false,
-		)
-		references.Agencies = append(references.Agencies, agencyModel)
-	}
+	agencyModel := models.NewAgencyReference(
+		agency.ID,
+		agency.Name,
+		agency.Url,
+		agency.Timezone,
+		agency.Lang.String,
+		agency.Phone.String,
+		agency.Email.String,
+		agency.FareUrl.String,
+		"",
+		false,
+	)
+	references.Agencies = append(references.Agencies, agencyModel)
 
 	for _, stopID := range stopIDs {
 
@@ -236,7 +234,7 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 			RouteIDs:       combinedRouteIDs,
 			StaticRouteIDs: combinedRouteIDs,
 		}
-		references.Stops = append(references.Stops, stopModel)
+		references.Stops = append(references.Stops, *stopModel)
 	}
 
 	response := models.NewEntryResponse(tripDetails, references)
@@ -246,8 +244,7 @@ func (api *RestAPI) buildTripStatus(
 	ctx context.Context,
 	agencyID, tripID string,
 	serviceDate time.Time,
-) (*models.TripStatus, error) {
-
+) (*models.TripStatusForTripDetails, error) {
 	vehicle := api.GtfsManager.GetVehicleForTrip(tripID)
 
 	var lastUpdateTime, lastLocationUpdateTime int64
@@ -276,7 +273,7 @@ func (api *RestAPI) buildTripStatus(
 		}
 	}
 
-	status := &models.TripStatus{
+	status := &models.TripStatusForTripDetails{
 		ServiceDate:            serviceDate.Unix() * 1000,
 		ActiveTripID:           activeTripID,
 		Predicted:              true,
@@ -604,7 +601,7 @@ func getDistanceAlongShape(lat, lon float64, shape []gtfs.ShapePoint) float64 {
 	return total
 }
 
-func (api *RestAPI) setBlockTripSequence(ctx context.Context, tripID string, status *models.TripStatus) int {
+func (api *RestAPI) setBlockTripSequence(ctx context.Context, tripID string, status *models.TripStatusForTripDetails) int {
 	blockID, err := api.GtfsManager.GtfsDB.Queries.GetBlockIDByTripID(ctx, tripID)
 
 	if err != nil || !blockID.Valid || blockID.String == "" {

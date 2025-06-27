@@ -38,6 +38,13 @@ type CalendarDate struct {
 	ExceptionType int64
 }
 
+type ImportMetadatum struct {
+	ID         int64
+	FileHash   string
+	ImportTime int64
+	FileSource string
+}
+
 type Route struct {
 	ID                string
 	AgencyID          string

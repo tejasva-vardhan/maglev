@@ -18,7 +18,7 @@ type TripResponse struct {
 	*Trip
 }
 
-func NewTripResponse(trip *Trip, routeShortName, timeZone string, peakOffPeak int) *TripResponse {
+func NewTripResponse(trip *Trip, timeZone string, peakOffPeak int) *TripResponse {
 	return &TripResponse{
 		Trip: trip,
 	}

@@ -26,7 +26,11 @@ type Manager struct {
 	realTimeTrips    []gtfs.Trip
 	realTimeVehicles []gtfs.Vehicle
 	realTimeMutex    sync.RWMutex
+	staticMutex      sync.RWMutex // Protects gtfsData and lastUpdated
 	config           Config
+	shutdownChan     chan struct{}
+	wg               sync.WaitGroup
+	shutdownOnce     sync.Once
 }
 
 // InitGTFSManager initializes the Manager with the GTFS data from the given source
@@ -40,9 +44,10 @@ func InitGTFSManager(config Config) (*Manager, error) {
 	}
 
 	manager := &Manager{
-		gtfsSource:  config.GtfsURL,
-		isLocalFile: isLocalFile,
-		config:      config,
+		gtfsSource:   config.GtfsURL,
+		isLocalFile:  isLocalFile,
+		config:       config,
+		shutdownChan: make(chan struct{}),
 	}
 	manager.setStaticGTFS(staticData)
 
@@ -53,6 +58,7 @@ func InitGTFSManager(config Config) (*Manager, error) {
 	manager.GtfsDB = gtfsDB
 
 	if !isLocalFile {
+		manager.wg.Add(1)
 		go manager.updateStaticGTFS()
 	}
 
@@ -60,29 +66,51 @@ func InitGTFSManager(config Config) (*Manager, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel() // Ensure the context is canceled when done
 		manager.updateGTFSRealtime(ctx, config)
+		manager.wg.Add(1)
 		go manager.updateGTFSRealtimePeriodically(config)
 	}
 
 	return manager, nil
 }
 
+// Shutdown gracefully shuts down the manager and its background goroutines
+func (manager *Manager) Shutdown() {
+	manager.shutdownOnce.Do(func() {
+		close(manager.shutdownChan)
+		manager.wg.Wait()
+		if manager.GtfsDB != nil {
+			_ = manager.GtfsDB.Close()
+		}
+	})
+}
+
 func (manager *Manager) GetAgencies() []gtfs.Agency {
+	manager.staticMutex.RLock()
+	defer manager.staticMutex.RUnlock()
 	return manager.gtfsData.Agencies
 }
 
 func (manager *Manager) GetTrips() []gtfs.ScheduledTrip {
+	manager.staticMutex.RLock()
+	defer manager.staticMutex.RUnlock()
 	return manager.gtfsData.Trips
 }
 
 func (manager *Manager) GetStaticData() *gtfs.Static {
+	manager.staticMutex.RLock()
+	defer manager.staticMutex.RUnlock()
 	return manager.gtfsData
 }
 
 func (manager *Manager) GetStops() []gtfs.Stop {
+	manager.staticMutex.RLock()
+	defer manager.staticMutex.RUnlock()
 	return manager.gtfsData.Stops
 }
 
 func (manager *Manager) FindAgency(id string) *gtfs.Agency {
+	manager.staticMutex.RLock()
+	defer manager.staticMutex.RUnlock()
 	for _, agency := range manager.gtfsData.Agencies {
 		if agency.Id == id {
 			return &agency
@@ -93,6 +121,8 @@ func (manager *Manager) FindAgency(id string) *gtfs.Agency {
 
 // RoutesForAgencyID retrieves all routes associated with the specified agency ID from the GTFS data.
 func (manager *Manager) RoutesForAgencyID(agencyID string) []*gtfs.Route {
+	manager.staticMutex.RLock()
+	defer manager.staticMutex.RUnlock()
 	var agencyRoutes []*gtfs.Route
 
 	for i := range manager.gtfsData.Routes {
@@ -109,7 +139,7 @@ type stopWithDistance struct {
 	distance float64
 }
 
-func (manager *Manager) GetStopsForLocation(lat, lon float64, radius float64, latSpan, lonSpan float64, query string, maxCount int, isForRoutes bool) []*gtfs.Stop {
+func (manager *Manager) GetStopsForLocation(ctx context.Context, lat, lon float64, radius float64, latSpan, lonSpan float64, query string, maxCount int, isForRoutes bool) []*gtfs.Stop {
 	const epsilon = 1e-6
 
 	if radius == 0 {
@@ -121,32 +151,79 @@ func (manager *Manager) GetStopsForLocation(lat, lon float64, radius float64, la
 
 	var candidates []stopWithDistance
 
-	for i := range manager.gtfsData.Stops {
-		stop := &manager.gtfsData.Stops[i]
-		if stop.Latitude == nil || stop.Longitude == nil {
+	// Calculate bounding box for spatial query
+	// Convert radius in meters to approximate degrees
+	// 1 degree latitude ≈ 111km, 1 degree longitude varies by latitude
+	latDegreeInMeters := 111000.0
+	lonDegreeInMeters := 111000.0 * math.Cos(lat*math.Pi/180)
+
+	var minLat, maxLat, minLon, maxLon float64
+
+	if latSpan > 0 && lonSpan > 0 {
+		// Use provided spans
+		minLat = lat - latSpan - epsilon
+		maxLat = lat + latSpan + epsilon
+		minLon = lon - lonSpan - epsilon
+		maxLon = lon + lonSpan + epsilon
+	} else {
+		// Calculate from radius
+		latRadiusDegrees := radius / latDegreeInMeters
+		lonRadiusDegrees := radius / lonDegreeInMeters
+
+		minLat = lat - latRadiusDegrees
+		maxLat = lat + latRadiusDegrees
+		minLon = lon - lonRadiusDegrees
+		maxLon = lon + lonRadiusDegrees
+	}
+
+	// Check if context is already cancelled
+	if ctx.Err() != nil {
+		return []*gtfs.Stop{}
+	}
+
+	// Use spatial index query for initial filtering
+	dbStops, err := manager.GtfsDB.Queries.GetStopsWithinBounds(ctx, gtfsdb.GetStopsWithinBoundsParams{
+		Lat:   minLat,
+		Lat_2: maxLat,
+		Lon:   minLon,
+		Lon_2: maxLon,
+	})
+	if err != nil {
+		// TODO: add logging.
+		return []*gtfs.Stop{}
+	}
+
+	// Process results from database query
+	for _, dbStop := range dbStops {
+		// Find corresponding stop in memory
+		var gtfsStop *gtfs.Stop
+		manager.staticMutex.RLock()
+		for i := range manager.gtfsData.Stops {
+			if manager.gtfsData.Stops[i].Id == dbStop.ID {
+				gtfsStop = &manager.gtfsData.Stops[i]
+				break
+			}
+		}
+		manager.staticMutex.RUnlock()
+
+		if gtfsStop == nil || gtfsStop.Latitude == nil || gtfsStop.Longitude == nil {
 			continue
 		}
 
 		if query != "" && !isForRoutes {
-			if stop.Code == query {
-				distance := utils.Haversine(lat, lon, *stop.Latitude, *stop.Longitude)
+			if gtfsStop.Code == query {
+				distance := utils.Haversine(lat, lon, *gtfsStop.Latitude, *gtfsStop.Longitude)
 				if distance <= radius {
-					return []*gtfs.Stop{stop}
+					return []*gtfs.Stop{gtfsStop}
 				}
 			}
 			continue
 		}
 
-		if latSpan > 0 && lonSpan > 0 {
-			if math.Abs(*stop.Latitude-lat) <= latSpan+epsilon && math.Abs(*stop.Longitude-lon) <= lonSpan+epsilon {
-				distance := utils.Haversine(lat, lon, *stop.Latitude, *stop.Longitude)
-				candidates = append(candidates, stopWithDistance{stop, distance})
-			}
-		} else {
-			distance := utils.Haversine(lat, lon, *stop.Latitude, *stop.Longitude)
-			if distance <= radius {
-				candidates = append(candidates, stopWithDistance{stop, distance})
-			}
+		// Calculate precise distance for final filtering
+		distance := utils.Haversine(lat, lon, *gtfsStop.Latitude, *gtfsStop.Longitude)
+		if distance <= radius {
+			candidates = append(candidates, stopWithDistance{gtfsStop, distance})
 		}
 	}
 
@@ -209,6 +286,8 @@ func (manager *Manager) GetTripUpdatesForTrip(tripID string) []gtfs.Trip {
 }
 
 func (manager *Manager) PrintStatistics() {
+	manager.staticMutex.RLock()
+	defer manager.staticMutex.RUnlock()
 	fmt.Printf("Source: %s (Local File: %v)\n", manager.gtfsSource, manager.isLocalFile)
 	fmt.Printf("Last Updated: %s\n", manager.lastUpdated)
 	fmt.Println("Stops Count: ", len(manager.gtfsData.Stops))

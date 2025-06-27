@@ -1,7 +1,6 @@
 package restapi
 
 import (
-	"context"
 	"net/http"
 
 	"maglev.onebusaway.org/internal/models"
@@ -19,7 +18,13 @@ func (api *RestAPI) stopIDsForAgencyHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	ctx := context.Background()
+	ctx := r.Context()
+
+	// Check if context is already cancelled
+	if ctx.Err() != nil {
+		api.serverErrorResponse(w, r, ctx.Err())
+		return
+	}
 
 	stopIDs, err := api.GtfsManager.GtfsDB.Queries.GetStopIDsForAgency(ctx)
 

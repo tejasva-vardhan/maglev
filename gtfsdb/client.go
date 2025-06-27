@@ -3,6 +3,7 @@ package gtfsdb
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -19,10 +20,10 @@ type Client struct {
 }
 
 // NewClient creates a new Client with the provided configuration
-func NewClient(config Config) *Client {
+func NewClient(config Config) (*Client, error) {
 	db, err := createDB(config)
 	if err != nil {
-		log.Fatal("Unable to create DB", err)
+		return nil, fmt.Errorf("unable to create DB: %w", err)
 	} else if config.verbose {
 		log.Println("Successfully created tables")
 	}
@@ -34,7 +35,7 @@ func NewClient(config Config) *Client {
 		DB:      db,
 		Queries: queries,
 	}
-	return client
+	return client, nil
 }
 
 func (c *Client) Close() error {
@@ -53,7 +54,7 @@ func (c *Client) DownloadAndStore(ctx context.Context, url string) error {
 		return err
 	}
 
-	err = c.processAndStoreGTFSData(b)
+	err = c.processAndStoreGTFSDataWithSource(b, url)
 
 	return err
 }
@@ -65,7 +66,7 @@ func (c *Client) ImportFromFile(ctx context.Context, path string) error {
 		return err
 	}
 
-	err = c.processAndStoreGTFSData(data)
+	err = c.processAndStoreGTFSDataWithSource(data, path)
 
 	return err
 }

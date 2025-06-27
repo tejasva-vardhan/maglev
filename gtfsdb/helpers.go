@@ -2,15 +2,18 @@ package gtfsdb
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	_ "embed"
+	"encoding/hex"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/jamespfennell/gtfs"
 	"maglev.onebusaway.org/internal/appconf"
+	"maglev.onebusaway.org/internal/logging"
 )
 
 //go:embed schema.sql
@@ -19,7 +22,7 @@ var ddl string
 // createDB creates a new SQLite database with tables for static GTFS data
 func createDB(config Config) (*sql.DB, error) {
 	if config.Env == appconf.Test && config.DBPath != ":memory:" {
-		log.Fatal("DB is being created in a file.", config.DBPath)
+		return nil, fmt.Errorf("test database must use in-memory storage, got path: %s", config.DBPath)
 	}
 
 	db, err := sql.Open("sqlite", config.DBPath)
@@ -32,6 +35,9 @@ func createDB(config Config) (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error performing database migration: %w", err)
 	}
+
+	// Configure connection pool settings
+	configureConnectionPool(db)
 
 	return db, nil
 }
@@ -50,7 +56,9 @@ func performDatabaseMigration(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-func (c *Client) processAndStoreGTFSData(b []byte) error {
+func (c *Client) processAndStoreGTFSDataWithSource(b []byte, source string) error {
+	logger := slog.Default().With(slog.String("component", "gtfs_importer"))
+
 	startTime := time.Now()
 	defer func() {
 		endTime := time.Now()
@@ -58,9 +66,45 @@ func (c *Client) processAndStoreGTFSData(b []byte) error {
 		c.importRuntime = endTime.Sub(startTime)
 
 		if c.config.verbose {
-			log.Println("Importing GTFS data took", c.importRuntime.String())
+			logging.LogOperation(logger, "gtfs_data_import_completed",
+				slog.Duration("duration", c.importRuntime),
+				slog.String("source", source))
 		}
 	}()
+
+	// Calculate hash of the GTFS data
+	hash := sha256.Sum256(b)
+	hashStr := hex.EncodeToString(hash[:])
+
+	ctx := context.Background()
+
+	// Check if we already have this data imported
+	existingMetadata, err := c.Queries.GetImportMetadata(ctx)
+	if err == nil {
+		// We have existing metadata, check if hash matches
+		if existingMetadata.FileHash == hashStr && existingMetadata.FileSource == source {
+			if c.config.verbose {
+				logging.LogOperation(logger, "gtfs_data_unchanged_skipping_import",
+					slog.String("hash", hashStr[:8]))
+			}
+			return nil
+		}
+		// Hash differs, we need to clear existing data and reimport
+		if c.config.verbose {
+			logging.LogOperation(logger, "gtfs_data_changed_reimporting",
+				slog.String("old_hash", existingMetadata.FileHash[:8]),
+				slog.String("new_hash", hashStr[:8]))
+		}
+		err = c.clearAllGTFSData(ctx)
+		if err != nil {
+			return fmt.Errorf("error clearing existing GTFS data: %w", err)
+		}
+	} else if err != nil && err != sql.ErrNoRows {
+		// Some other error occurred
+		return fmt.Errorf("error checking import metadata: %w", err)
+	}
+	// If err == sql.ErrNoRows, this is the first import, continue normally
+
 	var staticCounts map[string]int
 
 	staticData, err := gtfs.ParseStatic(b, gtfs.ParseStaticOptions{})
@@ -80,8 +124,6 @@ func (c *Client) processAndStoreGTFSData(b []byte) error {
 		fmt.Print("========\n\n")
 	}
 
-	ctx := context.Background()
-
 	for _, a := range staticData.Agencies {
 		params := CreateAgencyParams{
 			ID:       a.Id,
@@ -96,7 +138,7 @@ func (c *Client) processAndStoreGTFSData(b []byte) error {
 
 		_, err := c.Queries.CreateAgency(ctx, params)
 		if err != nil {
-			log.Fatal("Unable to create agency", err)
+			return fmt.Errorf("unable to create agency: %w", err)
 		}
 	}
 
@@ -123,7 +165,7 @@ func (c *Client) processAndStoreGTFSData(b []byte) error {
 		_, err := c.Queries.CreateRoute(ctx, route)
 
 		if err != nil {
-			log.Fatal("Unable to create route: ", err)
+			return fmt.Errorf("unable to create route: %w", err)
 		}
 	}
 
@@ -148,7 +190,7 @@ func (c *Client) processAndStoreGTFSData(b []byte) error {
 	}
 	err = c.bulkInsertStops(ctx, allStopParams)
 	if err != nil {
-		log.Fatalf("Unable to create stops: %v\n", err)
+		return fmt.Errorf("unable to create stops: %w", err)
 	}
 
 	for _, s := range staticData.Services {
@@ -167,7 +209,7 @@ func (c *Client) processAndStoreGTFSData(b []byte) error {
 
 		_, err := c.Queries.CreateCalendar(ctx, params)
 		if err != nil {
-			log.Fatal("Unable to create calendar: ", err)
+			return fmt.Errorf("unable to create calendar: %w", err)
 		}
 	}
 
@@ -189,7 +231,7 @@ func (c *Client) processAndStoreGTFSData(b []byte) error {
 	}
 	err = c.bulkInsertTrips(ctx, allTripParams)
 	if err != nil {
-		log.Fatalf("Unable to create trips: %v\n", err)
+		return fmt.Errorf("unable to create trips: %w", err)
 	}
 
 	var allStopTimeParams []CreateStopTimeParams
@@ -212,7 +254,7 @@ func (c *Client) processAndStoreGTFSData(b []byte) error {
 	}
 	err = c.bulkInsertStopTimes(ctx, allStopTimeParams)
 	if err != nil {
-		log.Fatalf("Unable to create stop times: %v\n", err)
+		return fmt.Errorf("unable to create stop times: %w", err)
 	}
 
 	var allShapeParams []CreateShapeParams
@@ -229,43 +271,99 @@ func (c *Client) processAndStoreGTFSData(b []byte) error {
 	}
 	err = c.bulkInsertShapes(ctx, allShapeParams)
 	if err != nil {
-		log.Fatalf("Unable to create shapes: %v\n", err)
-	}
-
-	var allCalendarDateParams []CreateCalendarDateParams
-
-	for _, service := range staticData.Services {
-		for _, date := range service.AddedDates {
-			allCalendarDateParams = append(allCalendarDateParams, CreateCalendarDateParams{
-				ServiceID:     service.Id,
-				Date:          date.Format("20060102"),
-				ExceptionType: 1,
-			})
-		}
-		for _, date := range service.RemovedDates {
-			allCalendarDateParams = append(allCalendarDateParams, CreateCalendarDateParams{
-				ServiceID:     service.Id,
-				Date:          date.Format("20060102"),
-				ExceptionType: 2,
-			})
-		}
-	}
-
-	err = c.bulkInsertCalendarDates(ctx, allCalendarDateParams)
-	if err != nil {
-		log.Fatalf("Unable to create calendar dates: %v\n", err)
+		return fmt.Errorf("unable to create shapes: %w", err)
 	}
 
 	if c.config.verbose {
 		counts, err := c.TableCounts()
 		if err != nil {
-			log.Fatalf("Failed to get table counts: %v", err)
+			logging.LogError(logger, "Error getting table counts", err)
+			return fmt.Errorf("failed to get table counts: %w", err)
 		}
 		for k, v := range counts {
 			fmt.Printf("%s: %d (Static matches? %v)\n", k, v, v == staticCounts[k])
 		}
 	}
 
+	// Update import metadata to record successful import
+	if c.config.verbose {
+		logging.LogOperation(logger, "updating_import_metadata",
+			slog.String("hash", hashStr[:8]),
+			slog.String("source", source))
+	}
+	_, err = c.Queries.UpsertImportMetadata(ctx, UpsertImportMetadataParams{
+		FileHash:   hashStr,
+		ImportTime: time.Now().Unix(),
+		FileSource: source,
+	})
+	if err != nil {
+		logging.LogError(logger, "Error updating import metadata", err)
+		return fmt.Errorf("error updating import metadata: %w", err)
+	}
+	if c.config.verbose {
+		logging.LogOperation(logger, "import_metadata_updated_successfully")
+	}
+
+	var allCalendarDateParams []CreateCalendarDateParams
+
+	for _, service := range staticData.Services {
+		// Process added dates (exception type 1)
+		for _, date := range service.AddedDates {
+			params := CreateCalendarDateParams{
+				ServiceID:     service.Id,
+				Date:          date.Format("20060102"),
+				ExceptionType: 1,
+			}
+			allCalendarDateParams = append(allCalendarDateParams, params)
+		}
+
+		// Process removed dates (exception type 2)
+		for _, date := range service.RemovedDates {
+			params := CreateCalendarDateParams{
+				ServiceID:     service.Id,
+				Date:          date.Format("20060102"),
+				ExceptionType: 2,
+			}
+			allCalendarDateParams = append(allCalendarDateParams, params)
+		}
+	}
+
+	// Insert calendar dates into the database
+	if len(allCalendarDateParams) > 0 {
+		err = c.buldInsertCalendarDates(ctx, allCalendarDateParams)
+		if err != nil {
+			logging.LogError(logger, "Unable to create calendar dates", err)
+			return fmt.Errorf("unable to create calendar dates: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// clearAllGTFSData clears all GTFS data from the database in the correct order to respect foreign key constraints
+func (c *Client) clearAllGTFSData(ctx context.Context) error {
+	// Delete in reverse order of dependencies to avoid foreign key constraint violations
+	if err := c.Queries.ClearStopTimes(ctx); err != nil {
+		return fmt.Errorf("error clearing stop_times: %w", err)
+	}
+	if err := c.Queries.ClearShapes(ctx); err != nil {
+		return fmt.Errorf("error clearing shapes: %w", err)
+	}
+	if err := c.Queries.ClearTrips(ctx); err != nil {
+		return fmt.Errorf("error clearing trips: %w", err)
+	}
+	if err := c.Queries.ClearCalendar(ctx); err != nil {
+		return fmt.Errorf("error clearing calendar: %w", err)
+	}
+	if err := c.Queries.ClearStops(ctx); err != nil {
+		return fmt.Errorf("error clearing stops: %w", err)
+	}
+	if err := c.Queries.ClearRoutes(ctx); err != nil {
+		return fmt.Errorf("error clearing routes: %w", err)
+	}
+	if err := c.Queries.ClearAgencies(ctx); err != nil {
+		return fmt.Errorf("error clearing agencies: %w", err)
+	}
 	return nil
 }
 
@@ -304,12 +402,13 @@ func pickFirstAvailable(a, b string) string {
 func (c *Client) bulkInsertStops(ctx context.Context, stops []CreateStopParams) error {
 	db := c.DB
 	queries := c.Queries
+	logger := slog.Default().With(slog.String("component", "bulk_insert"))
 
 	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback() // nolint:errcheck
+	defer logging.SafeRollbackWithLogging(tx, logger, "bulk_insert_stops")
 
 	qtx := queries.WithTx(tx)
 	for _, params := range stops {
@@ -324,12 +423,13 @@ func (c *Client) bulkInsertStops(ctx context.Context, stops []CreateStopParams) 
 func (c *Client) bulkInsertTrips(ctx context.Context, trips []CreateTripParams) error {
 	db := c.DB
 	queries := c.Queries
+	logger := slog.Default().With(slog.String("component", "bulk_insert"))
 
 	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback() // nolint:errcheck
+	defer logging.SafeRollbackWithLogging(tx, logger, "bulk_insert_trips")
 
 	qtx := queries.WithTx(tx)
 	for _, params := range trips {
@@ -344,12 +444,13 @@ func (c *Client) bulkInsertTrips(ctx context.Context, trips []CreateTripParams) 
 func (c *Client) bulkInsertStopTimes(ctx context.Context, stopTimes []CreateStopTimeParams) error {
 	db := c.DB
 	queries := c.Queries
+	logger := slog.Default().With(slog.String("component", "bulk_insert"))
 
 	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback() // nolint:errcheck
+	defer logging.SafeRollbackWithLogging(tx, logger, "bulk_insert_stop_times")
 
 	qtx := queries.WithTx(tx)
 	for _, params := range stopTimes {
@@ -364,12 +465,13 @@ func (c *Client) bulkInsertStopTimes(ctx context.Context, stopTimes []CreateStop
 func (c *Client) bulkInsertShapes(ctx context.Context, shapes []CreateShapeParams) error {
 	db := c.DB
 	queries := c.Queries
+	logger := slog.Default().With(slog.String("component", "bulk_insert"))
 
 	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback() // nolint:errcheck
+	defer logging.SafeRollbackWithLogging(tx, logger, "bulk_insert_shapes")
 
 	qtx := queries.WithTx(tx)
 	for _, params := range shapes {
@@ -381,15 +483,16 @@ func (c *Client) bulkInsertShapes(ctx context.Context, shapes []CreateShapeParam
 	return tx.Commit()
 }
 
-func (c *Client) bulkInsertCalendarDates(ctx context.Context, calendarDates []CreateCalendarDateParams) error {
+func (c *Client) buldInsertCalendarDates(ctx context.Context, calendarDates []CreateCalendarDateParams) error {
 	db := c.DB
 	queries := c.Queries
+	logger := slog.Default().With(slog.String("component", "bulk_insert"))
 
 	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback() // nolint:errcheck
+	defer logging.SafeRollbackWithLogging(tx, logger, "bulk_insert_calendar_dates")
 
 	qtx := queries.WithTx(tx)
 	for _, params := range calendarDates {
@@ -399,4 +502,16 @@ func (c *Client) bulkInsertCalendarDates(ctx context.Context, calendarDates []Cr
 		}
 	}
 	return tx.Commit()
+}
+
+// configureConnectionPool applies connection pool settings to the database
+func configureConnectionPool(db *sql.DB) {
+	// Set maximum number of open connections to 25
+	db.SetMaxOpenConns(25)
+
+	// Set maximum number of idle connections to 5
+	db.SetMaxIdleConns(5)
+
+	// Set maximum lifetime of connections to 5 minutes
+	db.SetConnMaxLifetime(5 * time.Minute)
 }

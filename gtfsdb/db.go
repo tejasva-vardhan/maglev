@@ -24,6 +24,27 @@ func New(db DBTX) *Queries {
 func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	q := Queries{db: db}
 	var err error
+	if q.clearAgenciesStmt, err = db.PrepareContext(ctx, clearAgencies); err != nil {
+		return nil, fmt.Errorf("error preparing query ClearAgencies: %w", err)
+	}
+	if q.clearCalendarStmt, err = db.PrepareContext(ctx, clearCalendar); err != nil {
+		return nil, fmt.Errorf("error preparing query ClearCalendar: %w", err)
+	}
+	if q.clearRoutesStmt, err = db.PrepareContext(ctx, clearRoutes); err != nil {
+		return nil, fmt.Errorf("error preparing query ClearRoutes: %w", err)
+	}
+	if q.clearShapesStmt, err = db.PrepareContext(ctx, clearShapes); err != nil {
+		return nil, fmt.Errorf("error preparing query ClearShapes: %w", err)
+	}
+	if q.clearStopTimesStmt, err = db.PrepareContext(ctx, clearStopTimes); err != nil {
+		return nil, fmt.Errorf("error preparing query ClearStopTimes: %w", err)
+	}
+	if q.clearStopsStmt, err = db.PrepareContext(ctx, clearStops); err != nil {
+		return nil, fmt.Errorf("error preparing query ClearStops: %w", err)
+	}
+	if q.clearTripsStmt, err = db.PrepareContext(ctx, clearTrips); err != nil {
+		return nil, fmt.Errorf("error preparing query ClearTrips: %w", err)
+	}
 	if q.createAgencyStmt, err = db.PrepareContext(ctx, createAgency); err != nil {
 		return nil, fmt.Errorf("error preparing query CreateAgency: %w", err)
 	}
@@ -48,6 +69,12 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.createTripStmt, err = db.PrepareContext(ctx, createTrip); err != nil {
 		return nil, fmt.Errorf("error preparing query CreateTrip: %w", err)
 	}
+	if q.getActiveServiceIDsForDateStmt, err = db.PrepareContext(ctx, getActiveServiceIDsForDate); err != nil {
+		return nil, fmt.Errorf("error preparing query GetActiveServiceIDsForDate: %w", err)
+	}
+	if q.getAgenciesForStopsStmt, err = db.PrepareContext(ctx, getAgenciesForStops); err != nil {
+		return nil, fmt.Errorf("error preparing query GetAgenciesForStops: %w", err)
+	}
 	if q.getAgencyStmt, err = db.PrepareContext(ctx, getAgency); err != nil {
 		return nil, fmt.Errorf("error preparing query GetAgency: %w", err)
 	}
@@ -56,6 +83,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.getAllShapesStmt, err = db.PrepareContext(ctx, getAllShapes); err != nil {
 		return nil, fmt.Errorf("error preparing query GetAllShapes: %w", err)
+	}
+	if q.getAllTripsForRouteStmt, err = db.PrepareContext(ctx, getAllTripsForRoute); err != nil {
+		return nil, fmt.Errorf("error preparing query GetAllTripsForRoute: %w", err)
 	}
 	if q.getBlockIDByTripIDStmt, err = db.PrepareContext(ctx, getBlockIDByTripID); err != nil {
 		return nil, fmt.Errorf("error preparing query GetBlockIDByTripID: %w", err)
@@ -66,6 +96,12 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getCalendarDateExceptionsForServiceIDStmt, err = db.PrepareContext(ctx, getCalendarDateExceptionsForServiceID); err != nil {
 		return nil, fmt.Errorf("error preparing query GetCalendarDateExceptionsForServiceID: %w", err)
 	}
+	if q.getImportMetadataStmt, err = db.PrepareContext(ctx, getImportMetadata); err != nil {
+		return nil, fmt.Errorf("error preparing query GetImportMetadata: %w", err)
+	}
+	if q.getOrderedStopIDsForTripStmt, err = db.PrepareContext(ctx, getOrderedStopIDsForTrip); err != nil {
+		return nil, fmt.Errorf("error preparing query GetOrderedStopIDsForTrip: %w", err)
+	}
 	if q.getRouteStmt, err = db.PrepareContext(ctx, getRoute); err != nil {
 		return nil, fmt.Errorf("error preparing query GetRoute: %w", err)
 	}
@@ -75,8 +111,17 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getRouteIDsForStopStmt, err = db.PrepareContext(ctx, getRouteIDsForStop); err != nil {
 		return nil, fmt.Errorf("error preparing query GetRouteIDsForStop: %w", err)
 	}
+	if q.getRouteIDsForStopsStmt, err = db.PrepareContext(ctx, getRouteIDsForStops); err != nil {
+		return nil, fmt.Errorf("error preparing query GetRouteIDsForStops: %w", err)
+	}
 	if q.getRoutesForStopStmt, err = db.PrepareContext(ctx, getRoutesForStop); err != nil {
 		return nil, fmt.Errorf("error preparing query GetRoutesForStop: %w", err)
+	}
+	if q.getRoutesForStopsStmt, err = db.PrepareContext(ctx, getRoutesForStops); err != nil {
+		return nil, fmt.Errorf("error preparing query GetRoutesForStops: %w", err)
+	}
+	if q.getScheduleForStopStmt, err = db.PrepareContext(ctx, getScheduleForStop); err != nil {
+		return nil, fmt.Errorf("error preparing query GetScheduleForStop: %w", err)
 	}
 	if q.getShapeByIDStmt, err = db.PrepareContext(ctx, getShapeByID); err != nil {
 		return nil, fmt.Errorf("error preparing query GetShapeByID: %w", err)
@@ -84,17 +129,29 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getShapePointsByTripIDStmt, err = db.PrepareContext(ctx, getShapePointsByTripID); err != nil {
 		return nil, fmt.Errorf("error preparing query GetShapePointsByTripID: %w", err)
 	}
+	if q.getShapesGroupedByTripHeadSignStmt, err = db.PrepareContext(ctx, getShapesGroupedByTripHeadSign); err != nil {
+		return nil, fmt.Errorf("error preparing query GetShapesGroupedByTripHeadSign: %w", err)
+	}
 	if q.getStopStmt, err = db.PrepareContext(ctx, getStop); err != nil {
 		return nil, fmt.Errorf("error preparing query GetStop: %w", err)
 	}
 	if q.getStopIDsForAgencyStmt, err = db.PrepareContext(ctx, getStopIDsForAgency); err != nil {
 		return nil, fmt.Errorf("error preparing query GetStopIDsForAgency: %w", err)
 	}
+	if q.getStopIDsForRouteStmt, err = db.PrepareContext(ctx, getStopIDsForRoute); err != nil {
+		return nil, fmt.Errorf("error preparing query GetStopIDsForRoute: %w", err)
+	}
+	if q.getStopIDsForTripStmt, err = db.PrepareContext(ctx, getStopIDsForTrip); err != nil {
+		return nil, fmt.Errorf("error preparing query GetStopIDsForTrip: %w", err)
+	}
 	if q.getStopTimesForTripStmt, err = db.PrepareContext(ctx, getStopTimesForTrip); err != nil {
 		return nil, fmt.Errorf("error preparing query GetStopTimesForTrip: %w", err)
 	}
 	if q.getStopsForRouteStmt, err = db.PrepareContext(ctx, getStopsForRoute); err != nil {
 		return nil, fmt.Errorf("error preparing query GetStopsForRoute: %w", err)
+	}
+	if q.getStopsWithinBoundsStmt, err = db.PrepareContext(ctx, getStopsWithinBounds); err != nil {
+		return nil, fmt.Errorf("error preparing query GetStopsWithinBounds: %w", err)
 	}
 	if q.getTripStmt, err = db.PrepareContext(ctx, getTrip); err != nil {
 		return nil, fmt.Errorf("error preparing query GetTrip: %w", err)
@@ -105,17 +162,58 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getTripsByBlockIDOrderedStmt, err = db.PrepareContext(ctx, getTripsByBlockIDOrdered); err != nil {
 		return nil, fmt.Errorf("error preparing query GetTripsByBlockIDOrdered: %w", err)
 	}
+	if q.getTripsForRouteInActiveServiceIDsStmt, err = db.PrepareContext(ctx, getTripsForRouteInActiveServiceIDs); err != nil {
+		return nil, fmt.Errorf("error preparing query GetTripsForRouteInActiveServiceIDs: %w", err)
+	}
 	if q.listAgenciesStmt, err = db.PrepareContext(ctx, listAgencies); err != nil {
 		return nil, fmt.Errorf("error preparing query ListAgencies: %w", err)
 	}
 	if q.listRoutesStmt, err = db.PrepareContext(ctx, listRoutes); err != nil {
 		return nil, fmt.Errorf("error preparing query ListRoutes: %w", err)
 	}
+	if q.upsertImportMetadataStmt, err = db.PrepareContext(ctx, upsertImportMetadata); err != nil {
+		return nil, fmt.Errorf("error preparing query UpsertImportMetadata: %w", err)
+	}
 	return &q, nil
 }
 
 func (q *Queries) Close() error {
 	var err error
+	if q.clearAgenciesStmt != nil {
+		if cerr := q.clearAgenciesStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing clearAgenciesStmt: %w", cerr)
+		}
+	}
+	if q.clearCalendarStmt != nil {
+		if cerr := q.clearCalendarStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing clearCalendarStmt: %w", cerr)
+		}
+	}
+	if q.clearRoutesStmt != nil {
+		if cerr := q.clearRoutesStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing clearRoutesStmt: %w", cerr)
+		}
+	}
+	if q.clearShapesStmt != nil {
+		if cerr := q.clearShapesStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing clearShapesStmt: %w", cerr)
+		}
+	}
+	if q.clearStopTimesStmt != nil {
+		if cerr := q.clearStopTimesStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing clearStopTimesStmt: %w", cerr)
+		}
+	}
+	if q.clearStopsStmt != nil {
+		if cerr := q.clearStopsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing clearStopsStmt: %w", cerr)
+		}
+	}
+	if q.clearTripsStmt != nil {
+		if cerr := q.clearTripsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing clearTripsStmt: %w", cerr)
+		}
+	}
 	if q.createAgencyStmt != nil {
 		if cerr := q.createAgencyStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing createAgencyStmt: %w", cerr)
@@ -156,6 +254,16 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing createTripStmt: %w", cerr)
 		}
 	}
+	if q.getActiveServiceIDsForDateStmt != nil {
+		if cerr := q.getActiveServiceIDsForDateStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getActiveServiceIDsForDateStmt: %w", cerr)
+		}
+	}
+	if q.getAgenciesForStopsStmt != nil {
+		if cerr := q.getAgenciesForStopsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getAgenciesForStopsStmt: %w", cerr)
+		}
+	}
 	if q.getAgencyStmt != nil {
 		if cerr := q.getAgencyStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getAgencyStmt: %w", cerr)
@@ -169,6 +277,11 @@ func (q *Queries) Close() error {
 	if q.getAllShapesStmt != nil {
 		if cerr := q.getAllShapesStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getAllShapesStmt: %w", cerr)
+		}
+	}
+	if q.getAllTripsForRouteStmt != nil {
+		if cerr := q.getAllTripsForRouteStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getAllTripsForRouteStmt: %w", cerr)
 		}
 	}
 	if q.getBlockIDByTripIDStmt != nil {
@@ -186,6 +299,16 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getCalendarDateExceptionsForServiceIDStmt: %w", cerr)
 		}
 	}
+	if q.getImportMetadataStmt != nil {
+		if cerr := q.getImportMetadataStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getImportMetadataStmt: %w", cerr)
+		}
+	}
+	if q.getOrderedStopIDsForTripStmt != nil {
+		if cerr := q.getOrderedStopIDsForTripStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getOrderedStopIDsForTripStmt: %w", cerr)
+		}
+	}
 	if q.getRouteStmt != nil {
 		if cerr := q.getRouteStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getRouteStmt: %w", cerr)
@@ -201,9 +324,24 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getRouteIDsForStopStmt: %w", cerr)
 		}
 	}
+	if q.getRouteIDsForStopsStmt != nil {
+		if cerr := q.getRouteIDsForStopsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getRouteIDsForStopsStmt: %w", cerr)
+		}
+	}
 	if q.getRoutesForStopStmt != nil {
 		if cerr := q.getRoutesForStopStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getRoutesForStopStmt: %w", cerr)
+		}
+	}
+	if q.getRoutesForStopsStmt != nil {
+		if cerr := q.getRoutesForStopsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getRoutesForStopsStmt: %w", cerr)
+		}
+	}
+	if q.getScheduleForStopStmt != nil {
+		if cerr := q.getScheduleForStopStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getScheduleForStopStmt: %w", cerr)
 		}
 	}
 	if q.getShapeByIDStmt != nil {
@@ -216,6 +354,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getShapePointsByTripIDStmt: %w", cerr)
 		}
 	}
+	if q.getShapesGroupedByTripHeadSignStmt != nil {
+		if cerr := q.getShapesGroupedByTripHeadSignStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getShapesGroupedByTripHeadSignStmt: %w", cerr)
+		}
+	}
 	if q.getStopStmt != nil {
 		if cerr := q.getStopStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getStopStmt: %w", cerr)
@@ -226,6 +369,16 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getStopIDsForAgencyStmt: %w", cerr)
 		}
 	}
+	if q.getStopIDsForRouteStmt != nil {
+		if cerr := q.getStopIDsForRouteStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getStopIDsForRouteStmt: %w", cerr)
+		}
+	}
+	if q.getStopIDsForTripStmt != nil {
+		if cerr := q.getStopIDsForTripStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getStopIDsForTripStmt: %w", cerr)
+		}
+	}
 	if q.getStopTimesForTripStmt != nil {
 		if cerr := q.getStopTimesForTripStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getStopTimesForTripStmt: %w", cerr)
@@ -234,6 +387,11 @@ func (q *Queries) Close() error {
 	if q.getStopsForRouteStmt != nil {
 		if cerr := q.getStopsForRouteStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getStopsForRouteStmt: %w", cerr)
+		}
+	}
+	if q.getStopsWithinBoundsStmt != nil {
+		if cerr := q.getStopsWithinBoundsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getStopsWithinBoundsStmt: %w", cerr)
 		}
 	}
 	if q.getTripStmt != nil {
@@ -251,6 +409,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getTripsByBlockIDOrderedStmt: %w", cerr)
 		}
 	}
+	if q.getTripsForRouteInActiveServiceIDsStmt != nil {
+		if cerr := q.getTripsForRouteInActiveServiceIDsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getTripsForRouteInActiveServiceIDsStmt: %w", cerr)
+		}
+	}
 	if q.listAgenciesStmt != nil {
 		if cerr := q.listAgenciesStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing listAgenciesStmt: %w", cerr)
@@ -259,6 +422,11 @@ func (q *Queries) Close() error {
 	if q.listRoutesStmt != nil {
 		if cerr := q.listRoutesStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing listRoutesStmt: %w", cerr)
+		}
+	}
+	if q.upsertImportMetadataStmt != nil {
+		if cerr := q.upsertImportMetadataStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing upsertImportMetadataStmt: %w", cerr)
 		}
 	}
 	return err
@@ -300,6 +468,13 @@ func (q *Queries) queryRow(ctx context.Context, stmt *sql.Stmt, query string, ar
 type Queries struct {
 	db                                        DBTX
 	tx                                        *sql.Tx
+	clearAgenciesStmt                         *sql.Stmt
+	clearCalendarStmt                         *sql.Stmt
+	clearRoutesStmt                           *sql.Stmt
+	clearShapesStmt                           *sql.Stmt
+	clearStopTimesStmt                        *sql.Stmt
+	clearStopsStmt                            *sql.Stmt
+	clearTripsStmt                            *sql.Stmt
 	createAgencyStmt                          *sql.Stmt
 	createCalendarStmt                        *sql.Stmt
 	createCalendarDateStmt                    *sql.Stmt
@@ -308,61 +483,96 @@ type Queries struct {
 	createStopStmt                            *sql.Stmt
 	createStopTimeStmt                        *sql.Stmt
 	createTripStmt                            *sql.Stmt
+	getActiveServiceIDsForDateStmt            *sql.Stmt
+	getAgenciesForStopsStmt                   *sql.Stmt
 	getAgencyStmt                             *sql.Stmt
 	getAgencyForStopStmt                      *sql.Stmt
 	getAllShapesStmt                          *sql.Stmt
+	getAllTripsForRouteStmt                   *sql.Stmt
 	getBlockIDByTripIDStmt                    *sql.Stmt
 	getCalendarByServiceIDStmt                *sql.Stmt
 	getCalendarDateExceptionsForServiceIDStmt *sql.Stmt
+	getImportMetadataStmt                     *sql.Stmt
+	getOrderedStopIDsForTripStmt              *sql.Stmt
 	getRouteStmt                              *sql.Stmt
 	getRouteIDsForAgencyStmt                  *sql.Stmt
 	getRouteIDsForStopStmt                    *sql.Stmt
+	getRouteIDsForStopsStmt                   *sql.Stmt
 	getRoutesForStopStmt                      *sql.Stmt
+	getRoutesForStopsStmt                     *sql.Stmt
+	getScheduleForStopStmt                    *sql.Stmt
 	getShapeByIDStmt                          *sql.Stmt
 	getShapePointsByTripIDStmt                *sql.Stmt
+	getShapesGroupedByTripHeadSignStmt        *sql.Stmt
 	getStopStmt                               *sql.Stmt
 	getStopIDsForAgencyStmt                   *sql.Stmt
+	getStopIDsForRouteStmt                    *sql.Stmt
+	getStopIDsForTripStmt                     *sql.Stmt
 	getStopTimesForTripStmt                   *sql.Stmt
 	getStopsForRouteStmt                      *sql.Stmt
+	getStopsWithinBoundsStmt                  *sql.Stmt
 	getTripStmt                               *sql.Stmt
 	getTripsByBlockIDStmt                     *sql.Stmt
 	getTripsByBlockIDOrderedStmt              *sql.Stmt
+	getTripsForRouteInActiveServiceIDsStmt    *sql.Stmt
 	listAgenciesStmt                          *sql.Stmt
 	listRoutesStmt                            *sql.Stmt
+	upsertImportMetadataStmt                  *sql.Stmt
 }
 
 func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 	return &Queries{
-		db:                         tx,
-		tx:                         tx,
-		createAgencyStmt:           q.createAgencyStmt,
-		createCalendarStmt:         q.createCalendarStmt,
-		createCalendarDateStmt:     q.createCalendarDateStmt,
-		createRouteStmt:            q.createRouteStmt,
-		createShapeStmt:            q.createShapeStmt,
-		createStopStmt:             q.createStopStmt,
-		createStopTimeStmt:         q.createStopTimeStmt,
-		createTripStmt:             q.createTripStmt,
-		getAgencyStmt:              q.getAgencyStmt,
-		getAgencyForStopStmt:       q.getAgencyForStopStmt,
-		getAllShapesStmt:           q.getAllShapesStmt,
-		getBlockIDByTripIDStmt:     q.getBlockIDByTripIDStmt,
-		getCalendarByServiceIDStmt: q.getCalendarByServiceIDStmt,
+		db:                             tx,
+		tx:                             tx,
+		clearAgenciesStmt:              q.clearAgenciesStmt,
+		clearCalendarStmt:              q.clearCalendarStmt,
+		clearRoutesStmt:                q.clearRoutesStmt,
+		clearShapesStmt:                q.clearShapesStmt,
+		clearStopTimesStmt:             q.clearStopTimesStmt,
+		clearStopsStmt:                 q.clearStopsStmt,
+		clearTripsStmt:                 q.clearTripsStmt,
+		createAgencyStmt:               q.createAgencyStmt,
+		createCalendarStmt:             q.createCalendarStmt,
+		createCalendarDateStmt:         q.createCalendarDateStmt,
+		createRouteStmt:                q.createRouteStmt,
+		createShapeStmt:                q.createShapeStmt,
+		createStopStmt:                 q.createStopStmt,
+		createStopTimeStmt:             q.createStopTimeStmt,
+		createTripStmt:                 q.createTripStmt,
+		getActiveServiceIDsForDateStmt: q.getActiveServiceIDsForDateStmt,
+		getAgenciesForStopsStmt:        q.getAgenciesForStopsStmt,
+		getAgencyStmt:                  q.getAgencyStmt,
+		getAgencyForStopStmt:           q.getAgencyForStopStmt,
+		getAllShapesStmt:               q.getAllShapesStmt,
+		getAllTripsForRouteStmt:        q.getAllTripsForRouteStmt,
+		getBlockIDByTripIDStmt:         q.getBlockIDByTripIDStmt,
+		getCalendarByServiceIDStmt:     q.getCalendarByServiceIDStmt,
 		getCalendarDateExceptionsForServiceIDStmt: q.getCalendarDateExceptionsForServiceIDStmt,
-		getRouteStmt:                 q.getRouteStmt,
-		getRouteIDsForAgencyStmt:     q.getRouteIDsForAgencyStmt,
-		getRouteIDsForStopStmt:       q.getRouteIDsForStopStmt,
-		getRoutesForStopStmt:         q.getRoutesForStopStmt,
-		getShapeByIDStmt:             q.getShapeByIDStmt,
-		getShapePointsByTripIDStmt:   q.getShapePointsByTripIDStmt,
-		getStopStmt:                  q.getStopStmt,
-		getStopIDsForAgencyStmt:      q.getStopIDsForAgencyStmt,
-		getStopTimesForTripStmt:      q.getStopTimesForTripStmt,
-		getStopsForRouteStmt:         q.getStopsForRouteStmt,
-		getTripStmt:                  q.getTripStmt,
-		getTripsByBlockIDStmt:        q.getTripsByBlockIDStmt,
-		getTripsByBlockIDOrderedStmt: q.getTripsByBlockIDOrderedStmt,
-		listAgenciesStmt:             q.listAgenciesStmt,
-		listRoutesStmt:               q.listRoutesStmt,
+		getImportMetadataStmt:                     q.getImportMetadataStmt,
+		getOrderedStopIDsForTripStmt:              q.getOrderedStopIDsForTripStmt,
+		getRouteStmt:                              q.getRouteStmt,
+		getRouteIDsForAgencyStmt:                  q.getRouteIDsForAgencyStmt,
+		getRouteIDsForStopStmt:                    q.getRouteIDsForStopStmt,
+		getRouteIDsForStopsStmt:                   q.getRouteIDsForStopsStmt,
+		getRoutesForStopStmt:                      q.getRoutesForStopStmt,
+		getRoutesForStopsStmt:                     q.getRoutesForStopsStmt,
+		getScheduleForStopStmt:                    q.getScheduleForStopStmt,
+		getShapeByIDStmt:                          q.getShapeByIDStmt,
+		getShapePointsByTripIDStmt:                q.getShapePointsByTripIDStmt,
+		getShapesGroupedByTripHeadSignStmt:        q.getShapesGroupedByTripHeadSignStmt,
+		getStopStmt:                               q.getStopStmt,
+		getStopIDsForAgencyStmt:                   q.getStopIDsForAgencyStmt,
+		getStopIDsForRouteStmt:                    q.getStopIDsForRouteStmt,
+		getStopIDsForTripStmt:                     q.getStopIDsForTripStmt,
+		getStopTimesForTripStmt:                   q.getStopTimesForTripStmt,
+		getStopsForRouteStmt:                      q.getStopsForRouteStmt,
+		getStopsWithinBoundsStmt:                  q.getStopsWithinBoundsStmt,
+		getTripStmt:                               q.getTripStmt,
+		getTripsByBlockIDStmt:                     q.getTripsByBlockIDStmt,
+		getTripsByBlockIDOrderedStmt:              q.getTripsByBlockIDOrderedStmt,
+		getTripsForRouteInActiveServiceIDsStmt:    q.getTripsForRouteInActiveServiceIDsStmt,
+		listAgenciesStmt:                          q.listAgenciesStmt,
+		listRoutesStmt:                            q.listRoutesStmt,
+		upsertImportMetadataStmt:                  q.upsertImportMetadataStmt,
 	}
 }

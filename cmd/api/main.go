@@ -1,17 +1,21 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log/slog"
 	"maglev.onebusaway.org/internal/app"
 	"maglev.onebusaway.org/internal/appconf"
 	"maglev.onebusaway.org/internal/gtfs"
-	"maglev.onebusaway.org/internal/rest_api"
+	"maglev.onebusaway.org/internal/logging"
+	"maglev.onebusaway.org/internal/restapi"
 	"maglev.onebusaway.org/internal/webui"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -24,6 +28,7 @@ func main() {
 	flag.IntVar(&cfg.Port, "port", 4000, "API server port")
 	flag.StringVar(&envFlag, "env", "development", "Environment (development|test|production)")
 	flag.StringVar(&apiKeysFlag, "api-keys", "test", "Comma Separated API Keys (test, etc)")
+	flag.IntVar(&cfg.RateLimit, "rate-limit", 100, "Requests per second per API key for rate limiting")
 	flag.StringVar(&gtfsCfg.GtfsURL, "gtfs-url", "https://www.soundtransit.org/GTFS-rail/40_gtfs.zip", "URL for a static GTFS zip file")
 	flag.StringVar(&gtfsCfg.TripUpdatesURL, "trip-updates-url", "https://api.pugetsound.onebusaway.org/api/gtfs_realtime/trip-updates-for-agency/40.pb?key=org.onebusaway.iphone", "URL for a GTFS-RT trip updates feed")
 	flag.StringVar(&gtfsCfg.VehiclePositionsURL, "vehicle-positions-url", "https://api.pugetsound.onebusaway.org/api/gtfs_realtime/vehicle-positions-for-agency/40.pb?key=org.onebusaway.iphone", "URL for a GTFS-RT vehicle positions feed")
@@ -58,9 +63,7 @@ func main() {
 		GtfsManager: gtfsManager,
 	}
 
-	api := &restapi.RestAPI{
-		Application: coreApp,
-	}
+	api := restapi.NewRestAPI(coreApp)
 
 	webUI := &webui.WebUI{
 		Application: coreApp,
@@ -71,9 +74,17 @@ func main() {
 	api.SetRoutes(mux)
 	webUI.SetWebUIRoutes(mux)
 
+	// Wrap with security middleware
+	secureHandler := api.WithSecurityHeaders(mux)
+
+	// Add request logging middleware (outermost)
+	requestLogger := logging.NewStructuredLogger(os.Stdout, slog.LevelInfo)
+	requestLogMiddleware := restapi.NewRequestLoggingMiddleware(requestLogger)
+	handler := requestLogMiddleware(secureHandler)
+
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
-		Handler:      mux,
+		Handler:      handler,
 		IdleTimeout:  time.Minute,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
@@ -81,9 +92,36 @@ func main() {
 	}
 
 	logger.Info("starting server", "addr", srv.Addr, "env", cfg.Env)
-	err = srv.ListenAndServe()
-	if err != nil {
-		logger.Error(err.Error())
+
+	// Set up signal handling for graceful shutdown
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	// Start server in a goroutine
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("server failed to start", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	// Wait for shutdown signal
+	<-ctx.Done()
+	logger.Info("shutting down server...")
+
+	// Create shutdown context with timeout
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Shutdown server
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		logger.Error("server forced to shutdown", "error", err)
 	}
-	os.Exit(1)
+
+	// Shutdown GTFS manager
+	if gtfsManager != nil {
+		gtfsManager.Shutdown()
+	}
+
+	logger.Info("server exited")
 }

@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-func (api *RestAPI) shapes(w http.ResponseWriter, r *http.Request) {
+func (api *RestAPI) shapesHandler(w http.ResponseWriter, r *http.Request) {
 	_, shapeID, err := utils.ExtractAgencyIDAndCodeID(utils.ExtractIDFromParams(r))
 
 	if err != nil {

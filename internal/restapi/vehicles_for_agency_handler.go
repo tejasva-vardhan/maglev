@@ -92,7 +92,7 @@ func (api *RestAPI) vehiclesForAgencyHandler(w http.ResponseWriter, r *http.Requ
 				if obaOrientation < 0 {
 					obaOrientation += 360
 				}
-				tripStatus.Orientation = float64(obaOrientation)
+				tripStatus.Orientation = float32(obaOrientation)
 			}
 
 			// Set service date (use current date for now)
@@ -172,7 +172,7 @@ func (api *RestAPI) vehiclesForAgencyHandler(w http.ResponseWriter, r *http.Requ
 		Routes:     routeRefList,
 		Situations: []interface{}{},
 		StopTimes:  []interface{}{},
-		Stops:      []interface{}{},
+		Stops:      []models.Stop{},
 		Trips:      tripRefList,
 	}
 

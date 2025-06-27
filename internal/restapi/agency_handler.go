@@ -8,6 +8,16 @@ import (
 
 func (api *RestAPI) agencyHandler(w http.ResponseWriter, r *http.Request) {
 	id := utils.ExtractIDFromParams(r)
+
+	// Validate ID
+	if err := utils.ValidateID(id); err != nil {
+		fieldErrors := map[string][]string{
+			"id": {err.Error()},
+		}
+		api.validationErrorResponse(w, r, fieldErrors)
+		return
+	}
+
 	agency := api.GtfsManager.FindAgency(id)
 
 	if agency == nil {
