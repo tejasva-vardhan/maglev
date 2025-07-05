@@ -147,6 +147,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getStopTimesForTripStmt, err = db.PrepareContext(ctx, getStopTimesForTrip); err != nil {
 		return nil, fmt.Errorf("error preparing query GetStopTimesForTrip: %w", err)
 	}
+	if q.getStopsByIDsStmt, err = db.PrepareContext(ctx, getStopsByIDs); err != nil {
+		return nil, fmt.Errorf("error preparing query GetStopsByIDs: %w", err)
+	}
 	if q.getStopsForRouteStmt, err = db.PrepareContext(ctx, getStopsForRoute); err != nil {
 		return nil, fmt.Errorf("error preparing query GetStopsForRoute: %w", err)
 	}
@@ -384,6 +387,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getStopTimesForTripStmt: %w", cerr)
 		}
 	}
+	if q.getStopsByIDsStmt != nil {
+		if cerr := q.getStopsByIDsStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getStopsByIDsStmt: %w", cerr)
+		}
+	}
 	if q.getStopsForRouteStmt != nil {
 		if cerr := q.getStopsForRouteStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getStopsForRouteStmt: %w", cerr)
@@ -509,6 +517,7 @@ type Queries struct {
 	getStopIDsForRouteStmt                    *sql.Stmt
 	getStopIDsForTripStmt                     *sql.Stmt
 	getStopTimesForTripStmt                   *sql.Stmt
+	getStopsByIDsStmt                         *sql.Stmt
 	getStopsForRouteStmt                      *sql.Stmt
 	getStopsWithinBoundsStmt                  *sql.Stmt
 	getTripStmt                               *sql.Stmt
@@ -565,6 +574,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		getStopIDsForRouteStmt:                    q.getStopIDsForRouteStmt,
 		getStopIDsForTripStmt:                     q.getStopIDsForTripStmt,
 		getStopTimesForTripStmt:                   q.getStopTimesForTripStmt,
+		getStopsByIDsStmt:                         q.getStopsByIDsStmt,
 		getStopsForRouteStmt:                      q.getStopsForRouteStmt,
 		getStopsWithinBoundsStmt:                  q.getStopsWithinBoundsStmt,
 		getTripStmt:                               q.getTripStmt,

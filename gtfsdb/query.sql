@@ -519,3 +519,13 @@ FROM
     trips
 WHERE
     id = ?;
+
+-- name: GetStopsByIDs :many
+SELECT
+    *
+FROM
+    stops
+WHERE
+    id IN (sqlc.slice('stop_ids'))
+ORDER BY
+    id;

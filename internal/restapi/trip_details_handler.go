@@ -498,9 +498,24 @@ func findNextStop(
 
 	var minDiff float64 = math.MaxFloat64
 
+	stopIDs := make([]string, len(stopTimes))
+	for i, st := range stopTimes {
+		stopIDs[i] = st.StopID
+	}
+
+	stops, err := api.GtfsManager.GtfsDB.Queries.GetStopsByIDs(ctx, stopIDs)
+	if err != nil {
+		return "", 0
+	}
+
+	stopMap := make(map[string]gtfsdb.Stop)
+	for _, stop := range stops {
+		stopMap[stop.ID] = stop
+	}
+
 	for _, st := range stopTimes {
-		stop, err := api.GtfsManager.GtfsDB.Queries.GetStop(ctx, st.StopID)
-		if err != nil {
+		stop, exists := stopMap[st.StopID]
+		if !exists {
 			continue
 		}
 
@@ -511,7 +526,6 @@ func findNextStop(
 			offset = int(st.StopSequence)
 		}
 	}
-
 	return
 }
 
@@ -522,9 +536,24 @@ func findClosestStop(api *RestAPI, ctx context.Context, pos *gtfs.Position, stop
 
 	var minDist float64 = math.MaxFloat64
 
+	stopIDs := make([]string, len(stopTimes))
+	for i, st := range stopTimes {
+		stopIDs[i] = st.StopID
+	}
+
+	stops, err := api.GtfsManager.GtfsDB.Queries.GetStopsByIDs(ctx, stopIDs)
+	if err != nil {
+		return "", 0
+	}
+
+	stopMap := make(map[string]gtfsdb.Stop)
+	for _, stop := range stops {
+		stopMap[stop.ID] = stop
+	}
+
 	for _, st := range stopTimes {
-		stop, err := api.GtfsManager.GtfsDB.Queries.GetStop(ctx, st.StopID)
-		if err != nil {
+		stop, exists := stopMap[st.StopID]
+		if !exists {
 			continue
 		}
 
