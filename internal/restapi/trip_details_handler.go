@@ -354,7 +354,8 @@ func (api *RestAPI) buildReferencedTrips(ctx context.Context, agencyID string, t
 }
 
 func (api *RestAPI) buildStopReferences(ctx context.Context, agencyID string, stopTimes []models.StopTime) ([]models.Stop, error) {
-	stops := []models.Stop{}
+	stopIDSet := make(map[string]bool)
+	originalStopIDs := make([]string, 0, len(stopTimes))
 
 	for _, st := range stopTimes {
 		_, originalStopID, err := utils.ExtractAgencyIDAndCodeID(st.StopID)
@@ -362,16 +363,67 @@ func (api *RestAPI) buildStopReferences(ctx context.Context, agencyID string, st
 			continue
 		}
 
-		stop, err := api.GtfsManager.GtfsDB.Queries.GetStop(ctx, originalStopID)
+		if !stopIDSet[originalStopID] {
+			stopIDSet[originalStopID] = true
+			originalStopIDs = append(originalStopIDs, originalStopID)
+		}
+	}
+
+	if len(originalStopIDs) == 0 {
+		return []models.Stop{}, nil
+	}
+
+	stops, err := api.GtfsManager.GtfsDB.Queries.GetStopsByIDs(ctx, originalStopIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	stopMap := make(map[string]gtfsdb.Stop)
+	for _, stop := range stops {
+		stopMap[stop.ID] = stop
+	}
+
+	allRoutes, err := api.GtfsManager.GtfsDB.Queries.GetRoutesForStops(ctx, originalStopIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	routesByStop := make(map[string][]gtfsdb.Route)
+	for _, routeRow := range allRoutes {
+		route := gtfsdb.Route{
+			ID:        routeRow.ID,
+			AgencyID:  routeRow.AgencyID,
+			ShortName: routeRow.ShortName,
+			LongName:  routeRow.LongName,
+			Desc:      routeRow.Desc,
+			Type:      routeRow.Type,
+			Url:       routeRow.Url,
+			Color:     routeRow.Color,
+			TextColor: routeRow.TextColor,
+		}
+		routesByStop[routeRow.StopID] = append(routesByStop[routeRow.StopID], route)
+	}
+
+	modelStops := make([]models.Stop, 0, len(stopTimes))
+	processedStops := make(map[string]bool)
+
+	for _, st := range stopTimes {
+		_, originalStopID, err := utils.ExtractAgencyIDAndCodeID(st.StopID)
 		if err != nil {
 			continue
 		}
 
-		routesForStop, err := api.GtfsManager.GtfsDB.Queries.GetRoutesForStop(ctx, originalStopID)
-		if err != nil {
+		if processedStops[originalStopID] {
+			continue
+		}
+		processedStops[originalStopID] = true
+
+		stop, exists := stopMap[originalStopID]
+		if !exists {
 			continue
 		}
 
+		routesForStop := routesByStop[originalStopID]
 		combinedRouteIDs := make([]string, len(routesForStop))
 		for i, rt := range routesForStop {
 			combinedRouteIDs[i] = utils.FormCombinedID(agencyID, rt.ID)
@@ -389,10 +441,10 @@ func (api *RestAPI) buildStopReferences(ctx context.Context, agencyID string, st
 			RouteIDs:           combinedRouteIDs,
 			StaticRouteIDs:     combinedRouteIDs,
 		}
-		stops = append(stops, stopModel)
+		modelStops = append(modelStops, stopModel)
 	}
 
-	return stops, nil
+	return modelStops, nil
 }
 
 func (api *RestAPI) GetNextAndPreviousTripIDs(ctx context.Context, trip *gtfsdb.Trip, tripID string, agencyID string, serviceDate time.Time) (nextTripID string, previousTripID string, err error) {
