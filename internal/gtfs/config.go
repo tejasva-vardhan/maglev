@@ -8,6 +8,7 @@ type Config struct {
 	GtfsURL                 string
 	TripUpdatesURL          string
 	VehiclePositionsURL     string
+	ServiceAlertsURL        string
 	RealTimeAuthHeaderKey   string
 	RealTimeAuthHeaderValue string
 	GTFSDataPath            string

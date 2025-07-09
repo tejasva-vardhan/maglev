@@ -26,6 +26,7 @@ type Manager struct {
 	realTimeTrips    []gtfs.Trip
 	realTimeVehicles []gtfs.Vehicle
 	realTimeMutex    sync.RWMutex
+	realTimeAlerts   []gtfs.Alert
 	staticMutex      sync.RWMutex // Protects gtfsData and lastUpdated
 	config           Config
 	shutdownChan     chan struct{}
@@ -339,4 +340,58 @@ func (manager *Manager) IsServiceActiveOnDate(ctx context.Context, serviceID str
 	default:
 		return 0, nil
 	}
+}
+
+func (manager *Manager) GetAlertsForRoute(routeID string) []gtfs.Alert {
+	manager.realTimeMutex.RLock()
+	defer manager.realTimeMutex.RUnlock()
+
+	var alerts []gtfs.Alert
+	for _, alert := range manager.realTimeAlerts {
+		if alert.InformedEntities != nil {
+			for _, entity := range alert.InformedEntities {
+				if entity.RouteID != nil && *entity.RouteID == routeID {
+					alerts = append(alerts, alert)
+					break
+				}
+			}
+		}
+	}
+	return alerts
+}
+
+func (manager *Manager) GetAlertsForTrip(tripID string) []gtfs.Alert {
+	manager.realTimeMutex.RLock()
+	defer manager.realTimeMutex.RUnlock()
+
+	var alerts []gtfs.Alert
+	for _, alert := range manager.realTimeAlerts {
+		if alert.InformedEntities != nil {
+			for _, entity := range alert.InformedEntities {
+				if entity.TripID != nil && entity.TripID.ID == tripID {
+					alerts = append(alerts, alert)
+					break
+				}
+			}
+		}
+	}
+	return alerts
+}
+
+func (manager *Manager) GetAlertsForStop(stopID string) []gtfs.Alert {
+	manager.realTimeMutex.RLock()
+	defer manager.realTimeMutex.RUnlock()
+
+	var alerts []gtfs.Alert
+	for _, alert := range manager.realTimeAlerts {
+		if alert.InformedEntities != nil {
+			for _, entity := range alert.InformedEntities {
+				if entity.StopID != nil && *entity.StopID == stopID {
+					alerts = append(alerts, alert)
+					break
+				}
+			}
+		}
+	}
+	return alerts
 }

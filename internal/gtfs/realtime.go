@@ -61,8 +61,8 @@ func (manager *Manager) updateGTFSRealtime(ctx context.Context, config Config) {
 	}
 
 	var wg sync.WaitGroup
-	var tripData, vehicleData *gtfs.Realtime
-	var tripErr, vehicleErr error
+	var tripData, vehicleData, alertData *gtfs.Realtime
+	var tripErr, vehicleErr, alertErr error
 
 	// Fetch trip updates in parallel
 	wg.Add(1)
@@ -86,6 +86,18 @@ func (manager *Manager) updateGTFSRealtime(ctx context.Context, config Config) {
 		}
 	}()
 
+	if config.ServiceAlertsURL != "" {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			alertData, alertErr = loadRealtimeData(ctx, config.ServiceAlertsURL, headers)
+			if alertErr != nil {
+				logging.LogError(logger, "Error loading GTFS-RT service alerts data", alertErr,
+					slog.String("url", config.ServiceAlertsURL))
+			}
+		}()
+	}
+
 	// Wait for both to complete
 	wg.Wait()
 
@@ -103,6 +115,10 @@ func (manager *Manager) updateGTFSRealtime(ctx context.Context, config Config) {
 	}
 	if vehicleData != nil && vehicleErr == nil {
 		manager.realTimeVehicles = vehicleData.Vehicles
+	}
+
+	if alertData != nil && alertErr == nil {
+		manager.realTimeAlerts = alertData.Alerts
 	}
 }
 
