@@ -52,6 +52,18 @@ func loadRealtimeData(ctx context.Context, source string, headers map[string]str
 	return gtfs.ParseRealtime(b, &gtfs.ParseRealtimeOptions{})
 }
 
+func (manager *Manager) GetRealTimeAlerts() []gtfs.Alert {
+	manager.realTimeMutex.RLock()
+	defer manager.realTimeMutex.RUnlock()
+	return manager.realTimeAlerts
+}
+
+func (manager *Manager) InjectTestAlerts(alerts []gtfs.Alert) {
+	manager.realTimeMutex.Lock()
+	defer manager.realTimeMutex.Unlock()
+	manager.realTimeAlerts = alerts
+}
+
 func (manager *Manager) updateGTFSRealtime(ctx context.Context, config Config) {
 	logger := logging.FromContext(ctx).With(slog.String("component", "gtfs_realtime"))
 
