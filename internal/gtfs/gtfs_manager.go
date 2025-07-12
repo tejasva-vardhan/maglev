@@ -26,6 +26,7 @@ type Manager struct {
 	realTimeTrips    []gtfs.Trip
 	realTimeVehicles []gtfs.Vehicle
 	realTimeMutex    sync.RWMutex
+	realTimeAlerts   []gtfs.Alert
 	staticMutex      sync.RWMutex // Protects gtfsData and lastUpdated
 	config           Config
 	shutdownChan     chan struct{}

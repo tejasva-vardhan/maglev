@@ -52,6 +52,60 @@ func loadRealtimeData(ctx context.Context, source string, headers map[string]str
 	return gtfs.ParseRealtime(b, &gtfs.ParseRealtimeOptions{})
 }
 
+func (manager *Manager) GetAlertsForRoute(routeID string) []gtfs.Alert {
+	manager.realTimeMutex.RLock()
+	defer manager.realTimeMutex.RUnlock()
+
+	var alerts []gtfs.Alert
+	for _, alert := range manager.realTimeAlerts {
+		if alert.InformedEntities != nil {
+			for _, entity := range alert.InformedEntities {
+				if entity.RouteID != nil && *entity.RouteID == routeID {
+					alerts = append(alerts, alert)
+					break
+				}
+			}
+		}
+	}
+	return alerts
+}
+
+func (manager *Manager) GetAlertsForTrip(tripID string) []gtfs.Alert {
+	manager.realTimeMutex.RLock()
+	defer manager.realTimeMutex.RUnlock()
+
+	var alerts []gtfs.Alert
+	for _, alert := range manager.realTimeAlerts {
+		if alert.InformedEntities != nil {
+			for _, entity := range alert.InformedEntities {
+				if entity.TripID != nil && entity.TripID.ID == tripID {
+					alerts = append(alerts, alert)
+					break
+				}
+			}
+		}
+	}
+	return alerts
+}
+
+func (manager *Manager) GetAlertsForStop(stopID string) []gtfs.Alert {
+	manager.realTimeMutex.RLock()
+	defer manager.realTimeMutex.RUnlock()
+
+	var alerts []gtfs.Alert
+	for _, alert := range manager.realTimeAlerts {
+		if alert.InformedEntities != nil {
+			for _, entity := range alert.InformedEntities {
+				if entity.StopID != nil && *entity.StopID == stopID {
+					alerts = append(alerts, alert)
+					break
+				}
+			}
+		}
+	}
+	return alerts
+}
+
 func (manager *Manager) updateGTFSRealtime(ctx context.Context, config Config) {
 	logger := logging.FromContext(ctx).With(slog.String("component", "gtfs_realtime"))
 
@@ -61,8 +115,8 @@ func (manager *Manager) updateGTFSRealtime(ctx context.Context, config Config) {
 	}
 
 	var wg sync.WaitGroup
-	var tripData, vehicleData *gtfs.Realtime
-	var tripErr, vehicleErr error
+	var tripData, vehicleData, alertData *gtfs.Realtime
+	var tripErr, vehicleErr, alertErr error
 
 	// Fetch trip updates in parallel
 	wg.Add(1)
@@ -86,6 +140,18 @@ func (manager *Manager) updateGTFSRealtime(ctx context.Context, config Config) {
 		}
 	}()
 
+	if config.ServiceAlertsURL != "" {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			alertData, alertErr = loadRealtimeData(ctx, config.ServiceAlertsURL, headers)
+			if alertErr != nil {
+				logging.LogError(logger, "Error loading GTFS-RT service alerts data", alertErr,
+					slog.String("url", config.ServiceAlertsURL))
+			}
+		}()
+	}
+
 	// Wait for both to complete
 	wg.Wait()
 
@@ -103,6 +169,10 @@ func (manager *Manager) updateGTFSRealtime(ctx context.Context, config Config) {
 	}
 	if vehicleData != nil && vehicleErr == nil {
 		manager.realTimeVehicles = vehicleData.Vehicles
+	}
+
+	if alertData != nil && alertErr == nil {
+		manager.realTimeAlerts = alertData.Alerts
 	}
 }
 
