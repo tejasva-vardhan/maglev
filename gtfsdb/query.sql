@@ -568,3 +568,10 @@ SELECT
     *
 FROM
     trips
+-- name: GetStopTimesByStopIDs :many
+SELECT
+    *
+FROM
+    stop_times
+WHERE
+    stop_id IN (sqlc.slice('stop_ids'));
