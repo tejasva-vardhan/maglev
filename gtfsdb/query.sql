@@ -124,10 +124,12 @@ OR REPLACE INTO trips (
 VALUES
     (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *;
 
+
 -- name: CreateCalendarDate :one
 INSERT
-OR REPLACE INTO calendar_dates(service_id, date, exception_type)
-VALUES (?, ?, ?) RETURNING *;
+OR REPLACE INTO calendar_dates (service_id, date, exception_type)
+VALUES
+    (?, ?, ?) RETURNING *;
 
 -- name: ListRoutes :many
 SELECT
@@ -230,11 +232,11 @@ WHERE
     stop_times.stop_id = ?;
 
 -- name: GetStopsWithinBounds :many
-SELECT 
+SELECT
     *
-FROM 
+FROM
     stops
-WHERE 
+WHERE
     lat >= ? AND lat <= ?
     AND lon >= ? AND lon <= ?;
 
@@ -274,6 +276,7 @@ FROM
     stop_times
 WHERE
     stop_times.trip_id = ?;
+
 -- name: GetShapesGroupedByTripHeadSign :many
 SELECT DISTINCT s.lat, s.lon, s.shape_pt_sequence
 FROM shapes s
@@ -286,6 +289,7 @@ FROM shapes s
     LIMIT 1
 ) t ON s.shape_id = t.shape_id
 ORDER BY s.shape_pt_sequence;
+
 -- name: GetActiveServiceIDsForDate :many
 WITH formatted_date AS (
     SELECT STRFTIME('%w', SUBSTR(@target_date, 1, 4) || '-' || SUBSTR(@target_date, 5, 2) || '-' || SUBSTR(@target_date, 7, 2)) AS weekday
@@ -321,6 +325,7 @@ SELECT stop_id
 FROM stop_times
 WHERE trip_id = ?
 ORDER BY stop_sequence;
+
 -- name: GetScheduleForStop :many
 SELECT
     st.trip_id,
@@ -549,3 +554,11 @@ WHERE
     t.block_id = ?
 ORDER BY
     t.id, st.stop_sequence
+
+-- name: GetStopTimesByStopIDs :many
+SELECT
+    *
+FROM
+    stop_times
+WHERE
+    stop_id IN (sqlc.slice('stop_ids'));
