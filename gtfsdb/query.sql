@@ -575,3 +575,9 @@ FROM
     stop_times
 WHERE
     stop_id IN (sqlc.slice('stop_ids'));
+
+-- name: ListTrips :many
+SELECT
+    *
+FROM
+    trips
