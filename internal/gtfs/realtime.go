@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jamespfennell/gtfs"
+	"github.com/OneBusAway/go-gtfs"
 	"maglev.onebusaway.org/internal/logging"
 )
 

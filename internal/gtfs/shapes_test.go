@@ -1,7 +1,7 @@
 package gtfs
 
 import (
-	"github.com/jamespfennell/gtfs"
+	"github.com/OneBusAway/go-gtfs"
 	"github.com/stretchr/testify/assert"
 	"maglev.onebusaway.org/internal/models"
 	"testing"

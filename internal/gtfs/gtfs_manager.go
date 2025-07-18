@@ -12,7 +12,7 @@ import (
 	"maglev.onebusaway.org/gtfsdb"
 	"maglev.onebusaway.org/internal/utils"
 
-	"github.com/jamespfennell/gtfs"
+	"github.com/OneBusAway/go-gtfs"
 	_ "modernc.org/sqlite" // Pure Go SQLite driver
 )
 
