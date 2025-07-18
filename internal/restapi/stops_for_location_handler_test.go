@@ -114,7 +114,7 @@ func TestStopsForLocationRadius(t *testing.T) {
 	require.True(t, ok)
 	list, ok := data["list"].([]interface{})
 	require.True(t, ok)
-	assert.Len(t, list, 74)
+	assert.Len(t, list, 77)
 }
 
 func TestStopsForLocationLatAndLan(t *testing.T) {
