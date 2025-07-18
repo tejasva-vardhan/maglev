@@ -2,7 +2,7 @@ package utils
 
 import (
 	"context"
-	"github.com/jamespfennell/gtfs"
+	"github.com/OneBusAway/go-gtfs"
 	"maglev.onebusaway.org/gtfsdb"
 	"maglev.onebusaway.org/internal/models"
 )

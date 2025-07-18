@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jamespfennell/gtfs"
+	"github.com/OneBusAway/go-gtfs"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -3,7 +3,7 @@ package gtfsdb
 import (
 	"database/sql"
 	"fmt"
-	"github.com/jamespfennell/gtfs"
+	"github.com/OneBusAway/go-gtfs"
 	"log"
 	"log/slog"
 	"maglev.onebusaway.org/internal/logging"

@@ -7,7 +7,7 @@ import (
 	"maglev.onebusaway.org/internal/models"
 	"maglev.onebusaway.org/internal/utils"
 
-	"github.com/jamespfennell/gtfs"
+	"github.com/OneBusAway/go-gtfs"
 )
 
 func (api *RestAPI) stopsForLocationHandler(w http.ResponseWriter, r *http.Request) {

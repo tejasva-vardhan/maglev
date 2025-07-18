@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jamespfennell/gtfs"
+	"github.com/OneBusAway/go-gtfs"
 )
 
 // ExtractCodeID extracts the `code_id` from a string in the format `{agency_id}_{code_id}`.
