@@ -101,14 +101,14 @@ func transformBlockToEntry(block []gtfsdb.GetBlockDetailsRow, blockID, agencyID 
 				}
 
 				blockStopTime := models.BlockStopTime{
-					BlockSequence:      int(stop.StopSequence),
+					BlockSequence:      int(stop.StopSequence - 1),
 					DistanceAlongBlock: blockDistance,
 					StopTime: models.StopTime{
 						ArrivalTime:   int(stop.ArrivalTime),
 						DepartureTime: int(stop.DepartureTime),
 						DropOffType:   int(stop.DropOffType.Int64),
 						PickupType:    int(stop.PickupType.Int64),
-						StopId:        utils.FormCombinedID(agencyID, stop.StopID),
+						StopID:        utils.FormCombinedID(agencyID, stop.StopID),
 					},
 				}
 				blockStopTimes = append(blockStopTimes, blockStopTime)
