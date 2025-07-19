@@ -32,11 +32,3 @@ type BlockStopTime struct {
 	DistanceAlongBlock   float64  `json:"distanceAlongBlock"`
 	StopTime             StopTime `json:"stopTime"`
 }
-
-type StopTime struct {
-	ArrivalTime   int    `json:"arrivalTime"`
-	DepartureTime int    `json:"departureTime"`
-	DropOffType   int    `json:"dropOffType"`
-	PickupType    int    `json:"pickupType"`
-	StopId        string `json:"stopId"`
-}
