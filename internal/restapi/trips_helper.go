@@ -116,8 +116,15 @@ func (api *RestAPI) BuildTripStatus(
 	return status, nil
 }
 
-func (api *RestAPI) BuildTripSchedule(ctx context.Context, agencyID, tripID, nextTripID, previousTripID string, loc *time.Location) (*models.Schedule, error) {
-	stopTimes, err := api.GtfsManager.GtfsDB.Queries.GetStopTimesForTrip(ctx, tripID)
+func (api *RestAPI) BuildTripSchedule(ctx context.Context, agencyID string, serviceDate time.Time, trip *gtfsdb.Trip, loc *time.Location) (*models.Schedule, error) {
+
+	stopTimes, err := api.GtfsManager.GtfsDB.Queries.GetStopTimesForTrip(ctx, trip.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	var nextTripID, previousTripID string
+	nextTripID, previousTripID, err = api.GetNextAndPreviousTripIDs(ctx, trip, agencyID, serviceDate)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +150,7 @@ func (api *RestAPI) BuildTripSchedule(ctx context.Context, agencyID, tripID, nex
 	}, nil
 }
 
-func (api *RestAPI) GetNextAndPreviousTripIDs(ctx context.Context, trip *gtfsdb.Trip, tripID string, agencyID string, serviceDate time.Time) (nextTripID string, previousTripID string, err error) {
+func (api *RestAPI) GetNextAndPreviousTripIDs(ctx context.Context, trip *gtfsdb.Trip, agencyID string, serviceDate time.Time) (nextTripID string, previousTripID string, err error) {
 	if !trip.BlockID.Valid {
 		return "", "", nil
 	}
@@ -161,58 +168,59 @@ func (api *RestAPI) GetNextAndPreviousTripIDs(ctx context.Context, trip *gtfsdb.
 		TripID    string
 		StartTime int
 		EndTime   int
-		IsActive  bool
 	}
 
 	tripsWithDetails := []TripWithDetails{}
 
 	for _, blockTrip := range blockTrips {
-		isActive, err := api.GtfsManager.IsServiceActiveOnDate(ctx, blockTrip.ServiceID, serviceDate)
-		if err != nil || isActive == 0 {
-			continue
-		}
-
 		stopTimes, err := api.GtfsManager.GtfsDB.Queries.GetStopTimesForTrip(ctx, blockTrip.ID)
 		if err != nil || len(stopTimes) == 0 {
 			continue
 		}
 
-		startTime := int(^uint(0) >> 1) // max int value
-		endTime := 0
+		var startTime, endTime int
 
 		for _, st := range stopTimes {
-			if st.DepartureTime > 0 && int(st.DepartureTime) < startTime {
+			if st.DepartureTime > 0 {
 				startTime = int(st.DepartureTime)
-			}
-
-			if st.ArrivalTime > 0 && int(st.ArrivalTime) > endTime {
-				endTime = int(st.ArrivalTime)
+				break
 			}
 		}
 
-		if startTime != int(^uint(0)>>1) && endTime > 0 {
+		// Find the last stop time with a valid arrival time
+		for i := len(stopTimes) - 1; i >= 0; i-- {
+			if stopTimes[i].ArrivalTime > 0 {
+				endTime = int(stopTimes[i].ArrivalTime)
+				break
+			}
+		}
+
+		if startTime > 0 && endTime > 0 {
+			// Only include trips that match the service ID of the original trip
+			if trip.ServiceID != blockTrip.ServiceID {
+				continue
+			}
+
 			tripsWithDetails = append(tripsWithDetails, TripWithDetails{
 				TripID:    blockTrip.ID,
 				StartTime: startTime,
 				EndTime:   endTime,
-				IsActive:  isActive > 0,
 			})
 		}
 	}
 
+	// Sort trips chronologically by start time, then by trip ID for stability
+	// This ensures consistent ordering when trips have the same start time
 	sort.Slice(tripsWithDetails, func(i, j int) bool {
-		if tripsWithDetails[i].IsActive && !tripsWithDetails[j].IsActive {
-			return true
-		}
-		if !tripsWithDetails[i].IsActive && tripsWithDetails[j].IsActive {
-			return false
+		if tripsWithDetails[i].StartTime == tripsWithDetails[j].StartTime {
+			return tripsWithDetails[i].TripID < tripsWithDetails[j].TripID
 		}
 		return tripsWithDetails[i].StartTime < tripsWithDetails[j].StartTime
 	})
 
 	currentIndex := -1
 	for i, t := range tripsWithDetails {
-		if t.TripID == tripID {
+		if t.TripID == trip.ID {
 			currentIndex = i
 			break
 		}

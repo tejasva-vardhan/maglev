@@ -103,24 +103,15 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 
 	serviceDateMillis := serviceDate.Unix() * 1000
 
-	var nextTripID, previousTripID string
 	var schedule *models.Schedule
 	var status *models.TripStatusForTripDetails
-
-	if params.IncludeTrip || params.IncludeSchedule {
-		nextTripID, previousTripID, err = api.GetNextAndPreviousTripIDs(ctx, &trip, tripID, agencyID, serviceDate)
-		if err != nil {
-			api.serverErrorResponse(w, r, err)
-			return
-		}
-	}
 
 	if params.IncludeStatus {
 		status, _ = api.BuildTripStatus(ctx, agencyID, trip.ID, serviceDate, currentTime)
 	}
 
 	if params.IncludeSchedule {
-		schedule, err = api.BuildTripSchedule(ctx, agencyID, tripID, nextTripID, previousTripID, loc)
+		schedule, err = api.BuildTripSchedule(ctx, agencyID, serviceDate, &trip, loc)
 		if err != nil {
 			api.serverErrorResponse(w, r, err)
 			return
@@ -142,7 +133,7 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 		SituationIDs: situationIDs,
 	}
 
-	if status != nil {
+	if status != nil && status.VehicleID != "" {
 		tripDetails.Status = status
 	}
 
@@ -151,11 +142,17 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 	if params.IncludeTrip {
 		tripsToInclude := []string{utils.FormCombinedID(agencyID, trip.ID)}
 
-		if nextTripID != "" {
-			tripsToInclude = append(tripsToInclude, nextTripID)
+		if params.IncludeSchedule && schedule != nil {
+			if schedule.NextTripID != "" {
+				tripsToInclude = append(tripsToInclude, schedule.NextTripID)
+			}
+			if schedule.PreviousTripID != "" {
+				tripsToInclude = append(tripsToInclude, schedule.PreviousTripID)
+			}
 		}
-		if previousTripID != "" {
-			tripsToInclude = append(tripsToInclude, previousTripID)
+
+		if params.IncludeStatus && status != nil && status.ActiveTripID != "" {
+			tripsToInclude = append(tripsToInclude, status.ActiveTripID)
 		}
 
 		referencedTrips, err := api.buildReferencedTrips(ctx, agencyID, tripsToInclude, trip)
