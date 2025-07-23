@@ -168,20 +168,6 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 		references.Trips = referencedTripsIface
 	}
 
-	routeModel := models.NewRoute(
-		utils.FormCombinedID(agencyID, route.ID),
-		agencyID,
-		route.ShortName.String,
-		route.LongName.String,
-		route.Desc.String,
-		models.RouteType(route.Type),
-		route.Url.String,
-		route.Color.String,
-		route.TextColor.String,
-		route.ShortName.String,
-	)
-	references.Routes = append(references.Routes, routeModel)
-
 	agencyModel := models.NewAgencyReference(
 		agency.ID,
 		agency.Name,
@@ -203,6 +189,18 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		references.Stops = stops
+
+		routes, err := api.BuildRouteReference(ctx, agencyID, stops)
+		if err != nil {
+			api.serverErrorResponse(w, r, err)
+			return
+		}
+
+		routesIface := make([]interface{}, len(routes))
+		for i, route := range routes {
+			routesIface[i] = route
+		}
+		references.Routes = routesIface
 	}
 
 	response := models.NewEntryResponse(tripDetails, references)
@@ -349,4 +347,52 @@ func (api *RestAPI) buildStopReferences(ctx context.Context, agencyID string, st
 	}
 
 	return modelStops, nil
+}
+
+func (api *RestAPI) BuildRouteReference(ctx context.Context, agencyID string, stops []models.Stop) ([]models.Route, error) {
+
+	routeIDSet := make(map[string]bool)
+	originalRouteIDs := make([]string, 0)
+
+	for _, stop := range stops {
+		for _, routeID := range stop.StaticRouteIDs {
+			_, originalRouteID, err := utils.ExtractAgencyIDAndCodeID(routeID)
+			if err != nil {
+				continue
+			}
+
+			if !routeIDSet[originalRouteID] {
+				routeIDSet[originalRouteID] = true
+				originalRouteIDs = append(originalRouteIDs, originalRouteID)
+			}
+		}
+	}
+
+	if len(originalRouteIDs) == 0 {
+		return []models.Route{}, nil
+	}
+
+	routes, err := api.GtfsManager.GtfsDB.Queries.GetRoutesByIDs(ctx, originalRouteIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	modelRoutes := make([]models.Route, 0, len(routes))
+	for _, route := range routes {
+		routeModel := models.Route{
+			ID:                utils.FormCombinedID(agencyID, route.ID),
+			AgencyID:          agencyID,
+			ShortName:         route.ShortName.String,
+			LongName:          route.LongName.String,
+			Description:       route.Desc.String,
+			Type:              models.RouteType(route.Type),
+			URL:               route.Url.String,
+			Color:             route.Color.String,
+			TextColor:         route.TextColor.String,
+			NullSafeShortName: route.ShortName.String,
+		}
+		modelRoutes = append(modelRoutes, routeModel)
+	}
+
+	return modelRoutes, nil
 }
