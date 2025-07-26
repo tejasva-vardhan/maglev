@@ -1,7 +1,7 @@
 package gtfs
 
 import (
-	"github.com/jamespfennell/gtfs"
+	"github.com/OneBusAway/go-gtfs"
 )
 
 func (m *Manager) MockAddAgency(id, name string) {
