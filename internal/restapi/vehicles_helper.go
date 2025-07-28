@@ -9,6 +9,24 @@ import (
 	"maglev.onebusaway.org/internal/utils"
 )
 
+// GetVehicleStatusAndPhase returns status and phase based on GTFS-RT CurrentStatus
+func GetVehicleStatusAndPhase(vehicle *gtfs.Vehicle) (status string, phase string) {
+	if vehicle == nil || vehicle.CurrentStatus == nil {
+		return "SCHEDULED", "scheduled"
+	}
+
+	switch *vehicle.CurrentStatus {
+	case 0: // INCOMING_AT
+		return "INCOMING_AT", "approaching"
+	case 1: // STOPPED_AT
+		return "STOPPED_AT", "stopped"
+	case 2: // IN_TRANSIT_TO
+		return "IN_TRANSIT_TO", "in_progress"
+	default:
+		return "SCHEDULED", "scheduled"
+	}
+}
+
 func (api *RestAPI) BuildVehicleStatus(
 	ctx context.Context,
 	vehicle *gtfs.Vehicle,
@@ -17,8 +35,7 @@ func (api *RestAPI) BuildVehicleStatus(
 	status *models.TripStatusForTripDetails,
 ) {
 	if vehicle == nil {
-		status.Phase = "scheduled"
-		status.Status = "SCHEDULED"
+		status.Status, status.Phase = GetVehicleStatusAndPhase(nil)
 		return
 	}
 
@@ -46,25 +63,7 @@ func (api *RestAPI) BuildVehicleStatus(
 		status.LastKnownOrientation = float64(obaOrientation)
 	}
 
-	if vehicle.CurrentStatus != nil {
-		switch *vehicle.CurrentStatus {
-		case 0:
-			status.Status = "INCOMING_AT"
-			status.Phase = "approaching"
-		case 1:
-			status.Status = "STOPPED_AT"
-			status.Phase = "stopped"
-		case 2:
-			status.Status = "IN_TRANSIT_TO"
-			status.Phase = "in_progress"
-		default:
-			status.Status = "SCHEDULED"
-			status.Phase = "scheduled"
-		}
-	} else {
-		status.Status = "SCHEDULED"
-		status.Phase = "scheduled"
-	}
+	status.Status, status.Phase = GetVehicleStatusAndPhase(vehicle)
 
 	if vehicle.Trip != nil && vehicle.Trip.ID.ID != "" {
 		status.ActiveTripID = utils.FormCombinedID(agencyID, vehicle.Trip.ID.ID)

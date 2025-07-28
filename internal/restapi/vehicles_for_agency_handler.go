@@ -46,25 +46,7 @@ func (api *RestAPI) vehiclesForAgencyHandler(w http.ResponseWriter, r *http.Requ
 		}
 
 		// Set status and phase based on current status
-		if vehicle.CurrentStatus != nil {
-			switch *vehicle.CurrentStatus {
-			case 0: // INCOMING_AT
-				vehicleStatus.Status = "INCOMING_AT"
-				vehicleStatus.Phase = "approaching"
-			case 1: // STOPPED_AT
-				vehicleStatus.Status = "STOPPED_AT"
-				vehicleStatus.Phase = "stopped"
-			case 2: // IN_TRANSIT_TO
-				vehicleStatus.Status = "IN_TRANSIT_TO"
-				vehicleStatus.Phase = "in_progress"
-			default:
-				vehicleStatus.Status = "SCHEDULED"
-				vehicleStatus.Phase = "scheduled"
-			}
-		} else {
-			vehicleStatus.Status = "SCHEDULED"
-			vehicleStatus.Phase = "scheduled"
-		}
+		vehicleStatus.Status, vehicleStatus.Phase = GetVehicleStatusAndPhase(&vehicle)
 
 		// Build trip status if trip is available
 		if vehicle.Trip != nil {
