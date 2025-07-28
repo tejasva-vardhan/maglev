@@ -40,7 +40,7 @@ func TestTripsForLocationHandler_DifferentAreas(t *testing.T) {
 			lat:         40.5865,
 			lon:         -122.3917,
 			latSpan:     2,
-			lonSpan:     2,
+			lonSpan:     3,
 			minExpected: 0,
 			maxExpected: 100,
 		},

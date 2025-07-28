@@ -553,7 +553,7 @@ FROM
 WHERE
     t.block_id = ?
 ORDER BY
-    t.id, st.stop_sequence
+    t.id, st.stop_sequence;
 
 -- name: GetStopTimesByStopIDs :many
 SELECT
@@ -567,17 +567,4 @@ WHERE
 SELECT
     *
 FROM
-    trips
--- name: GetStopTimesByStopIDs :many
-SELECT
-    *
-FROM
-    stop_times
-WHERE
-    stop_id IN (sqlc.slice('stop_ids'));
-
--- name: ListTrips :many
-SELECT
-    *
-FROM
-    trips
+    trips;
