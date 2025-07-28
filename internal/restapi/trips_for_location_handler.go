@@ -38,7 +38,7 @@ func (api *RestAPI) tripsForLocationHandler(w http.ResponseWriter, r *http.Reque
 	tripAgencyResolver := NewTripAgencyResolver(allRoutes, allTrips)
 
 	result := api.buildTripsForLocationEntries(ctx, activeTrips, bbox, tripAgencyResolver, includeSchedule, currentLocation, todayMidnight, serviceDate, w, r)
-	references := api.BuildReference(ctx, includeTrip, allRoutes, allTrips, stops, result)
+	references := api.BuildReference(w, r, ctx, includeTrip, allRoutes, allTrips, stops, result)
 	response := models.NewListResponseWithRange(result, references, len(result) == 0)
 	api.sendResponse(w, r, response)
 }
@@ -241,7 +241,7 @@ func buildStopTimesList(api *RestAPI, ctx context.Context, stopTimes []gtfsdb.St
 	}
 	return stopTimesList
 }
-func (api *RestAPI) BuildReference(ctx context.Context, includeTrip bool, allRoutes []gtfsdb.Route, allTrips []gtfsdb.Trip, stops []*gtfs.Stop, trips []models.TripsForLocationListEntry) models.ReferencesModel {
+func (api *RestAPI) BuildReference(w http.ResponseWriter, r *http.Request, ctx context.Context, includeTrip bool, allRoutes []gtfsdb.Route, allTrips []gtfsdb.Trip, stops []*gtfs.Stop, trips []models.TripsForLocationListEntry) models.ReferencesModel {
 	// Collect present trip IDs
 	presentTrips := make(map[string]models.Trip, len(trips))
 	presentRoutes := make(map[string]models.Route)
@@ -317,7 +317,7 @@ func (api *RestAPI) BuildReference(ctx context.Context, includeTrip bool, allRou
 			)
 			currentAgency, err := api.GtfsManager.GtfsDB.Queries.GetAgency(ctx, route.AgencyID)
 			if err != nil {
-				api.serverErrorResponse(nil, nil, err)
+				api.serverErrorResponse(w, r, err)
 				return models.ReferencesModel{}
 			}
 			presentAgencies[currentAgency.ID] = models.NewAgencyReference(
