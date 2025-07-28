@@ -229,7 +229,10 @@ func (api *RestAPI) GetNextAndPreviousTripIDs(ctx context.Context, trip *gtfsdb.
 			nextTripID = utils.FormCombinedID(agencyID, tripsWithDetails[currentIndex+1].TripID)
 		}
 	}
-
+	if currentIndex == -1 {
+		// If the trip is not found, return empty values
+		return "", "", nil, nil
+	}
 	return nextTripID, previousTripID, tripsWithDetails[currentIndex].StopTimes, nil
 }
 
