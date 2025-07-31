@@ -266,9 +266,9 @@ func (api *RestAPI) arrivalAndDepartureForStopHandler(w http.ResponseWriter, r *
 		predictedDepartureTime,
 		currentTime.UnixMilli(),
 		predicted,
-		true, // arrivalEnabled
-		true, // departureEnabled
-		int(targetStopTime.StopSequence),
+		true,                               // arrivalEnabled
+		true,                               // departureEnabled
+		int(targetStopTime.StopSequence)-1, // Zero-based index
 		totalStopsInTrip,
 		numberOfStopsAway,
 		blockTripSequence,
