@@ -50,7 +50,7 @@ func (api *RestAPI) BuildTripStatus(
 	scheduleDeviation := api.calculateScheduleDeviationFromTripUpdates(tripID)
 	status.ScheduleDeviation = scheduleDeviation
 
-	blockTripSequence := api.setBlockTripSequence(ctx, tripID, status)
+	blockTripSequence := api.setBlockTripSequence(ctx, tripID, serviceDate, status)
 	if blockTripSequence > 0 {
 		status.BlockTripSequence = blockTripSequence
 	}
@@ -393,19 +393,67 @@ func getDistanceAlongShape(lat, lon float64, shape []gtfs.ShapePoint) float64 {
 	return total
 }
 
-func (api *RestAPI) setBlockTripSequence(ctx context.Context, tripID string, status *models.TripStatusForTripDetails) int {
+func (api *RestAPI) setBlockTripSequence(ctx context.Context, tripID string, serviceDate time.Time, status *models.TripStatusForTripDetails) int {
+	return api.calculateBlockTripSequence(ctx, tripID, serviceDate)
+}
+
+// calculateBlockTripSequence calculates the index of a trip within its block's ordered trip sequence
+// for trips that are active on the given service date
+func (api *RestAPI) calculateBlockTripSequence(ctx context.Context, tripID string, serviceDate time.Time) int {
 	blockID, err := api.GtfsManager.GtfsDB.Queries.GetBlockIDByTripID(ctx, tripID)
 
 	if err != nil || !blockID.Valid || blockID.String == "" {
 		return 0
 	}
 
-	blockTrips, err := api.GtfsManager.GtfsDB.Queries.GetTripsByBlockIDOrdered(ctx, blockID)
-	if err == nil {
-		for _, bt := range blockTrips {
-			if bt.ID == tripID {
-				return status.BlockTripSequence
+	blockTrips, err := api.GtfsManager.GtfsDB.Queries.GetTripsByBlockID(ctx, blockID)
+	if err != nil {
+		return 0
+	}
+
+	type TripWithDetails struct {
+		TripID    string
+		StartTime int
+	}
+
+	activeTrips := []TripWithDetails{}
+
+	for _, blockTrip := range blockTrips {
+		// First check if trip is active on the service date
+		isActive, err := api.GtfsManager.IsServiceActiveOnDate(ctx, blockTrip.ServiceID, serviceDate)
+		if err != nil || isActive == 0 {
+			continue
+		}
+
+		// Second, get the start time for this trip
+		stopTimes, err := api.GtfsManager.GtfsDB.Queries.GetStopTimesForTrip(ctx, blockTrip.ID)
+		if err != nil || len(stopTimes) == 0 {
+			continue
+		}
+
+		startTime := int(^uint(0) >> 1)
+		for _, st := range stopTimes {
+			if st.DepartureTime > 0 && int(st.DepartureTime) < startTime {
+				startTime = int(st.DepartureTime)
 			}
+		}
+
+		if startTime != int(^uint(0)>>1) {
+			activeTrips = append(activeTrips, TripWithDetails{
+				TripID:    blockTrip.ID,
+				StartTime: startTime,
+			})
+		}
+	}
+
+	// Third, sort trips by start time
+	sort.Slice(activeTrips, func(i, j int) bool {
+		return activeTrips[i].StartTime < activeTrips[j].StartTime
+	})
+
+	for i, trip := range activeTrips {
+		if trip.TripID == tripID {
+			return i
 		}
 	}
 	return 0

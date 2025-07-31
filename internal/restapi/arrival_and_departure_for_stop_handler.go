@@ -249,7 +249,7 @@ func (api *RestAPI) arrivalAndDepartureForStopHandler(w http.ResponseWriter, r *
 
 	totalStopsInTrip := len(stopTimes)
 
-	blockTripSequence := 0 // TODO: Add logic to calculate block trip sequence
+	blockTripSequence := api.calculateBlockTripSequence(ctx, tripID, serviceDate)
 
 	arrival := models.NewArrivalAndDeparture(
 		utils.FormCombinedID(agencyID, route.ID),
