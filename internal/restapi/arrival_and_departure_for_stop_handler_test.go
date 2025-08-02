@@ -190,20 +190,30 @@ func TestArrivalAndDepartureForStopHandlerRequiresTripId(t *testing.T) {
 	agency := api.GtfsManager.GetAgencies()[0]
 	stops := api.GtfsManager.GetStops()
 
-	if len(stops) == 0 {
-		t.Skip("No stops available for testing")
-	}
-
 	stopID := utils.FormCombinedID(agency.Id, stops[0].Id)
 	serviceDate := time.Now().Unix() * 1000
 
-	_, resp, model := serveAndRetrieveEndpoint(t,
-		"/api/where/arrival-and-departure-for-stop/"+stopID+".json?key=TEST&serviceDate="+
-			fmt.Sprintf("%d", serviceDate))
+	mux := http.NewServeMux()
+	api.SetRoutes(mux)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/api/where/arrival-and-departure-for-stop/" + stopID +
+		".json?key=TEST&serviceDate=" + fmt.Sprintf("%d", serviceDate))
+	require.NoError(t, err)
+	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-	assert.Equal(t, http.StatusBadRequest, model.Code)
-	assert.Contains(t, model.Text, "validation")
+
+	var errorResponse struct {
+		FieldErrors map[string][]string `json:"fieldErrors"`
+	}
+	err = json.NewDecoder(resp.Body).Decode(&errorResponse)
+	require.NoError(t, err)
+
+	assert.Contains(t, errorResponse.FieldErrors, "tripId")
+	assert.Len(t, errorResponse.FieldErrors["tripId"], 1)
+	assert.Equal(t, "missingRequiredField", errorResponse.FieldErrors["tripId"][0])
 }
 
 func TestArrivalAndDepartureForStopHandlerRequiresServiceDate(t *testing.T) {
@@ -213,21 +223,28 @@ func TestArrivalAndDepartureForStopHandlerRequiresServiceDate(t *testing.T) {
 	stops := api.GtfsManager.GetStops()
 	trips := api.GtfsManager.GetTrips()
 
-	if len(stops) == 0 {
-		t.Skip("No stops available for testing")
-	}
-
-	if len(trips) == 0 {
-		t.Skip("No trips available for testing")
-	}
-
 	stopID := utils.FormCombinedID(agency.Id, stops[0].Id)
 	tripID := utils.FormCombinedID(agency.Id, trips[0].ID)
 
-	_, resp, model := serveAndRetrieveEndpoint(t,
-		"/api/where/arrival-and-departure-for-stop/"+stopID+".json?key=TEST&tripId="+tripID)
+	mux := http.NewServeMux()
+	api.SetRoutes(mux)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/api/where/arrival-and-departure-for-stop/" + stopID +
+		".json?key=TEST&tripId=" + tripID)
+	require.NoError(t, err)
+	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-	assert.Equal(t, http.StatusBadRequest, model.Code)
-	assert.Contains(t, model.Text, "validation")
+
+	var errorResponse struct {
+		FieldErrors map[string][]string `json:"fieldErrors"`
+	}
+	err = json.NewDecoder(resp.Body).Decode(&errorResponse)
+	require.NoError(t, err)
+
+	assert.Contains(t, errorResponse.FieldErrors, "serviceDate")
+	assert.Len(t, errorResponse.FieldErrors["serviceDate"], 1)
+	assert.Equal(t, "missingRequiredField", errorResponse.FieldErrors["serviceDate"][0])
 }

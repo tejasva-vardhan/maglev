@@ -86,7 +86,7 @@ func (api *RestAPI) arrivalAndDepartureForStopHandler(w http.ResponseWriter, r *
 
 	if params.TripID == "" {
 		fieldErrors := map[string][]string{
-			"tripId": {"tripId parameter is required"},
+			"tripId": {"missingRequiredField"},
 		}
 		api.validationErrorResponse(w, r, fieldErrors)
 		return
@@ -94,7 +94,7 @@ func (api *RestAPI) arrivalAndDepartureForStopHandler(w http.ResponseWriter, r *
 
 	if params.ServiceDate == nil {
 		fieldErrors := map[string][]string{
-			"serviceDate": {"serviceDate parameter is required"},
+			"serviceDate": {"missingRequiredField"},
 		}
 		api.validationErrorResponse(w, r, fieldErrors)
 		return
@@ -102,10 +102,7 @@ func (api *RestAPI) arrivalAndDepartureForStopHandler(w http.ResponseWriter, r *
 
 	_, tripID, err := utils.ExtractAgencyIDAndCodeID(params.TripID)
 	if err != nil {
-		fieldErrors := map[string][]string{
-			"tripId": {"invalid tripId format"},
-		}
-		api.validationErrorResponse(w, r, fieldErrors)
+		api.serverErrorResponse(w, r, err)
 		return
 	}
 
