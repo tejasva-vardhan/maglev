@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	"maglev.onebusaway.org/gtfsdb"
 	"maglev.onebusaway.org/internal/models"
 	"maglev.onebusaway.org/internal/utils"
 )
@@ -305,27 +306,74 @@ func (api *RestAPI) arrivalAndDepartureForStopHandler(w http.ResponseWriter, r *
 	)
 	references.Trips = append(references.Trips, tripRef)
 
-	routesForStop, _ := api.GtfsManager.GtfsDB.Queries.GetRoutesForStops(ctx, []string{stopCode})
-	combinedRouteIDs := make([]string, len(routesForStop))
-	for i, route := range routesForStop {
-		combinedRouteIDs[i] = utils.FormCombinedID(agencyID, route.ID)
+	// Build stops references
+	stopIDSet := make(map[string]bool)
+	routeIDSet := make(map[string]*gtfsdb.Route)
+
+	stopIDSet[stop.ID] = true
+
+	// Include the next and closest stops if trip status is not null to stops reference
+	if tripStatus != nil {
+		if tripStatus.NextStop != "" {
+			_, nextStopID, err := utils.ExtractAgencyIDAndCodeID(tripStatus.NextStop)
+
+			if err != nil {
+				api.serverErrorResponse(w, r, err)
+			}
+
+			stopIDSet[nextStopID] = true
+		}
+		if tripStatus.ClosestStop != "" {
+			_, closestStopID, err := utils.ExtractAgencyIDAndCodeID(tripStatus.ClosestStop)
+
+			if err != nil {
+				api.serverErrorResponse(w, r, err)
+			}
+			stopIDSet[closestStopID] = true
+		}
 	}
 
-	stopRef := models.Stop{
-		ID:                 stopID,
-		Name:               stop.Name.String,
-		Lat:                stop.Lat,
-		Lon:                stop.Lon,
-		Code:               stop.Code.String,
-		Direction:          "N", // TODO: Calculate actual direction
-		LocationType:       int(stop.LocationType.Int64),
-		WheelchairBoarding: "UNKNOWN",
-		RouteIDs:           combinedRouteIDs,
-		StaticRouteIDs:     combinedRouteIDs,
-	}
-	references.Stops = append(references.Stops, stopRef)
+	for stopID := range stopIDSet {
+		stopData, err := api.GtfsManager.GtfsDB.Queries.GetStop(ctx, stopID)
+		if err != nil {
+			continue
+		}
 
-	for _, route := range routesForStop {
+		routesForThisStop, _ := api.GtfsManager.GtfsDB.Queries.GetRoutesForStops(ctx, []string{stopID})
+		combinedRouteIDs := make([]string, len(routesForThisStop))
+		for i, route := range routesForThisStop {
+			combinedRouteIDs[i] = utils.FormCombinedID(agencyID, route.ID)
+			routeCopy := gtfsdb.Route{
+				ID:        route.ID,
+				AgencyID:  route.AgencyID,
+				ShortName: route.ShortName,
+				LongName:  route.LongName,
+				Desc:      route.Desc,
+				Type:      route.Type,
+				Url:       route.Url,
+				Color:     route.Color,
+				TextColor: route.TextColor,
+			}
+			routeIDSet[route.ID] = &routeCopy
+		}
+
+		stopRef := models.Stop{
+			ID:                 utils.FormCombinedID(agencyID, stopData.ID),
+			Name:               stopData.Name.String,
+			Lat:                stopData.Lat,
+			Lon:                stopData.Lon,
+			Code:               stopData.Code.String,
+			Direction:          "N", // TODO: Calculate actual direction
+			LocationType:       int(stopData.LocationType.Int64),
+			WheelchairBoarding: "UNKNOWN",
+			RouteIDs:           combinedRouteIDs,
+			StaticRouteIDs:     combinedRouteIDs,
+		}
+		references.Stops = append(references.Stops, stopRef)
+	}
+
+	// Build routes references
+	for _, route := range routeIDSet {
 		routeRef := models.NewRoute(
 			utils.FormCombinedID(agencyID, route.ID),
 			agencyID,
