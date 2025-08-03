@@ -293,20 +293,6 @@ func (api *RestAPI) arrivalAndDepartureForStopHandler(w http.ResponseWriter, r *
 		false,
 	))
 
-	routeRef := models.NewRoute(
-		utils.FormCombinedID(agencyID, route.ID),
-		agencyID,
-		route.ShortName.String,
-		route.LongName.String,
-		route.Desc.String,
-		models.RouteType(route.Type),
-		route.Url.String,
-		route.Color.String,
-		route.TextColor.String,
-		route.ShortName.String,
-	)
-	references.Routes = append(references.Routes, routeRef)
-
 	tripRef := models.NewTripReference(
 		utils.FormCombinedID(agencyID, tripID),
 		utils.FormCombinedID(agencyID, trip.RouteID),
@@ -338,6 +324,22 @@ func (api *RestAPI) arrivalAndDepartureForStopHandler(w http.ResponseWriter, r *
 		StaticRouteIDs:     combinedRouteIDs,
 	}
 	references.Stops = append(references.Stops, stopRef)
+
+	for _, route := range routesForStop {
+		routeRef := models.NewRoute(
+			utils.FormCombinedID(agencyID, route.ID),
+			agencyID,
+			route.ShortName.String,
+			route.LongName.String,
+			route.Desc.String,
+			models.RouteType(route.Type),
+			route.Url.String,
+			route.Color.String,
+			route.TextColor.String,
+			route.ShortName.String,
+		)
+		references.Routes = append(references.Routes, routeRef)
+	}
 
 	response := models.NewEntryResponse(arrival, references)
 	api.sendResponse(w, r, response)
