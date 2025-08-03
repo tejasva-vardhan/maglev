@@ -230,11 +230,11 @@ WHERE
     stop_times.stop_id = ?;
 
 -- name: GetStopsWithinBounds :many
-SELECT 
+SELECT
     *
-FROM 
+FROM
     stops
-WHERE 
+WHERE
     lat >= ? AND lat <= ?
     AND lon >= ? AND lon <= ?;
 
@@ -525,7 +525,6 @@ WHERE
 ORDER BY
     id;
 
-<<<<<<< HEAD
 -- name: GetRoutesByIDs :many
 SELECT
     *
@@ -535,9 +534,8 @@ WHERE
     id IN (sqlc.slice('route_ids'))
 ORDER BY
     id;
-=======
--- name: GetBlockDetails :many
 
+-- name: GetBlockDetails :many
 SELECT
     t.service_id,
     t.id as trip_id,
@@ -559,5 +557,4 @@ FROM
 WHERE
     t.block_id = ?
 ORDER BY
-    t.id, st.stop_sequence
->>>>>>> origin/main
+    t.id, st.stop_sequence;
