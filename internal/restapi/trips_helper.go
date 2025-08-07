@@ -193,6 +193,7 @@ func (api *RestAPI) GetNextAndPreviousTripIDs(ctx context.Context, trip *gtfsdb.
 
 		var startTime, endTime int
 
+		// Find the first stop time with a valid departure time (intentionally only the first)
 		for _, st := range stopTimes {
 			if st.DepartureTime > 0 {
 				startTime = int(st.DepartureTime)
@@ -222,8 +223,8 @@ func (api *RestAPI) GetNextAndPreviousTripIDs(ctx context.Context, trip *gtfsdb.
 		}
 	}
 
-	// Sort trips chronologically by start time, then by trip ID for stability
-	// This ensures consistent ordering when trips have the same start time
+	// Sort trips first by start time (chronologically), and then by trip ID to ensure a stable and deterministic order when start times are equal.
+	// This ensures consistent ordering of trips with identical start times.
 	sort.Slice(tripsWithDetails, func(i, j int) bool {
 		if tripsWithDetails[i].StartTime == tripsWithDetails[j].StartTime {
 			return tripsWithDetails[i].TripID < tripsWithDetails[j].TripID
@@ -476,7 +477,7 @@ func (api *RestAPI) calculatePreciseDistanceAlongTrip(ctx context.Context, stopI
 	stopLat, stopLon := stop.Lat, stop.Lon
 
 	// Find the closest point on the shape to this stop
-	var minDistance float64 = math.MaxFloat64
+	var minDistance float64 = math.Inf(1)
 	var closestSegmentIndex int
 	var projectionRatio float64
 

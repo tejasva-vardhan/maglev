@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -272,7 +273,7 @@ func (manager *Manager) GetVehicleForTrip(tripID string) *gtfs.Vehicle {
 
 	requestedTrip, err := manager.GtfsDB.Queries.GetTrip(ctx, tripID)
 	if err != nil || !requestedTrip.BlockID.Valid {
-		fmt.Printf("Could not get block ID for trip %s: %v\n", tripID, err)
+		fmt.Fprintf(os.Stderr, "Could not get block ID for trip %s: %v\n", tripID, err)
 		return nil
 	}
 
@@ -280,7 +281,7 @@ func (manager *Manager) GetVehicleForTrip(tripID string) *gtfs.Vehicle {
 
 	blockTrips, err := manager.GtfsDB.Queries.GetTripsByBlockID(ctx, requestedTrip.BlockID)
 	if err != nil {
-		fmt.Printf("Could not get trips for block %s: %v\n", requestedBlockID, err)
+		fmt.Fprintf(os.Stderr, "Could not get trips for block %s: %v\n", requestedBlockID, err)
 		return nil
 	}
 
