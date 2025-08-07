@@ -118,7 +118,7 @@ func (api *RestAPI) tripForVehicleHandler(w http.ResponseWriter, r *http.Request
 
 	var nextTripID, previousTripID string
 	if params.IncludeTrip || params.IncludeSchedule {
-		nextTripID, previousTripID, err = api.GetNextAndPreviousTripIDs(ctx, &trip, tripID, agencyID, serviceDate)
+		nextTripID, previousTripID, _, err = api.GetNextAndPreviousTripIDs(ctx, &trip, tripID, agencyID, serviceDate)
 		if err != nil {
 			api.serverErrorResponse(w, r, err)
 			return

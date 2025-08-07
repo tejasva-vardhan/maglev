@@ -143,18 +143,18 @@ func (api *RestAPI) BuildTripSchedule(ctx context.Context, agencyID, tripID, nex
 	}, nil
 }
 
-func (api *RestAPI) GetNextAndPreviousTripIDs(ctx context.Context, trip *gtfsdb.Trip, tripID string, agencyID string, serviceDate time.Time) (nextTripID string, previousTripID string, err error) {
+func (api *RestAPI) GetNextAndPreviousTripIDs(ctx context.Context, trip *gtfsdb.Trip, tripID string, agencyID string, serviceDate time.Time) (nextTripID string, previousTripID string, stopTimes []gtfsdb.StopTime, err error) {
 	if !trip.BlockID.Valid {
-		return "", "", nil
+		return "", "", nil, nil
 	}
 
 	blockTrips, err := api.GtfsManager.GtfsDB.Queries.GetTripsByBlockID(ctx, trip.BlockID)
 	if err != nil {
-		return "", "", err
+		return "", "", nil, err
 	}
 
 	if len(blockTrips) == 0 {
-		return "", "", nil
+		return "", "", nil, nil
 	}
 
 	type TripWithDetails struct {
@@ -162,9 +162,10 @@ func (api *RestAPI) GetNextAndPreviousTripIDs(ctx context.Context, trip *gtfsdb.
 		StartTime int
 		EndTime   int
 		IsActive  bool
+		StopTimes []gtfsdb.StopTime
 	}
 
-	tripsWithDetails := []TripWithDetails{}
+	var tripsWithDetails []TripWithDetails
 
 	for _, blockTrip := range blockTrips {
 		isActive, err := api.GtfsManager.IsServiceActiveOnDate(ctx, blockTrip.ServiceID, serviceDate)
@@ -196,6 +197,7 @@ func (api *RestAPI) GetNextAndPreviousTripIDs(ctx context.Context, trip *gtfsdb.
 				StartTime: startTime,
 				EndTime:   endTime,
 				IsActive:  isActive > 0,
+				StopTimes: stopTimes,
 			})
 		}
 	}
@@ -227,8 +229,11 @@ func (api *RestAPI) GetNextAndPreviousTripIDs(ctx context.Context, trip *gtfsdb.
 			nextTripID = utils.FormCombinedID(agencyID, tripsWithDetails[currentIndex+1].TripID)
 		}
 	}
-
-	return nextTripID, previousTripID, nil
+	if currentIndex == -1 {
+		// If the trip is not found, return empty values
+		return "", "", nil, nil
+	}
+	return nextTripID, previousTripID, tripsWithDetails[currentIndex].StopTimes, nil
 }
 
 func findNextStop(
@@ -439,4 +444,45 @@ func (api *RestAPI) calculateScheduleDeviationFromTripUpdates(
 	}
 
 	return int(bestDeviation)
+}
+
+func (api *RestAPI) GetSituationIDsForTrip(tripID string) []string {
+	alerts := api.GtfsManager.GetAlertsForTrip(tripID)
+	situationIDs := make([]string, 0, len(alerts))
+	for _, alert := range alerts {
+		if alert.ID != "" {
+			situationIDs = append(situationIDs, alert.ID)
+		}
+	}
+	return situationIDs
+}
+
+type TripAgencyResolver struct {
+	RouteToAgency map[string]string
+	TripToRoute   map[string]string
+}
+
+// NewTripAgencyResolver creates a new TripAgencyResolver that maps trip IDs to their respective agency IDs.
+func NewTripAgencyResolver(allRoutes []gtfsdb.Route, allTrips []gtfsdb.Trip) *TripAgencyResolver {
+	routeToAgency := make(map[string]string, len(allRoutes))
+	for _, route := range allRoutes {
+		routeToAgency[route.ID] = route.AgencyID
+	}
+	tripToRoute := make(map[string]string, len(allTrips))
+	for _, trip := range allTrips {
+		tripToRoute[trip.ID] = trip.RouteID
+	}
+	return &TripAgencyResolver{
+		RouteToAgency: routeToAgency,
+		TripToRoute:   tripToRoute,
+	}
+}
+
+// GetAgencyNameByTripID retrieves the agency name for a given trip ID.
+func (r *TripAgencyResolver) GetAgencyNameByTripID(tripID string) string {
+	routeID := r.TripToRoute[tripID]
+
+	agency := r.RouteToAgency[routeID]
+
+	return agency
 }
