@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -15,6 +16,8 @@ import (
 	"github.com/OneBusAway/go-gtfs"
 	_ "modernc.org/sqlite" // Pure Go SQLite driver
 )
+
+const NoRadiusLimit = -1
 
 // Manager manages the GTFS data and provides methods to access it
 type Manager struct {
@@ -225,6 +228,9 @@ func (manager *Manager) GetStopsForLocation(ctx context.Context, lat, lon float6
 		distance := utils.Haversine(lat, lon, *gtfsStop.Latitude, *gtfsStop.Longitude)
 		if distance <= radius {
 			candidates = append(candidates, stopWithDistance{gtfsStop, distance})
+		} else if radius == NoRadiusLimit {
+			// No radius specified; include all stops within the given latSpan and lonSpan
+			candidates = append(candidates, stopWithDistance{gtfsStop, distance})
 		}
 	}
 
@@ -261,12 +267,36 @@ func (manager *Manager) VehiclesForAgencyID(agencyID string) []gtfs.Vehicle {
 	return vehicles
 }
 
+// This function retrieves a vehicle for a specific trip ID or finds the first vehicle that is part of the block for that trip.
+// Note we depend on getting the vehicle that may not match the trip ID exactly, but is part of the same block.
 func (manager *Manager) GetVehicleForTrip(tripID string) *gtfs.Vehicle {
 	manager.realTimeMutex.RLock()
 	defer manager.realTimeMutex.RUnlock()
 
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	requestedTrip, err := manager.GtfsDB.Queries.GetTrip(ctx, tripID)
+	if err != nil || !requestedTrip.BlockID.Valid {
+		fmt.Fprintf(os.Stderr, "Could not get block ID for trip %s: %v\n", tripID, err)
+		return nil
+	}
+
+	requestedBlockID := requestedTrip.BlockID.String
+
+	blockTrips, err := manager.GtfsDB.Queries.GetTripsByBlockID(ctx, requestedTrip.BlockID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Could not get trips for block %s: %v\n", requestedBlockID, err)
+		return nil
+	}
+
+	blockTripIDs := make(map[string]bool)
+	for _, trip := range blockTrips {
+		blockTripIDs[trip.ID] = true
+	}
+
 	for _, v := range manager.realTimeVehicles {
-		if v.Trip != nil && v.Trip.ID.ID == tripID {
+		if v.Trip != nil && v.Trip.ID.ID != "" && blockTripIDs[v.Trip.ID.ID] {
 			return &v
 		}
 	}
