@@ -530,8 +530,17 @@ WHERE
 ORDER BY
     id;
 
--- name: GetBlockDetails :many
+-- name: GetRoutesByIDs :many
+SELECT
+    *
+FROM
+    routes
+WHERE
+    id IN (sqlc.slice('route_ids'))
+ORDER BY
+    id;
 
+-- name: GetBlockDetails :many
 SELECT
     t.service_id,
     t.id as trip_id,
@@ -554,6 +563,20 @@ WHERE
     t.block_id = ?
 ORDER BY
     t.id, st.stop_sequence;
+
+-- name: GetStopTimesByStopIDs :many
+SELECT
+    *
+FROM
+    stop_times
+WHERE
+    stop_id IN (sqlc.slice('stop_ids'));
+
+-- name: ListTrips :many
+SELECT
+    *
+FROM
+    trips;
 
 -- name: GetStopTimesByStopIDs :many
 SELECT

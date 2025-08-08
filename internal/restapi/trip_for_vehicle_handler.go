@@ -116,18 +116,9 @@ func (api *RestAPI) tripForVehicleHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	var nextTripID, previousTripID string
-	if params.IncludeTrip || params.IncludeSchedule {
-		nextTripID, previousTripID, _, err = api.GetNextAndPreviousTripIDs(ctx, &trip, tripID, agencyID, serviceDate)
-		if err != nil {
-			api.serverErrorResponse(w, r, err)
-			return
-		}
-	}
-
 	var schedule *models.Schedule
 	if params.IncludeSchedule {
-		schedule, _ = api.BuildTripSchedule(ctx, agencyID, tripID, nextTripID, previousTripID, time.Local)
+		schedule, _ = api.BuildTripSchedule(ctx, agencyID, serviceDate, &trip, time.Local)
 	}
 
 	situationIDs := []string{}
