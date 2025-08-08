@@ -144,7 +144,7 @@ func (api *RestAPI) arrivalAndDepartureForStopHandler(w http.ResponseWriter, r *
 		StopHeadsign  string
 	}
 
-	for i, st := range stopTimes {
+	for _, st := range stopTimes {
 		if st.StopID == stopCode {
 			if params.StopSequence != nil && int64(*params.StopSequence) != st.StopSequence {
 				continue
@@ -162,7 +162,6 @@ func (api *RestAPI) arrivalAndDepartureForStopHandler(w http.ResponseWriter, r *
 			}
 			break
 		}
-		_ = i
 	}
 
 	if targetStopTime == nil {

@@ -177,7 +177,7 @@ func (api *RestAPI) GetNextAndPreviousTripIDs(ctx context.Context, trip *gtfsdb.
 			continue
 		}
 
-		startTime := int(^uint(0) >> 1) // max int value
+		startTime := math.MaxInt // max int value
 		endTime := 0
 
 		for _, st := range stopTimes {
@@ -190,7 +190,7 @@ func (api *RestAPI) GetNextAndPreviousTripIDs(ctx context.Context, trip *gtfsdb.
 			}
 		}
 
-		if startTime != int(^uint(0)>>1) && endTime > 0 {
+		if startTime != math.MaxInt && endTime > 0 {
 			tripsWithDetails = append(tripsWithDetails, TripWithDetails{
 				TripID:    blockTrip.ID,
 				StartTime: startTime,
@@ -431,14 +431,14 @@ func (api *RestAPI) calculateBlockTripSequence(ctx context.Context, tripID strin
 			continue
 		}
 
-		startTime := int(^uint(0) >> 1)
+		startTime := math.MaxInt
 		for _, st := range stopTimes {
 			if st.DepartureTime > 0 && int(st.DepartureTime) < startTime {
 				startTime = int(st.DepartureTime)
 			}
 		}
 
-		if startTime != int(^uint(0)>>1) {
+		if startTime != math.MaxInt {
 			activeTrips = append(activeTrips, TripWithDetails{
 				TripID:    blockTrip.ID,
 				StartTime: startTime,
