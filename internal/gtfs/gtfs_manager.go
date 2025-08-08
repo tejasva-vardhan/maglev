@@ -17,6 +17,8 @@ import (
 	_ "modernc.org/sqlite" // Pure Go SQLite driver
 )
 
+const NoRadiusLimit = -1
+
 // Manager manages the GTFS data and provides methods to access it
 type Manager struct {
 	gtfsSource       string
@@ -225,6 +227,9 @@ func (manager *Manager) GetStopsForLocation(ctx context.Context, lat, lon float6
 		// Calculate precise distance for final filtering
 		distance := utils.Haversine(lat, lon, *gtfsStop.Latitude, *gtfsStop.Longitude)
 		if distance <= radius {
+			candidates = append(candidates, stopWithDistance{gtfsStop, distance})
+		} else if radius == NoRadiusLimit {
+			// No radius specified; include all stops within the given latSpan and lonSpan
 			candidates = append(candidates, stopWithDistance{gtfsStop, distance})
 		}
 	}

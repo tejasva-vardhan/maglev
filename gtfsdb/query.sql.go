@@ -188,8 +188,9 @@ func (q *Queries) CreateCalendar(ctx context.Context, arg CreateCalendarParams) 
 
 const createCalendarDate = `-- name: CreateCalendarDate :one
 INSERT
-OR REPLACE INTO calendar_dates(service_id, date, exception_type)
-VALUES (?, ?, ?) RETURNING service_id, date, exception_type
+OR REPLACE INTO calendar_dates (service_id, date, exception_type)
+VALUES
+    (?, ?, ?) RETURNING service_id, date, exception_type
 `
 
 type CreateCalendarDateParams struct {
@@ -751,81 +752,6 @@ func (q *Queries) GetAllTripsForRoute(ctx context.Context, routeID string) ([]Tr
 	return items, nil
 }
 
-const getBlockIDByTripID = `-- name: GetBlockIDByTripID :one
-SELECT
-    block_id
-FROM
-    trips
-WHERE
-    id = ?
-`
-
-func (q *Queries) GetBlockIDByTripID(ctx context.Context, id string) (sql.NullString, error) {
-	row := q.queryRow(ctx, q.getBlockIDByTripIDStmt, getBlockIDByTripID, id)
-	var block_id sql.NullString
-	err := row.Scan(&block_id)
-	return block_id, err
-}
-
-const getCalendarByServiceID = `-- name: GetCalendarByServiceID :one
-SELECT
-    id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date
-FROM
-    calendar
-WHERE
-    id = ?
-`
-
-func (q *Queries) GetCalendarByServiceID(ctx context.Context, id string) (Calendar, error) {
-	row := q.queryRow(ctx, q.getCalendarByServiceIDStmt, getCalendarByServiceID, id)
-	var i Calendar
-	err := row.Scan(
-		&i.ID,
-		&i.Monday,
-		&i.Tuesday,
-		&i.Wednesday,
-		&i.Thursday,
-		&i.Friday,
-		&i.Saturday,
-		&i.Sunday,
-		&i.StartDate,
-		&i.EndDate,
-	)
-	return i, err
-}
-
-const getCalendarDateExceptionsForServiceID = `-- name: GetCalendarDateExceptionsForServiceID :many
-SELECT
-    service_id, date, exception_type
-FROM
-    calendar_dates
-WHERE
-    service_id = ?
-`
-
-func (q *Queries) GetCalendarDateExceptionsForServiceID(ctx context.Context, serviceID string) ([]CalendarDate, error) {
-	rows, err := q.query(ctx, q.getCalendarDateExceptionsForServiceIDStmt, getCalendarDateExceptionsForServiceID, serviceID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []CalendarDate
-	for rows.Next() {
-		var i CalendarDate
-		if err := rows.Scan(&i.ServiceID, &i.Date, &i.ExceptionType); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getBlockDetails = `-- name: GetBlockDetails :many
 
 SELECT
@@ -888,6 +814,81 @@ func (q *Queries) GetBlockDetails(ctx context.Context, blockID sql.NullString) (
 			&i.Lat,
 			&i.Lon,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getBlockIDByTripID = `-- name: GetBlockIDByTripID :one
+SELECT
+    block_id
+FROM
+    trips
+WHERE
+    id = ?
+`
+
+func (q *Queries) GetBlockIDByTripID(ctx context.Context, id string) (sql.NullString, error) {
+	row := q.queryRow(ctx, q.getBlockIDByTripIDStmt, getBlockIDByTripID, id)
+	var block_id sql.NullString
+	err := row.Scan(&block_id)
+	return block_id, err
+}
+
+const getCalendarByServiceID = `-- name: GetCalendarByServiceID :one
+SELECT
+    id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date
+FROM
+    calendar
+WHERE
+    id = ?
+`
+
+func (q *Queries) GetCalendarByServiceID(ctx context.Context, id string) (Calendar, error) {
+	row := q.queryRow(ctx, q.getCalendarByServiceIDStmt, getCalendarByServiceID, id)
+	var i Calendar
+	err := row.Scan(
+		&i.ID,
+		&i.Monday,
+		&i.Tuesday,
+		&i.Wednesday,
+		&i.Thursday,
+		&i.Friday,
+		&i.Saturday,
+		&i.Sunday,
+		&i.StartDate,
+		&i.EndDate,
+	)
+	return i, err
+}
+
+const getCalendarDateExceptionsForServiceID = `-- name: GetCalendarDateExceptionsForServiceID :many
+SELECT
+    service_id, date, exception_type
+FROM
+    calendar_dates
+WHERE
+    service_id = ?
+`
+
+func (q *Queries) GetCalendarDateExceptionsForServiceID(ctx context.Context, serviceID string) ([]CalendarDate, error) {
+	rows, err := q.query(ctx, q.getCalendarDateExceptionsForServiceIDStmt, getCalendarDateExceptionsForServiceID, serviceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CalendarDate
+	for rows.Next() {
+		var i CalendarDate
+		if err := rows.Scan(&i.ServiceID, &i.Date, &i.ExceptionType); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1595,6 +1596,59 @@ func (q *Queries) GetStopIDsForTrip(ctx context.Context, tripID string) ([]strin
 	return items, nil
 }
 
+const getStopTimesByStopIDs = `-- name: GetStopTimesByStopIDs :many
+SELECT
+    trip_id, arrival_time, departure_time, stop_id, stop_sequence, stop_headsign, pickup_type, drop_off_type, shape_dist_traveled, timepoint
+FROM
+    stop_times
+WHERE
+    stop_id IN (/*SLICE:stop_ids*/?)
+`
+
+func (q *Queries) GetStopTimesByStopIDs(ctx context.Context, stopIds []string) ([]StopTime, error) {
+	query := getStopTimesByStopIDs
+	var queryParams []interface{}
+	if len(stopIds) > 0 {
+		for _, v := range stopIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:stop_ids*/?", strings.Repeat(",?", len(stopIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:stop_ids*/?", "NULL", 1)
+	}
+	rows, err := q.query(ctx, nil, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StopTime
+	for rows.Next() {
+		var i StopTime
+		if err := rows.Scan(
+			&i.TripID,
+			&i.ArrivalTime,
+			&i.DepartureTime,
+			&i.StopID,
+			&i.StopSequence,
+			&i.StopHeadsign,
+			&i.PickupType,
+			&i.DropOffType,
+			&i.ShapeDistTraveled,
+			&i.Timepoint,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getStopTimesForTrip = `-- name: GetStopTimesForTrip :many
 SELECT
     trip_id, arrival_time, departure_time, stop_id, stop_sequence, stop_headsign, pickup_type, drop_off_type, shape_dist_traveled, timepoint
@@ -1746,11 +1800,11 @@ func (q *Queries) GetStopsForRoute(ctx context.Context, id string) ([]Stop, erro
 }
 
 const getStopsWithinBounds = `-- name: GetStopsWithinBounds :many
-SELECT 
+SELECT
     id, code, name, "desc", lat, lon, zone_id, url, location_type, timezone, wheelchair_boarding, platform_code
-FROM 
+FROM
     stops
-WHERE 
+WHERE
     lat >= ? AND lat <= ?
     AND lon >= ? AND lon <= ?
 `
@@ -2075,6 +2129,47 @@ func (q *Queries) ListRoutes(ctx context.Context) ([]Route, error) {
 			&i.TextColor,
 			&i.ContinuousPickup,
 			&i.ContinuousDropOff,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTrips = `-- name: ListTrips :many
+SELECT
+    id, route_id, service_id, trip_headsign, trip_short_name, direction_id, block_id, shape_id, wheelchair_accessible, bikes_allowed
+FROM
+    trips
+`
+
+func (q *Queries) ListTrips(ctx context.Context) ([]Trip, error) {
+	rows, err := q.query(ctx, q.listTripsStmt, listTrips)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Trip
+	for rows.Next() {
+		var i Trip
+		if err := rows.Scan(
+			&i.ID,
+			&i.RouteID,
+			&i.ServiceID,
+			&i.TripHeadsign,
+			&i.TripShortName,
+			&i.DirectionID,
+			&i.BlockID,
+			&i.ShapeID,
+			&i.WheelchairAccessible,
+			&i.BikesAllowed,
 		); err != nil {
 			return nil, err
 		}

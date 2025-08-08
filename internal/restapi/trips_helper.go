@@ -135,7 +135,7 @@ func (api *RestAPI) BuildTripSchedule(ctx context.Context, agencyID string, serv
 	}
 
 	var nextTripID, previousTripID string
-	nextTripID, previousTripID, err = api.GetNextAndPreviousTripIDs(ctx, trip, agencyID, serviceDate)
+	nextTripID, previousTripID, _, err = api.GetNextAndPreviousTripIDs(ctx, trip, agencyID, serviceDate)
 	if err != nil {
 		return nil, err
 	}
@@ -163,27 +163,29 @@ func (api *RestAPI) BuildTripSchedule(ctx context.Context, agencyID string, serv
 	}, nil
 }
 
-func (api *RestAPI) GetNextAndPreviousTripIDs(ctx context.Context, trip *gtfsdb.Trip, agencyID string, serviceDate time.Time) (nextTripID string, previousTripID string, err error) {
+func (api *RestAPI) GetNextAndPreviousTripIDs(ctx context.Context, trip *gtfsdb.Trip, agencyID string, serviceDate time.Time) (nextTripID string, previousTripID string, stopTimes []gtfsdb.StopTime, err error) {
 	if !trip.BlockID.Valid {
-		return "", "", nil
+		return "", "", nil, nil
 	}
 
 	blockTrips, err := api.GtfsManager.GtfsDB.Queries.GetTripsByBlockID(ctx, trip.BlockID)
 	if err != nil {
-		return "", "", err
+		return "", "", nil, err
 	}
 
 	if len(blockTrips) == 0 {
-		return "", "", nil
+		return "", "", nil, nil
 	}
 
 	type TripWithDetails struct {
 		TripID    string
 		StartTime int
 		EndTime   int
+		IsActive  bool
+		StopTimes []gtfsdb.StopTime
 	}
 
-	tripsWithDetails := []TripWithDetails{}
+	var tripsWithDetails []TripWithDetails
 
 	for _, blockTrip := range blockTrips {
 		stopTimes, err := api.GtfsManager.GtfsDB.Queries.GetStopTimesForTrip(ctx, blockTrip.ID)
@@ -219,6 +221,8 @@ func (api *RestAPI) GetNextAndPreviousTripIDs(ctx context.Context, trip *gtfsdb.
 				TripID:    blockTrip.ID,
 				StartTime: startTime,
 				EndTime:   endTime,
+				IsActive:  true,
+				StopTimes: stopTimes,
 			})
 		}
 	}
@@ -249,8 +253,11 @@ func (api *RestAPI) GetNextAndPreviousTripIDs(ctx context.Context, trip *gtfsdb.
 			nextTripID = utils.FormCombinedID(agencyID, tripsWithDetails[currentIndex+1].TripID)
 		}
 	}
-
-	return nextTripID, previousTripID, nil
+	if currentIndex == -1 {
+		// If the trip is not found, return empty values
+		return "", "", nil, nil
+	}
+	return nextTripID, previousTripID, tripsWithDetails[currentIndex].StopTimes, nil
 }
 
 func findNextStop(
