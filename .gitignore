@@ -5,3 +5,4 @@ __debug_bin*
 *.db
 *.db-journal
 api
+gtfsdb/tmp/main
