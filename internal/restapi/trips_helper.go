@@ -550,3 +550,44 @@ func distanceToLineSegment(px, py, x1, y1, x2, y2 float64) (distance, ratio floa
 
 	return utils.Haversine(px, py, closestX, closestY), t
 }
+
+func (api *RestAPI) GetSituationIDsForTrip(tripID string) []string {
+	alerts := api.GtfsManager.GetAlertsForTrip(tripID)
+	situationIDs := make([]string, 0, len(alerts))
+	for _, alert := range alerts {
+		if alert.ID != "" {
+			situationIDs = append(situationIDs, alert.ID)
+		}
+	}
+	return situationIDs
+}
+
+type TripAgencyResolver struct {
+	RouteToAgency map[string]string
+	TripToRoute   map[string]string
+}
+
+// NewTripAgencyResolver creates a new TripAgencyResolver that maps trip IDs to their respective agency IDs.
+func NewTripAgencyResolver(allRoutes []gtfsdb.Route, allTrips []gtfsdb.Trip) *TripAgencyResolver {
+	routeToAgency := make(map[string]string, len(allRoutes))
+	for _, route := range allRoutes {
+		routeToAgency[route.ID] = route.AgencyID
+	}
+	tripToRoute := make(map[string]string, len(allTrips))
+	for _, trip := range allTrips {
+		tripToRoute[trip.ID] = trip.RouteID
+	}
+	return &TripAgencyResolver{
+		RouteToAgency: routeToAgency,
+		TripToRoute:   tripToRoute,
+	}
+}
+
+// GetAgencyNameByTripID retrieves the agency name for a given trip ID.
+func (r *TripAgencyResolver) GetAgencyNameByTripID(tripID string) string {
+	routeID := r.TripToRoute[tripID]
+
+	agency := r.RouteToAgency[routeID]
+
+	return agency
+}

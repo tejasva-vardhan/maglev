@@ -2,13 +2,14 @@ package restapi
 
 import (
 	"context"
+	"math"
+	"net/http"
+	"time"
+
 	"github.com/OneBusAway/go-gtfs"
 	"maglev.onebusaway.org/gtfsdb"
 	"maglev.onebusaway.org/internal/models"
 	"maglev.onebusaway.org/internal/utils"
-	"math"
-	"net/http"
-	"time"
 )
 
 func (api *RestAPI) tripsForLocationHandler(w http.ResponseWriter, r *http.Request) {
@@ -189,7 +190,7 @@ func (api *RestAPI) buildScheduleForTrip(
 		return nil
 	}
 
-	nextTripID, previousTripID, stopTimes, err := api.GetNextAndPreviousTripIDs(ctx, &trip, tripID, agencyID, serviceDate)
+	nextTripID, previousTripID, stopTimes, err := api.GetNextAndPreviousTripIDs(ctx, &trip, agencyID, serviceDate)
 	if err != nil {
 		api.serverErrorResponse(w, r, err)
 		return nil
