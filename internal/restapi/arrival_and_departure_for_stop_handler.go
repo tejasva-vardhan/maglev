@@ -1,10 +1,12 @@
 package restapi
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/OneBusAway/go-gtfs"
 	"maglev.onebusaway.org/gtfsdb"
 	"maglev.onebusaway.org/internal/models"
 	"maglev.onebusaway.org/internal/utils"
@@ -144,7 +146,7 @@ func (api *RestAPI) arrivalAndDepartureForStopHandler(w http.ResponseWriter, r *
 		StopHeadsign  string
 	}
 
-	for _, st := range stopTimes {
+	for i, st := range stopTimes {
 		if st.StopID == stopCode {
 			if params.StopSequence != nil && int64(*params.StopSequence) != st.StopSequence {
 				continue
@@ -162,9 +164,12 @@ func (api *RestAPI) arrivalAndDepartureForStopHandler(w http.ResponseWriter, r *
 			}
 			break
 		}
+		_ = i
 	}
 
 	if targetStopTime == nil {
+
+		fmt.Println("targetStopTime == nil")
 		api.sendNotFound(w, r)
 		return
 	}
@@ -189,53 +194,46 @@ func (api *RestAPI) arrivalAndDepartureForStopHandler(w http.ResponseWriter, r *
 	scheduledDepartureTimeMs := startOfDay.Add(time.Duration(targetStopTime.DepartureTime)).UnixMilli()
 
 	// Get real-time data for this trip if available
-	var predictedArrivalTime, predictedDepartureTime int64
-	var predicted bool
-	var vehicleID string
-	var tripStatus *models.TripStatusForTripDetails
-	var distanceFromStop float64
-	var numberOfStopsAway int
+	var (
+		predictedArrivalTime, predictedDepartureTime int64
+		predicted                                    bool
+		vehicleID                                    string
+		tripStatus                                   *models.TripStatusForTripDetails
+		distanceFromStop                             float64
+		numberOfStopsAway                            int
+	)
 
 	// If vehicleId is provided, validate it matches the trip
+	var vehicle *gtfs.Vehicle
 	if params.VehicleID != "" {
 		_, providedVehicleID, err := utils.ExtractAgencyIDAndCodeID(params.VehicleID)
 		if err == nil {
-			vehicle, err := api.GtfsManager.GetVehicleByID(providedVehicleID)
-			if err == nil && vehicle != nil && vehicle.Trip != nil && vehicle.Trip.ID.ID == tripID {
-				vehicleID = vehicle.ID.ID
-				predicted = true
-
-				// Build trip status
-				status, _ := api.BuildTripStatus(ctx, agencyID, tripID, serviceDate, currentTime)
-				if status != nil {
-					tripStatus = status
-					predictedArrivalTime = scheduledArrivalTimeMs
-					predictedDepartureTime = scheduledDepartureTimeMs
-
-					if vehicle.Position != nil {
-						distanceFromStop = 0  // TODO: Calculate actual distance
-						numberOfStopsAway = 0 // TODO: Calculate actual number of stops away
-					}
-				}
+			v, err := api.GtfsManager.GetVehicleByID(providedVehicleID)
+			// If vehicle is found, validate it matches the trip
+			if err == nil && v != nil && v.Trip != nil && v.Trip.ID.ID == tripID {
+				vehicle = v
 			}
 		}
 	} else {
-		vehicle := api.GtfsManager.GetVehicleForTrip(tripID)
-		if vehicle != nil && vehicle.Trip != nil {
-			vehicleID = vehicle.ID.ID
-			predicted = true
+		// If vehicleId is not provided, get the vehicle for the trip
+		vehicle = api.GtfsManager.GetVehicleForTrip(tripID)
+	}
 
-			status, _ := api.BuildTripStatus(ctx, agencyID, tripID, serviceDate, currentTime)
-			if status != nil {
-				tripStatus = status
-				predictedArrivalTime = scheduledArrivalTimeMs
-				predictedDepartureTime = scheduledDepartureTimeMs
+	if vehicle != nil && vehicle.Trip != nil {
+		vehicleID = vehicle.ID.ID
+		predicted = true
+	}
 
-				if vehicle.Position != nil {
-					distanceFromStop = 100.0 // TODO: Calculate actual distance
-					numberOfStopsAway = 2    // TODO: Calculate actual number of stops away
-				}
-			}
+	status, _ := api.BuildTripStatus(ctx, agencyID, tripID, serviceDate, currentTime)
+	if status != nil {
+		tripStatus = status
+		predictedArrivalTime = scheduledArrivalTimeMs
+		predictedDepartureTime = scheduledDepartureTimeMs
+
+		if vehicle != nil && vehicle.Position != nil {
+			// TODO: Calculate actual distance and stops away
+			distanceFromStop = 0
+			numberOfStopsAway = 0
 		}
 	}
 
