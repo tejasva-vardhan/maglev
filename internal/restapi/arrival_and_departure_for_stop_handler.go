@@ -176,11 +176,10 @@ func (api *RestAPI) arrivalAndDepartureForStopHandler(w http.ResponseWriter, r *
 
 	// Set current time
 	var currentTime time.Time
+	loc, _ := time.LoadLocation(agency.Timezone)
 	if params.Time != nil {
-		loc, _ := time.LoadLocation(agency.Timezone)
 		currentTime = params.Time.In(loc)
 	} else {
-		loc, _ := time.LoadLocation(agency.Timezone)
 		currentTime = time.Now().In(loc)
 	}
 
@@ -188,10 +187,27 @@ func (api *RestAPI) arrivalAndDepartureForStopHandler(w http.ResponseWriter, r *
 	serviceDate := *params.ServiceDate
 	serviceDateMillis := serviceDate.Unix() * 1000
 
-	// Calculate actual timestamps for arrival and departure
-	startOfDay := serviceDate.Truncate(24 * time.Hour)
-	scheduledArrivalTimeMs := startOfDay.Add(time.Duration(targetStopTime.ArrivalTime)).UnixMilli()
-	scheduledDepartureTimeMs := startOfDay.Add(time.Duration(targetStopTime.DepartureTime)).UnixMilli()
+	// Service date is a "date" only, so get midnight in agency's TZ
+	serviceMidnight := time.Date(
+		serviceDate.Year(),
+		serviceDate.Month(),
+		serviceDate.Day(),
+		0, 0, 0, 0,
+		loc,
+	)
+
+	// Arrival time is stored in nanoseconds since midnight → convert to duration
+	// arrival and departure time is stored in nanoseconds (sqlite)
+	arrivalOffset := time.Duration(targetStopTime.ArrivalTime)
+	departureOffset := time.Duration(targetStopTime.DepartureTime)
+
+	// Add offsets to midnight
+	scheduledArrivalTime := serviceMidnight.Add(arrivalOffset)
+	scheduledDepartureTime := serviceMidnight.Add(departureOffset)
+
+	// Convert to ms since epoch
+	scheduledArrivalTimeMs := scheduledArrivalTime.UnixMilli()
+	scheduledDepartureTimeMs := scheduledDepartureTime.UnixMilli()
 
 	// Get real-time data for this trip if available
 	var (
