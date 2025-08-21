@@ -241,6 +241,7 @@ func (api *RestAPI) arrivalAndDepartureForStopHandler(w http.ResponseWriter, r *
 	}
 
 	status, _ := api.BuildTripStatus(ctx, agencyID, tripID, serviceDate, currentTime)
+	// TODO: Currently we set the predicted time to the scheduled time, this is not accurate
 	if status != nil {
 		tripStatus = status
 		predictedArrivalTime = scheduledArrivalTimeMs
