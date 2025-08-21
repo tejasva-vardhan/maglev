@@ -1,7 +1,6 @@
 package restapi
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -168,8 +167,6 @@ func (api *RestAPI) arrivalAndDepartureForStopHandler(w http.ResponseWriter, r *
 	}
 
 	if targetStopTime == nil {
-
-		fmt.Println("targetStopTime == nil")
 		api.sendNotFound(w, r)
 		return
 	}

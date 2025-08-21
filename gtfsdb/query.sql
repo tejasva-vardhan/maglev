@@ -578,21 +578,6 @@ SELECT
 FROM
     trips;
 
--- name: GetStopTimesByStopIDs :many
-SELECT
-    *
-FROM
-    stop_times
-WHERE
-    stop_id IN (sqlc.slice('stop_ids'));
-
--- name: ListTrips :many
-SELECT
-    *
-FROM
-    trips;
-    t.id, st.stop_sequence;
-
 -- name: GetArrivalsAndDeparturesForStop :many
 SELECT
     st.trip_id,
