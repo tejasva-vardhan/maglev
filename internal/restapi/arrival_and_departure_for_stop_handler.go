@@ -316,6 +316,27 @@ func (api *RestAPI) arrivalAndDepartureForStopHandler(w http.ResponseWriter, r *
 	)
 	references.Trips = append(references.Trips, tripRef)
 
+	// Include active trip if it's different from the parameter trip and trip status is not null
+	if tripStatus != nil && tripStatus.ActiveTripID != "" {
+		_, activeTripID, err := utils.ExtractAgencyIDAndCodeID(tripStatus.ActiveTripID)
+		if err == nil && activeTripID != tripID {
+			activeTrip, err := api.GtfsManager.GtfsDB.Queries.GetTrip(ctx, activeTripID)
+			if err == nil {
+				activeTripRef := models.NewTripReference(
+					utils.FormCombinedID(agencyID, activeTripID),
+					utils.FormCombinedID(agencyID, activeTrip.RouteID),
+					utils.FormCombinedID(agencyID, activeTrip.ServiceID),
+					activeTrip.TripHeadsign.String,
+					"", // trip short name
+					activeTrip.DirectionID.Int64,
+					utils.FormCombinedID(agencyID, activeTrip.BlockID.String),
+					utils.FormCombinedID(agencyID, activeTrip.ShapeID.String),
+				)
+				references.Trips = append(references.Trips, activeTripRef)
+			}
+		}
+	}
+
 	// Build stops references
 	stopIDSet := make(map[string]bool)
 	routeIDSet := make(map[string]*gtfsdb.Route)
