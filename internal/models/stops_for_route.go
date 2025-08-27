@@ -26,8 +26,8 @@ type StopGrouping struct {
 }
 
 type RouteEntry struct {
-	RouteID       string         `json:"routeId"`
-	StopIds       []string       `json:"stopIds"`
-	StopGroupings []StopGrouping `json:"stopGroupings"`
 	Polylines     []Polyline     `json:"polylines"`
+	RouteID       string         `json:"routeId"`
+	StopGroupings []StopGrouping `json:"stopGroupings"`
+	StopIds       []string       `json:"stopIds"`
 }

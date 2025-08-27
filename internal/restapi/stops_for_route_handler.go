@@ -2,17 +2,44 @@ package restapi
 
 import (
 	"context"
+	"net/http"
+	"time"
+
 	"github.com/OneBusAway/go-gtfs"
 	"github.com/twpayne/go-polyline"
 	"maglev.onebusaway.org/gtfsdb"
 	"maglev.onebusaway.org/internal/models"
 	"maglev.onebusaway.org/internal/utils"
-	"net/http"
-	"time"
 )
+
+type stopsForRouteParams struct {
+	IncludePolylines bool
+	Time             *time.Time
+}
+
+func (api *RestAPI) parseStopsForRouteParams(r *http.Request) stopsForRouteParams {
+	now := time.Now()
+	params := stopsForRouteParams{
+		IncludePolylines: true,
+		Time:             &now,
+	}
+
+	if r.URL.Query().Get("includePolylines") == "false" {
+		params.IncludePolylines = false
+	}
+
+	if timeParam := r.URL.Query().Get("time"); timeParam != "" {
+		if t, err := time.Parse(time.RFC3339, timeParam); err == nil {
+			params.Time = &t
+		}
+	}
+	return params
+}
 
 func (api *RestAPI) stopsForRouteHandler(w http.ResponseWriter, r *http.Request) {
 	agencyID, routeID, _ := utils.ExtractAgencyIDAndCodeID(utils.ExtractIDFromParams(r))
+
+	params := api.parseStopsForRouteParams(r)
 
 	currentAgency := api.handleCommonErrors(w, r, agencyID, routeID)
 	if currentAgency == nil {
@@ -42,7 +69,7 @@ func (api *RestAPI) stopsForRouteHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	result, stopsList, err := api.processRouteStops(ctx, agencyID, routeID, serviceIDs)
+	result, stopsList, err := api.processRouteStops(ctx, agencyID, routeID, serviceIDs, params.IncludePolylines)
 	if err != nil {
 		api.serverErrorResponse(w, r, err)
 		return
@@ -66,7 +93,7 @@ func (api *RestAPI) handleCommonErrors(w http.ResponseWriter, r *http.Request, a
 	return currentAgency
 }
 
-func (api *RestAPI) processRouteStops(ctx context.Context, agencyID string, routeID string, serviceIDs []string) (models.RouteEntry, []models.Stop, error) {
+func (api *RestAPI) processRouteStops(ctx context.Context, agencyID string, routeID string, serviceIDs []string, includePolylines bool) (models.RouteEntry, []models.Stop, error) {
 	allStops := make(map[string]bool)
 	allPolylines := make([]models.Polyline, 0, 100)
 	var stopGroupings []models.StopGrouping
@@ -91,6 +118,10 @@ func (api *RestAPI) processRouteStops(ctx context.Context, agencyID string, rout
 	} else {
 		// Process trips for the current service date
 		processTripGroups(ctx, api, agencyID, routeID, trips, &stopGroupings, allStops, &allPolylines)
+	}
+
+	if !includePolylines {
+		allPolylines = []models.Polyline{}
 	}
 
 	allStopsIds := formatStopIDs(agencyID, allStops)
