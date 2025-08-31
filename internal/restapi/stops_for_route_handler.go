@@ -188,9 +188,15 @@ func (api *RestAPI) buildAndSendResponse(w http.ResponseWriter, r *http.Request,
 		false,
 	)
 
+	routeRefs, err := api.BuildRouteReferencesAsInterface(ctx, currentAgency.Id, stopsList)
+	if err != nil {
+		api.serverErrorResponse(w, r, err)
+		return
+	}
+
 	references := models.ReferencesModel{
 		Agencies:   []models.AgencyReference{agencyRef},
-		Routes:     utils.GetAllRoutesRefs(api.GtfsManager.GtfsDB.Queries, ctx),
+		Routes:     routeRefs,
 		Situations: []interface{}{},
 		StopTimes:  []interface{}{},
 		Stops:      stopsList,
