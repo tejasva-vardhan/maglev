@@ -2,7 +2,9 @@ package restapi
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/OneBusAway/go-gtfs"
@@ -231,7 +233,20 @@ func processTripGroups(
 		tripGroups[key] = append(tripGroups[key], trip)
 	}
 
-	for key, tripsInGroup := range tripGroups {
+	var allStopGroups []models.StopGroup
+
+	var keys []directionHeadsignKey
+	for key := range tripGroups {
+		keys = append(keys, key)
+	}
+
+	/// Sort by direction ID to ensure consistent ordering (0 = outbound, 1 = inbound)
+	sort.Slice(keys, func(i, j int) bool {
+		return keys[i].DirectionID < keys[j].DirectionID
+	})
+
+	for _, key := range keys {
+		tripsInGroup := tripGroups[key]
 		representativeTrip := tripsInGroup[0]
 		stopsList, err := api.GtfsManager.GtfsDB.Queries.GetOrderedStopIDsForTrip(ctx, representativeTrip.ID)
 		if err != nil {
@@ -258,8 +273,10 @@ func processTripGroups(
 
 		formattedStopIDs := formatStopIDs(agencyID, stopIDs)
 
+		groupID := fmt.Sprintf("%d", key.DirectionID-1)
+
 		stopGroup := models.StopGroup{
-			ID: utils.FormCombinedID(agencyID, routeID),
+			ID: groupID,
 			Name: models.StopGroupName{
 				Name:  key.TripHeadsign,
 				Names: []string{key.TripHeadsign},
@@ -269,9 +286,13 @@ func processTripGroups(
 			Polylines: polylines,
 		}
 
+		allStopGroups = append(allStopGroups, stopGroup)
+	}
+
+	if len(allStopGroups) > 0 {
 		*stopGroupings = append(*stopGroupings, models.StopGrouping{
 			Ordered:    true,
-			StopGroups: []models.StopGroup{stopGroup},
+			StopGroups: allStopGroups,
 			Type:       "direction",
 		})
 	}
