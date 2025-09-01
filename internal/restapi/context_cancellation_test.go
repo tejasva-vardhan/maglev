@@ -79,8 +79,9 @@ func TestContextCancellationHandling(t *testing.T) {
 				statusCode == http.StatusUnauthorized || // API key validation happens first
 				statusCode == http.StatusInternalServerError ||
 				statusCode == http.StatusRequestTimeout ||
-				statusCode == http.StatusGatewayTimeout,
-				"Expected status 200, 401, 500, 408, or 504, got %d", statusCode)
+				statusCode == http.StatusGatewayTimeout ||
+				statusCode == http.StatusNotFound,
+				"Expected status 200, 401, 404, 500, 408, or 504, got %d", statusCode)
 		})
 	}
 }

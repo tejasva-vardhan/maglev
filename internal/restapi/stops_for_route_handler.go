@@ -39,12 +39,22 @@ func (api *RestAPI) parseStopsForRouteParams(r *http.Request) stopsForRouteParam
 }
 
 func (api *RestAPI) stopsForRouteHandler(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+	// Check if context is already cancelled
+	if ctx.Err() != nil {
+		api.serverErrorResponse(w, r, ctx.Err())
+		return
+	}
+
 	agencyID, routeID, _ := utils.ExtractAgencyIDAndCodeID(utils.ExtractIDFromParams(r))
 
 	params := api.parseStopsForRouteParams(r)
 
-	currentAgency := api.handleCommonErrors(w, r, agencyID, routeID)
-	if currentAgency == nil {
+	currentAgency, err := api.GtfsManager.GtfsDB.Queries.GetAgency(ctx, agencyID)
+
+	if err != nil {
+		api.sendNotFound(w, r)
 		return
 	}
 
@@ -57,15 +67,7 @@ func (api *RestAPI) stopsForRouteHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	ctx := r.Context()
-
-	// Check if context is already cancelled
-	if ctx.Err() != nil {
-		api.serverErrorResponse(w, r, ctx.Err())
-		return
-	}
-
-	_, err := api.GtfsManager.GtfsDB.Queries.GetRoute(ctx, routeID)
+	_, err = api.GtfsManager.GtfsDB.Queries.GetRoute(ctx, routeID)
 
 	if err != nil {
 		api.sendNotFound(w, r)
@@ -84,22 +86,7 @@ func (api *RestAPI) stopsForRouteHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	api.buildAndSendResponse(w, r, ctx, result, stopsList, *currentAgency)
-}
-
-func (api *RestAPI) handleCommonErrors(w http.ResponseWriter, r *http.Request, agencyID string, routeID string) *gtfs.Agency {
-	if routeID == "" || agencyID == "" {
-		http.Error(w, "null", http.StatusInternalServerError)
-		return nil
-	}
-
-	currentAgency := api.GtfsManager.FindAgency(agencyID)
-	if currentAgency == nil {
-		http.Error(w, "null", http.StatusInternalServerError)
-		return nil
-	}
-
-	return currentAgency
+	api.buildAndSendResponse(w, r, ctx, result, stopsList, currentAgency)
 }
 
 func (api *RestAPI) processRouteStops(ctx context.Context, agencyID string, routeID string, serviceIDs []string, includePolylines bool) (models.RouteEntry, []models.Stop, error) {
@@ -183,21 +170,21 @@ func buildStopsList(ctx context.Context, api *RestAPI, agencyID string, allStops
 	return stopsList, nil
 }
 
-func (api *RestAPI) buildAndSendResponse(w http.ResponseWriter, r *http.Request, ctx context.Context, result models.RouteEntry, stopsList []models.Stop, currentAgency gtfs.Agency) {
+func (api *RestAPI) buildAndSendResponse(w http.ResponseWriter, r *http.Request, ctx context.Context, result models.RouteEntry, stopsList []models.Stop, currentAgency gtfsdb.Agency) {
 	agencyRef := models.NewAgencyReference(
-		currentAgency.Id,
+		currentAgency.ID,
 		currentAgency.Name,
 		currentAgency.Url,
 		currentAgency.Timezone,
-		currentAgency.Language,
-		currentAgency.Phone,
-		currentAgency.Email,
-		currentAgency.FareUrl,
+		currentAgency.Lang.String,
+		currentAgency.Phone.String,
+		currentAgency.Email.String,
+		currentAgency.FareUrl.String,
 		"",
 		false,
 	)
 
-	routeRefs, err := api.BuildRouteReferencesAsInterface(ctx, currentAgency.Id, stopsList)
+	routeRefs, err := api.BuildRouteReferencesAsInterface(ctx, currentAgency.ID, stopsList)
 	if err != nil {
 		api.serverErrorResponse(w, r, err)
 		return
