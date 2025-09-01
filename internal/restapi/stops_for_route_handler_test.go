@@ -144,17 +144,17 @@ func TestStopsForRouteHandlerEndToEnd(t *testing.T) {
 
 func TestStopsForRouteHandlerInvalidRouteID(t *testing.T) {
 	_, resp, _ := serveAndRetrieveEndpoint(t, "/api/where/stops-for-route/invalid_route.json?key=TEST")
-	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
 func TestStopsForRouteHandlerMissingRouteIDComponent(t *testing.T) {
 	_, resp, _ := serveAndRetrieveEndpoint(t, "/api/where/stops-for-route/_FMS.json?key=TEST")
-	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
 func TestStopsForRouteHandlerNonExistentAgency(t *testing.T) {
 	_, resp, _ := serveAndRetrieveEndpoint(t, "/api/where/stops-for-route/fake_Raba.json?key=TEST")
-	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
 func TestStopsForRouteHandlerWithInvalidTimeFormats(t *testing.T) {
@@ -169,7 +169,7 @@ func TestStopsForRouteHandlerWithInvalidTimeFormats(t *testing.T) {
 		t.Run("Invalid format: "+format, func(t *testing.T) {
 			_, resp, _ := serveAndRetrieveEndpoint(t, "/api/where/stops-for-route/25-151.json?key=TEST&time="+format)
 
-			assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+			assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 		})
 	}
 }
