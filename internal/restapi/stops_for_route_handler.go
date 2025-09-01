@@ -41,15 +41,6 @@ func (api *RestAPI) parseStopsForRouteParams(r *http.Request) stopsForRouteParam
 func (api *RestAPI) stopsForRouteHandler(w http.ResponseWriter, r *http.Request) {
 	agencyID, routeID, _ := utils.ExtractAgencyIDAndCodeID(utils.ExtractIDFromParams(r))
 
-	ctx := r.Context()
-
-	_, err := api.GtfsManager.GtfsDB.Queries.GetRoute(ctx, routeID)
-
-	if err != nil {
-		api.sendNotFound(w, r)
-		return
-	}
-
 	params := api.parseStopsForRouteParams(r)
 
 	currentAgency := api.handleCommonErrors(w, r, agencyID, routeID)
@@ -66,9 +57,18 @@ func (api *RestAPI) stopsForRouteHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	ctx := r.Context()
+
 	// Check if context is already cancelled
 	if ctx.Err() != nil {
 		api.serverErrorResponse(w, r, ctx.Err())
+		return
+	}
+
+	_, err := api.GtfsManager.GtfsDB.Queries.GetRoute(ctx, routeID)
+
+	if err != nil {
+		api.sendNotFound(w, r)
 		return
 	}
 
