@@ -1,16 +1,17 @@
 package restapi
 
 import (
+	"net/http"
+	"strings"
+
 	"github.com/twpayne/go-polyline"
 	"maglev.onebusaway.org/gtfsdb"
 	"maglev.onebusaway.org/internal/models"
 	"maglev.onebusaway.org/internal/utils"
-	"net/http"
-	"strings"
 )
 
 func (api *RestAPI) shapesHandler(w http.ResponseWriter, r *http.Request) {
-	_, shapeID, err := utils.ExtractAgencyIDAndCodeID(utils.ExtractIDFromParams(r))
+	agencyID, shapeID, err := utils.ExtractAgencyIDAndCodeID(utils.ExtractIDFromParams(r))
 
 	if err != nil {
 		api.serverErrorResponse(w, r, err)
@@ -18,6 +19,14 @@ func (api *RestAPI) shapesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+
+	_, err = api.GtfsManager.GtfsDB.Queries.GetAgency(ctx, agencyID)
+
+	if err != nil {
+		api.sendNotFound(w, r)
+		return
+	}
+
 	shapes, err := api.GtfsManager.GtfsDB.Queries.GetShapeByID(ctx, shapeID)
 
 	if err != nil {
