@@ -18,7 +18,8 @@ func TestShapesHandlerReturnsShapeWhenItExists(t *testing.T) {
 	require.NotEmpty(t, shapes)
 
 	shapeID := shapes[0].ShapeID
-	resp, model := serveApiAndRetrieveEndpoint(t, api, "/api/where/shape/raba_"+shapeID+".json?key=TEST")
+	agencyID := api.GtfsManager.GetAgencies()[0].Id
+	resp, model := serveApiAndRetrieveEndpoint(t, api, "/api/where/shape/"+agencyID+"_"+shapeID+".json?key=TEST")
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, http.StatusOK, model.Code)
