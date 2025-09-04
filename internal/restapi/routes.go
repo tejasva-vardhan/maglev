@@ -71,6 +71,7 @@ func (api *RestAPI) SetRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/where/trip-for-vehicle/{id}", rateLimitAndValidateAPIKey(api, api.tripForVehicleHandler))
 	mux.Handle("GET /api/where/trips-for-location.json", rateLimitAndValidateAPIKey(api, api.tripsForLocationHandler))
 	mux.Handle("GET /api/where/arrival-and-departure-for-stop/{id}", rateLimitAndValidateAPIKey(api, api.arrivalAndDepartureForStopHandler))
+	mux.Handle("GET /api/where/trips-for-route/{id}", rateLimitAndValidateAPIKey(api, api.tripsForRouteHandler))
 }
 
 // SetupAPIRoutes creates and configures the API router with all middleware applied globally
