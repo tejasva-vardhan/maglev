@@ -6,7 +6,7 @@ import "time"
 type ResponseModel struct {
 	Code        int         `json:"code"`
 	CurrentTime int64       `json:"currentTime"`
-	Data        interface{} `json:"data"`
+	Data        interface{} `json:"data,omitempty"`
 	Text        string      `json:"text"`
 	Version     int         `json:"version"`
 }

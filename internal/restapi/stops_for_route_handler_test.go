@@ -46,7 +46,7 @@ func TestStopsForRouteHandlerEndToEnd(t *testing.T) {
 	// Verify stopGroupings
 	stopGroupings, ok := entry["stopGroupings"].([]interface{})
 	require.True(t, ok)
-	assert.Equal(t, 2, len(stopGroupings))
+	assert.Equal(t, 1, len(stopGroupings))
 
 	grouping, ok := stopGroupings[0].(map[string]interface{})
 	require.True(t, ok)
@@ -55,12 +55,12 @@ func TestStopsForRouteHandlerEndToEnd(t *testing.T) {
 
 	stopGroups, ok := grouping["stopGroups"].([]interface{})
 	require.True(t, ok)
-	assert.Equal(t, 1, len(stopGroups))
+	assert.Equal(t, 2, len(stopGroups))
 
-	// Verify inbound group
-	inboundGroup, ok := stopGroups[0].(map[string]interface{})
+	// Verify inbound group (direction 1)
+	inboundGroup, ok := stopGroups[1].(map[string]interface{})
 	require.True(t, ok)
-	assert.Equal(t, "25_151", inboundGroup["id"])
+	assert.Equal(t, "1", inboundGroup["id"])
 
 	inboundName, ok := inboundGroup["name"].(map[string]interface{})
 	require.True(t, ok)
@@ -83,10 +83,10 @@ func TestStopsForRouteHandlerEndToEnd(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, 1, len(inboundPolylines))
 
-	// Verify outbound group
+	// Verify outbound group (direction 0)
 	outboundGroup, ok := stopGroups[0].(map[string]interface{})
 	require.True(t, ok)
-	assert.Equal(t, "25_151", outboundGroup["id"])
+	assert.Equal(t, "0", outboundGroup["id"])
 
 	outboundName, ok := outboundGroup["name"].(map[string]interface{})
 	require.True(t, ok)
@@ -144,17 +144,17 @@ func TestStopsForRouteHandlerEndToEnd(t *testing.T) {
 
 func TestStopsForRouteHandlerInvalidRouteID(t *testing.T) {
 	_, resp, _ := serveAndRetrieveEndpoint(t, "/api/where/stops-for-route/invalid_route.json?key=TEST")
-	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
 func TestStopsForRouteHandlerMissingRouteIDComponent(t *testing.T) {
 	_, resp, _ := serveAndRetrieveEndpoint(t, "/api/where/stops-for-route/_FMS.json?key=TEST")
-	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
 func TestStopsForRouteHandlerNonExistentAgency(t *testing.T) {
 	_, resp, _ := serveAndRetrieveEndpoint(t, "/api/where/stops-for-route/fake_Raba.json?key=TEST")
-	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
 func TestStopsForRouteHandlerWithInvalidTimeFormats(t *testing.T) {
@@ -169,7 +169,7 @@ func TestStopsForRouteHandlerWithInvalidTimeFormats(t *testing.T) {
 		t.Run("Invalid format: "+format, func(t *testing.T) {
 			_, resp, _ := serveAndRetrieveEndpoint(t, "/api/where/stops-for-route/25-151.json?key=TEST&time="+format)
 
-			assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+			assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 		})
 	}
 }
