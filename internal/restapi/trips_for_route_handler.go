@@ -16,7 +16,7 @@ func (api *RestAPI) tripsForRouteHandler(w http.ResponseWriter, r *http.Request)
 
 	agencyID, routeID, _ := utils.ExtractAgencyIDAndCodeID(utils.ExtractIDFromParams(r))
 
-	if routeID == "" || agencyID == "" {
+	if routeID == "" && agencyID == "" {
 		http.Error(w, "null", http.StatusBadRequest)
 		return
 	}
@@ -25,6 +25,12 @@ func (api *RestAPI) tripsForRouteHandler(w http.ResponseWriter, r *http.Request)
 	includeStatus := r.URL.Query().Get("includeStatus") != "false"
 
 	currentAgency := api.GtfsManager.FindAgency(agencyID)
+	_, err := api.GtfsManager.GtfsDB.Queries.GetRoute(ctx, routeID)
+
+	if err == nil {
+		http.Error(w, "null", http.StatusNotFound)
+		return
+	}
 	if currentAgency == nil {
 		http.Error(w, "null", http.StatusNotFound)
 		return
@@ -110,8 +116,12 @@ func (api *RestAPI) tripsForRouteHandler(w http.ResponseWriter, r *http.Request)
 	tripAgencyResolver := NewTripAgencyResolver(allRoutes, allTrips)
 	result := api.buildTripsForRouteEntries(ctx, activeTrips, tripAgencyResolver, includeSchedule, includeStatus, currentLocation, currentTime, todayMidnight, w, r)
 
+	if result == nil {
+		result = []models.TripsForRouteListEntry{}
+	}
+
 	references := BuildTripReferences(api, w, r, ctx, includeSchedule, allRoutes, allTrips, nil, result)
-	response := models.NewListResponseWithRange(result, references, len(result) == 0)
+	response := models.NewListResponseWithRange(result, references, false)
 	api.sendResponse(w, r, response)
 }
 
