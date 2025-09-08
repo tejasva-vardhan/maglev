@@ -14,9 +14,8 @@ import (
 func (api *RestAPI) tripsForRouteHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	agencyID, routeID, _ := utils.ExtractAgencyIDAndCodeID(utils.ExtractIDFromParams(r))
-
-	if routeID == "" || agencyID == "" {
+	agencyID, routeID, err := utils.ExtractAgencyIDAndCodeID(utils.ExtractIDFromParams(r))
+	if err != nil {
 		http.Error(w, "null", http.StatusBadRequest)
 		return
 	}
@@ -25,12 +24,6 @@ func (api *RestAPI) tripsForRouteHandler(w http.ResponseWriter, r *http.Request)
 	includeStatus := r.URL.Query().Get("includeStatus") != "false"
 
 	currentAgency, err := api.GtfsManager.GtfsDB.Queries.GetAgency(ctx, agencyID)
-	if err != nil {
-		http.Error(w, "null", http.StatusNotFound)
-		return
-	}
-	_, err = api.GtfsManager.GtfsDB.Queries.GetRoute(ctx, routeID)
-
 	if err != nil {
 		http.Error(w, "null", http.StatusNotFound)
 		return
