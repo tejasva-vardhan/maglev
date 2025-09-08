@@ -1,9 +1,9 @@
 package models
 
 type TripsForRouteResponse struct {
-	Code        int64                `json:"code"`
-	CurrentTime int64                `json:"currentTime"`
-	Data        TripsForLocationData `json:"data"`
+	Code        int64             `json:"code"`
+	CurrentTime int64             `json:"currentTime"`
+	Data        TripsForRouteData `json:"data"`
 }
 
 type TripsForRouteData struct {
