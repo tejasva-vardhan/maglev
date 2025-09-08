@@ -16,7 +16,7 @@ func (api *RestAPI) tripsForRouteHandler(w http.ResponseWriter, r *http.Request)
 
 	agencyID, routeID, _ := utils.ExtractAgencyIDAndCodeID(utils.ExtractIDFromParams(r))
 
-	if routeID == "" && agencyID == "" {
+	if routeID == "" || agencyID == "" {
 		http.Error(w, "null", http.StatusBadRequest)
 		return
 	}
