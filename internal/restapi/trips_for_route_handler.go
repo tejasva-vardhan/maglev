@@ -3,7 +3,6 @@ package restapi
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"github.com/OneBusAway/go-gtfs"
 	"maglev.onebusaway.org/gtfsdb"
 	"maglev.onebusaway.org/internal/models"
@@ -45,14 +44,15 @@ func (api *RestAPI) tripsForRouteHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	serviceIDs, err := api.GtfsManager.GtfsDB.Queries.GetActiveServiceIDsForDate(ctx, formattedDate)
-	fmt.Println(formattedDate)
-	fmt.Println(serviceIDs)
 	if err != nil {
 		api.serverErrorResponse(w, r, err)
 		return
 	}
 
-	routeTrips, err := api.GtfsManager.GtfsDB.Queries.GetAllTripsForRoute(ctx, routeID)
+	routeTrips, err := api.GtfsManager.GtfsDB.Queries.GetTripsForRouteInActiveServiceIDs(ctx, gtfsdb.GetTripsForRouteInActiveServiceIDsParams{
+		RouteID:    routeID,
+		ServiceIds: serviceIDs,
+	})
 	if err != nil {
 		api.serverErrorResponse(w, r, err)
 		return
@@ -80,11 +80,7 @@ func (api *RestAPI) tripsForRouteHandler(w http.ResponseWriter, r *http.Request)
 	}
 	activeTrips := make(map[string]gtfs.Vehicle)
 	realTimeVehicles := api.GtfsManager.GetRealTimeVehicles()
-	realTimeTrips := api.GtfsManager.GetRealTimeTrips()
 
-	for _, trip := range realTimeTrips {
-		fmt.Println("Trip id: " + trip.ID.ID)
-	}
 	for _, vehicle := range realTimeVehicles {
 		if vehicle.Position == nil || vehicle.Trip == nil {
 			continue
