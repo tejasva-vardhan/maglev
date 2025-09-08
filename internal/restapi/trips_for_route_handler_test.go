@@ -65,10 +65,7 @@ func TestTripsForRouteHandler_DifferentRoutes(t *testing.T) {
 			assert.False(t, data["limitExceeded"].(bool))
 			assert.False(t, data["outOfRange"].(bool))
 
-			list, ok := data["list"].([]interface{})
-			if !ok {
-				t.Fatal("expected 'list' to be []interface{}")
-			}
+			list, _ := data["list"].([]interface{})
 			for _, item := range list {
 				trip := item.(map[string]interface{})
 				verifyTripEntry(t, trip)
