@@ -24,14 +24,14 @@ func (api *RestAPI) tripsForRouteHandler(w http.ResponseWriter, r *http.Request)
 	includeSchedule := r.URL.Query().Get("includeSchedule") != "false"
 	includeStatus := r.URL.Query().Get("includeStatus") != "false"
 
-	currentAgency := api.GtfsManager.FindAgency(agencyID)
-	_, err := api.GtfsManager.GtfsDB.Queries.GetRoute(ctx, routeID)
-
-	if err == nil {
+	currentAgency, err := api.GtfsManager.GtfsDB.Queries.GetAgency(ctx, agencyID)
+	if err != nil {
 		http.Error(w, "null", http.StatusNotFound)
 		return
 	}
-	if currentAgency == nil {
+	_, err = api.GtfsManager.GtfsDB.Queries.GetRoute(ctx, routeID)
+
+	if err != nil {
 		http.Error(w, "null", http.StatusNotFound)
 		return
 	}
