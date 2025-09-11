@@ -348,6 +348,9 @@ func (api *RestAPI) BuildReference(w http.ResponseWriter, r *http.Request, ctx c
 	// Convert presentRoutes and presentTrips maps to slices
 	routes := make([]interface{}, 0, len(presentRoutes))
 	for _, route := range presentRoutes {
+		if route.ID == "" {
+			continue
+		}
 		routes = append(routes, route)
 	}
 
