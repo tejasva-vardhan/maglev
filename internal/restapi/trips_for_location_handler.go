@@ -206,14 +206,6 @@ func (api *RestAPI) buildScheduleForTrip(
 }
 
 func buildStopTimesList(api *RestAPI, ctx context.Context, stopTimes []gtfsdb.StopTime, shapePoints []gtfs.ShapePoint, agencyID string) []models.StopTime {
-	// Precompute cumulative distances along the shape
-	cumDist := make([]float64, len(shapePoints))
-	for i := 1; i < len(shapePoints); i++ {
-		cumDist[i] = cumDist[i-1] + utils.Haversine(
-			shapePoints[i-1].Latitude, shapePoints[i-1].Longitude,
-			shapePoints[i].Latitude, shapePoints[i].Longitude,
-		)
-	}
 	stopTimesList := make([]models.StopTime, 0, len(stopTimes))
 	for _, stopTime := range stopTimes {
 		distanceAlongTrip := api.calculatePreciseDistanceAlongTrip(ctx, stopTime.StopID, shapePoints)
