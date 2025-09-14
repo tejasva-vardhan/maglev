@@ -752,8 +752,85 @@ func (q *Queries) GetAllTripsForRoute(ctx context.Context, routeID string) ([]Tr
 	return items, nil
 }
 
-const getBlockDetails = `-- name: GetBlockDetails :many
+const getArrivalsAndDeparturesForStop = `-- name: GetArrivalsAndDeparturesForStop :many
+SELECT
+    st.trip_id,
+    st.arrival_time,
+    st.departure_time,
+    st.stop_sequence,
+    st.stop_headsign,
+    t.service_id,
+    t.route_id,
+    t.trip_headsign,
+    t.block_id,
+    r.id as route_id,
+    r.agency_id,
+    r.short_name as route_short_name,
+    r.long_name as route_long_name
+FROM
+    stop_times st
+        JOIN trips t ON st.trip_id = t.id
+        JOIN routes r ON t.route_id = r.id
+WHERE
+    st.stop_id = ?
+ORDER BY
+    st.arrival_time LIMIT 50
+`
 
+type GetArrivalsAndDeparturesForStopRow struct {
+	TripID         string
+	ArrivalTime    int64
+	DepartureTime  int64
+	StopSequence   int64
+	StopHeadsign   sql.NullString
+	ServiceID      string
+	RouteID        string
+	TripHeadsign   sql.NullString
+	BlockID        sql.NullString
+	RouteID_2      string
+	AgencyID       string
+	RouteShortName sql.NullString
+	RouteLongName  sql.NullString
+}
+
+func (q *Queries) GetArrivalsAndDeparturesForStop(ctx context.Context, stopID string) ([]GetArrivalsAndDeparturesForStopRow, error) {
+	rows, err := q.query(ctx, q.getArrivalsAndDeparturesForStopStmt, getArrivalsAndDeparturesForStop, stopID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetArrivalsAndDeparturesForStopRow
+	for rows.Next() {
+		var i GetArrivalsAndDeparturesForStopRow
+		if err := rows.Scan(
+			&i.TripID,
+			&i.ArrivalTime,
+			&i.DepartureTime,
+			&i.StopSequence,
+			&i.StopHeadsign,
+			&i.ServiceID,
+			&i.RouteID,
+			&i.TripHeadsign,
+			&i.BlockID,
+			&i.RouteID_2,
+			&i.AgencyID,
+			&i.RouteShortName,
+			&i.RouteLongName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getBlockDetails = `-- name: GetBlockDetails :many
 SELECT
     t.service_id,
     t.id as trip_id,
@@ -1976,6 +2053,56 @@ func (q *Queries) GetTripsByBlockIDOrdered(ctx context.Context, blockID sql.Null
 	for rows.Next() {
 		var i GetTripsByBlockIDOrderedRow
 		if err := rows.Scan(&i.ID, &i.BlockID, &i.FirstDepartureTime); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getTripsByServiceID = `-- name: GetTripsByServiceID :many
+SELECT id, route_id, service_id, trip_headsign, trip_short_name, direction_id, block_id, shape_id, wheelchair_accessible, bikes_allowed
+FROM trips
+WHERE service_id IN (/*SLICE:service_ids*/?)
+`
+
+func (q *Queries) GetTripsByServiceID(ctx context.Context, serviceIds []string) ([]Trip, error) {
+	query := getTripsByServiceID
+	var queryParams []interface{}
+	if len(serviceIds) > 0 {
+		for _, v := range serviceIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:service_ids*/?", strings.Repeat(",?", len(serviceIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:service_ids*/?", "NULL", 1)
+	}
+	rows, err := q.query(ctx, nil, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Trip
+	for rows.Next() {
+		var i Trip
+		if err := rows.Scan(
+			&i.ID,
+			&i.RouteID,
+			&i.ServiceID,
+			&i.TripHeadsign,
+			&i.TripShortName,
+			&i.DirectionID,
+			&i.BlockID,
+			&i.ShapeID,
+			&i.WheelchairAccessible,
+			&i.BikesAllowed,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

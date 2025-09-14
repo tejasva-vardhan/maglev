@@ -595,9 +595,13 @@ SELECT
     r.long_name as route_long_name
 FROM
     stop_times st
-    JOIN trips t ON st.trip_id = t.id
-    JOIN routes r ON t.route_id = r.id
+        JOIN trips t ON st.trip_id = t.id
+        JOIN routes r ON t.route_id = r.id
 WHERE
     st.stop_id = ?
 ORDER BY
-    st.arrival_time LIMIT 50
+    st.arrival_time LIMIT 50;
+-- name: GetTripsByServiceID :many
+SELECT *
+FROM trips
+WHERE service_id IN (sqlc.slice('service_ids'));
