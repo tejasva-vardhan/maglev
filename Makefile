@@ -9,8 +9,8 @@ run: build
     	-trip-updates-url=https://webservices.umoiq.com/api/gtfs-rt/v1/trip-updates/unitrans \
     	-vehicle-positions-url=https://webservices.umoiq.com/api/gtfs-rt/v1/vehicle-positions/unitrans \
     	-realtime-auth-header-name=x-umo-iq-api-key \
-    	-realtime-auth-header-value=$(REALTIME_AUTH_HEADER_VALUE)
-		-service-alerts-url=https://webservices.umoiq.com/api/gtfs-rt/v1/service-alerts/unitrans \
+    	-realtime-auth-header-value=$(REALTIME_AUTH_HEADER_VALUE) \
+    	-service-alerts-url=https://webservices.umoiq.com/api/gtfs-rt/v1/service-alerts/unitrans
 
 build:
 	go build -gcflags "all=-N -l" -o bin/maglev ./cmd/api
