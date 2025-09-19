@@ -38,7 +38,13 @@ func (api *RestAPI) tripsForLocationHandler(w http.ResponseWriter, r *http.Reque
 	tripAgencyResolver := NewTripAgencyResolver(allRoutes, allTrips)
 
 	result := api.buildTripsForLocationEntries(ctx, activeTrips, bbox, tripAgencyResolver, includeSchedule, currentLocation, todayMidnight, serviceDate, w, r)
-	references := BuildTripReferences(api, w, r, ctx, includeTrip, allRoutes, allTrips, stops, result)
+	references := api.BuildReference(w, r, ctx, ReferenceParams{
+		IncludeTrip: includeTrip,
+		AllRoutes:   allRoutes,
+		AllTrips:    allTrips,
+		Stops:       stops,
+		Trips:       result,
+	})
 	response := models.NewListResponseWithRange(result, references, len(result) == 0)
 	api.sendResponse(w, r, response)
 }
@@ -165,4 +171,306 @@ func (api *RestAPI) buildTripsForLocationEntries(
 		result = append(result, entry)
 	}
 	return result
+}
+
+func (api *RestAPI) buildScheduleForTrip(
+	ctx context.Context,
+	tripID, agencyID string, serviceDate time.Time,
+	currentLocation *time.Location,
+	w http.ResponseWriter,
+	r *http.Request,
+) *models.TripsSchedule {
+	shapeRows, _ := api.GtfsManager.GtfsDB.Queries.GetShapePointsByTripID(ctx, tripID)
+	var shapePoints []gtfs.ShapePoint
+	if len(shapeRows) > 1 {
+		shapePoints = make([]gtfs.ShapePoint, len(shapeRows))
+		for i, sp := range shapeRows {
+			shapePoints[i] = gtfs.ShapePoint{Latitude: sp.Lat, Longitude: sp.Lon}
+		}
+	}
+
+	trip, err := api.GtfsManager.GtfsDB.Queries.GetTrip(ctx, tripID)
+	if err != nil {
+		api.serverErrorResponse(w, r, err)
+		return nil
+	}
+
+	nextTripID, previousTripID, stopTimes, err := api.GetNextAndPreviousTripIDs(ctx, &trip, agencyID, serviceDate)
+	if err != nil {
+		api.serverErrorResponse(w, r, err)
+		return nil
+	}
+
+	stopTimesList := buildStopTimesList(api, ctx, stopTimes, shapePoints, agencyID)
+	return &models.TripsSchedule{
+		Frequency:      nil,
+		NextTripId:     nextTripID,
+		PreviousTripId: previousTripID,
+		StopTimes:      stopTimesList,
+		TimeZone:       currentLocation.String(),
+	}
+}
+
+func buildStopTimesList(api *RestAPI, ctx context.Context, stopTimes []gtfsdb.StopTime, shapePoints []gtfs.ShapePoint, agencyID string) []models.StopTime {
+	stopTimesList := make([]models.StopTime, 0, len(stopTimes))
+	for _, stopTime := range stopTimes {
+		distanceAlongTrip := api.calculatePreciseDistanceAlongTrip(ctx, stopTime.StopID, shapePoints)
+		stopTimesList = append(stopTimesList, models.StopTime{
+			StopID:              utils.FormCombinedID(agencyID, stopTime.StopID),
+			ArrivalTime:         int(stopTime.ArrivalTime),
+			DepartureTime:       int(stopTime.DepartureTime),
+			StopHeadsign:        stopTime.StopHeadsign.String,
+			DistanceAlongTrip:   distanceAlongTrip,
+			HistoricalOccupancy: "",
+		})
+	}
+	return stopTimesList
+}
+
+type ReferenceParams struct {
+	IncludeTrip bool
+	AllRoutes   []gtfsdb.Route
+	AllTrips    []gtfsdb.Trip
+	Stops       []*gtfs.Stop
+	Trips       []models.TripsForLocationListEntry
+}
+
+func (api *RestAPI) BuildReference(w http.ResponseWriter, r *http.Request, ctx context.Context, params ReferenceParams) models.ReferencesModel {
+	refs := &referenceBuilder{
+		api:           api,
+		ctx:           ctx,
+		presentTrips:  make(map[string]models.Trip, len(params.Trips)),
+		presentRoutes: make(map[string]models.Route),
+	}
+
+	if err := refs.build(params); err != nil {
+		api.serverErrorResponse(w, r, err)
+		return models.ReferencesModel{}
+	}
+
+	return refs.toReferencesModel()
+}
+
+type referenceBuilder struct {
+	api             *RestAPI
+	ctx             context.Context
+	presentTrips    map[string]models.Trip
+	presentRoutes   map[string]models.Route
+	presentAgencies map[string]models.AgencyReference
+	stopList        []models.Stop
+	tripsRefList    []interface{}
+}
+
+func (rb *referenceBuilder) build(params ReferenceParams) error {
+	rb.collectTripIDs(params.Trips)
+	rb.buildStopList(params.Stops)
+	rb.enrichTripsData(params.AllTrips)
+
+	if err := rb.collectAgenciesAndRoutes(params.AllRoutes); err != nil {
+		return err
+	}
+
+	if params.IncludeTrip {
+		if err := rb.buildTripReferences(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (rb *referenceBuilder) collectTripIDs(trips []models.TripsForLocationListEntry) {
+	for _, trip := range trips {
+		_, tripID, err := utils.ExtractAgencyIDAndCodeID(trip.TripId)
+		if err != nil {
+			rb.presentTrips[tripID] = models.Trip{}
+		}
+
+		if trip.Schedule != nil {
+			if _, nextID, err := utils.ExtractAgencyIDAndCodeID(trip.Schedule.NextTripId); err == nil {
+				rb.presentTrips[nextID] = models.Trip{}
+			}
+			if _, prevID, err := utils.ExtractAgencyIDAndCodeID(trip.Schedule.PreviousTripId); err == nil {
+				rb.presentTrips[prevID] = models.Trip{}
+			}
+		}
+	}
+}
+
+func (rb *referenceBuilder) buildStopList(stops []*gtfs.Stop) {
+	rb.stopList = make([]models.Stop, 0, len(stops))
+	for _, stop := range stops {
+		if stop.Latitude == nil || stop.Longitude == nil {
+			continue
+		}
+
+		routeIds, err := rb.api.GtfsManager.GtfsDB.Queries.GetRouteIDsForStop(rb.ctx, stop.Id)
+		if err != nil {
+			continue
+		}
+
+		routeIdsString := rb.processRouteIds(routeIds)
+		rb.stopList = append(rb.stopList, rb.createStop(stop, routeIdsString))
+	}
+}
+
+func (rb *referenceBuilder) processRouteIds(routeIds []interface{}) []string {
+	routeIdsString := make([]string, len(routeIds))
+	for i, id := range routeIds {
+		routeId := id.(string)
+		rb.presentRoutes[routeId] = models.Route{}
+		routeIdsString[i] = routeId
+	}
+	return routeIdsString
+}
+
+func (rb *referenceBuilder) createStop(stop *gtfs.Stop, routeIds []string) models.Stop {
+	return models.Stop{
+		Code:               stop.Code,
+		Direction:          "NA", // TODO add direction to GTFS Stop
+		ID:                 stop.Id,
+		Lat:                *stop.Latitude,
+		Lon:                *stop.Longitude,
+		LocationType:       0,
+		Name:               stop.Name,
+		Parent:             "",
+		RouteIDs:           routeIds,
+		StaticRouteIDs:     routeIds,
+		WheelchairBoarding: utils.MapWheelchairBoarding(stop.WheelchairBoarding),
+	}
+}
+
+func (rb *referenceBuilder) enrichTripsData(allTrips []gtfsdb.Trip) {
+	for _, trip := range allTrips {
+		if _, exists := rb.presentTrips[trip.ID]; exists {
+			rb.presentTrips[trip.ID] = rb.createTrip(trip)
+			rb.presentRoutes[trip.RouteID] = models.Route{}
+		}
+	}
+}
+
+func (rb *referenceBuilder) createTrip(trip gtfsdb.Trip) models.Trip {
+	return models.Trip{
+		ID:            trip.ID,
+		RouteID:       trip.RouteID,
+		ServiceID:     trip.ServiceID,
+		TripHeadsign:  trip.TripHeadsign.String,
+		TripShortName: trip.TripShortName.String,
+		DirectionID:   trip.DirectionID.Int64,
+		BlockID:       trip.BlockID.String,
+		ShapeID:       trip.ShapeID.String,
+		PeakOffPeak:   0,
+		TimeZone:      "",
+	}
+}
+
+func (rb *referenceBuilder) collectAgenciesAndRoutes(allRoutes []gtfsdb.Route) error {
+	rb.presentAgencies = make(map[string]models.AgencyReference)
+
+	for _, route := range allRoutes {
+		if _, exists := rb.presentRoutes[route.ID]; !exists {
+			continue
+		}
+
+		rb.presentRoutes[route.ID] = rb.createRoute(route)
+		if err := rb.addAgency(route.AgencyID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (rb *referenceBuilder) createRoute(route gtfsdb.Route) models.Route {
+	return models.NewRoute(
+		utils.FormCombinedID(route.AgencyID, route.ID),
+		route.AgencyID,
+		route.ShortName.String,
+		route.LongName.String,
+		route.Desc.String,
+		models.RouteType(route.Type),
+		route.Url.String,
+		route.Color.String,
+		route.TextColor.String,
+		route.ShortName.String,
+	)
+}
+
+func (rb *referenceBuilder) addAgency(agencyID string) error {
+	agency, err := rb.api.GtfsManager.GtfsDB.Queries.GetAgency(rb.ctx, agencyID)
+	if err != nil {
+		return err
+	}
+
+	rb.presentAgencies[agency.ID] = models.NewAgencyReference(
+		agency.ID,
+		agency.Name,
+		agency.Url,
+		agency.Timezone,
+		agency.Lang.String,
+		agency.Phone.String,
+		agency.Email.String,
+		agency.FareUrl.String,
+		"",
+		false,
+	)
+	return nil
+}
+
+func (rb *referenceBuilder) buildTripReferences() error {
+	rb.tripsRefList = make([]interface{}, 0, len(rb.presentTrips))
+
+	for _, trip := range rb.presentTrips {
+		tripDetails, err := rb.api.GtfsManager.GtfsDB.Queries.GetTrip(rb.ctx, trip.ID)
+		if err != nil {
+			continue
+		}
+
+		currentAgency := rb.presentRoutes[tripDetails.RouteID].AgencyID
+		rb.tripsRefList = append(rb.tripsRefList, rb.createTripReference(tripDetails, currentAgency, trip))
+	}
+	return nil
+}
+
+func (rb *referenceBuilder) createTripReference(tripDetails gtfsdb.Trip, currentAgency string, trip models.Trip) models.Trip {
+	return models.Trip{
+		ID:            utils.FormCombinedID(currentAgency, trip.ID),
+		RouteID:       utils.FormCombinedID(currentAgency, tripDetails.RouteID),
+		ServiceID:     utils.FormCombinedID(currentAgency, trip.ServiceID),
+		TripHeadsign:  tripDetails.TripHeadsign.String,
+		TripShortName: tripDetails.TripShortName.String,
+		DirectionID:   tripDetails.DirectionID.Int64,
+		BlockID:       utils.FormCombinedID(currentAgency, trip.BlockID),
+		ShapeID:       utils.FormCombinedID(currentAgency, tripDetails.ShapeID.String),
+		PeakOffPeak:   0,
+		TimeZone:      "",
+	}
+}
+
+func (rb *referenceBuilder) toReferencesModel() models.ReferencesModel {
+	return models.ReferencesModel{
+		Agencies:   rb.getAgenciesList(),
+		Routes:     rb.getRoutesList(),
+		Situations: []interface{}{},
+		StopTimes:  []interface{}{},
+		Stops:      rb.stopList,
+		Trips:      rb.tripsRefList,
+	}
+}
+
+func (rb *referenceBuilder) getAgenciesList() []models.AgencyReference {
+	agencies := make([]models.AgencyReference, 0, len(rb.presentAgencies))
+	for _, agency := range rb.presentAgencies {
+		agencies = append(agencies, agency)
+	}
+	return agencies
+}
+
+func (rb *referenceBuilder) getRoutesList() []interface{} {
+	routes := make([]interface{}, 0, len(rb.presentRoutes))
+	for _, route := range rb.presentRoutes {
+		if route.ID != "" {
+			routes = append(routes, route)
+		}
+	}
+	return routes
 }
