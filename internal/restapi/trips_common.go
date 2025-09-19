@@ -114,9 +114,10 @@ func BuildTripReferences[T interface{ GetTripId() string }](api *RestAPI, w http
 			routeIdsString[i] = id.(string)
 		}
 
+		_, stopID, _ := utils.ExtractAgencyIDAndCodeID(stop.Id)
 		stopList = append(stopList, models.Stop{
 			Code:               stop.Code,
-			Direction:          "NA", // TODO add direction
+			Direction:          api.calculateStopDirection(ctx, stopID),
 			ID:                 stop.Id,
 			Lat:                *stop.Latitude,
 			Lon:                *stop.Longitude,

@@ -394,7 +394,7 @@ func (api *RestAPI) arrivalAndDepartureForStopHandler(w http.ResponseWriter, r *
 			Lat:                stopData.Lat,
 			Lon:                stopData.Lon,
 			Code:               stopData.Code.String,
-			Direction:          "N", // TODO: Calculate actual direction
+			Direction:          api.calculateStopDirection(r.Context(), stopData.ID),
 			LocationType:       int(stopData.LocationType.Int64),
 			WheelchairBoarding: "UNKNOWN",
 			RouteIDs:           combinedRouteIDs,

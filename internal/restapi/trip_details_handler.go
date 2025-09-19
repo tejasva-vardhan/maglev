@@ -330,7 +330,7 @@ func (api *RestAPI) buildStopReferences(ctx context.Context, agencyID string, st
 			Lat:                stop.Lat,
 			Lon:                stop.Lon,
 			Code:               stop.Code.String,
-			Direction:          "NE", // TODO
+			Direction:          api.calculateStopDirection(ctx, stop.ID),
 			LocationType:       int(stop.LocationType.Int64),
 			WheelchairBoarding: "UNKNOWN",
 			RouteIDs:           combinedRouteIDs,
