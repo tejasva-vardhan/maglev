@@ -290,7 +290,7 @@ func BuildStopReferencesAndRouteIDsForStops(api *RestAPI, ctx context.Context, a
 			Code:               stop.Code.String,
 			Direction:          api.calculateStopDirection(ctx, stop.ID),
 			LocationType:       int(stop.LocationType.Int64),
-			WheelchairBoarding: "UNKNOWN",
+			WheelchairBoarding: models.UnknownValue,
 			RouteIDs:           combinedRouteIDs,
 			StaticRouteIDs:     combinedRouteIDs,
 		}

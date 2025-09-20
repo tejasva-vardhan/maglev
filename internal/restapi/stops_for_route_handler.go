@@ -318,12 +318,12 @@ func formatStopIDs(agencyID string, stops map[string]bool) []string {
 
 func (api *RestAPI) calculateStopDirection(ctx context.Context, stopID string) string {
 	if api.DirectionCalculator == nil {
-		return "UNKNOWN" // Fallback for tests
+		return models.UnknownValue // Fallback for tests
 	}
 
 	direction := api.DirectionCalculator.CalculateStopDirection(ctx, stopID)
 	if direction == "" {
-		return "UNKNOWN" // Default when calculation fails
+		return models.UnknownValue // Default when calculation fails
 	}
 
 	return direction

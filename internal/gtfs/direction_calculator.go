@@ -2,9 +2,13 @@ package gtfs
 
 import (
 	"context"
+
 	"maglev.onebusaway.org/gtfsdb"
+	"maglev.onebusaway.org/internal/models"
 	"maglev.onebusaway.org/internal/utils"
 )
+
+const unknownDirection = models.UnknownValue
 
 type DirectionCalculator struct {
 	queries *gtfsdb.Queries
@@ -19,24 +23,24 @@ func NewDirectionCalculator(queries *gtfsdb.Queries) *DirectionCalculator {
 // CalculateStopDirection determines the compass direction for a stop
 func (dc *DirectionCalculator) CalculateStopDirection(ctx context.Context, stopID string) string {
 	// Strategy 1: Try shape-based calculation
-	if direction := dc.calculateFromShape(ctx, stopID); direction != "" {
+	if direction := dc.calculateFromShape(ctx, stopID); direction != unknownDirection {
 		return direction
 	}
 
 	// Strategy 2: Fallback to stop-to-stop calculation
-	if direction := dc.calculateFromNextStop(ctx, stopID); direction != "" {
+	if direction := dc.calculateFromNextStop(ctx, stopID); direction != unknownDirection {
 		return direction
 	}
 
 	// No direction could be calculated
-	return ""
+	return unknownDirection
 }
 
 func (dc *DirectionCalculator) calculateFromShape(ctx context.Context, stopID string) string {
 	// Get trips serving this stop
 	stopTrips, err := dc.queries.GetStopsWithTripContext(ctx, stopID)
 	if err != nil || len(stopTrips) == 0 {
-		return ""
+		return unknownDirection
 	}
 
 	directions := make(map[string]int)
@@ -73,7 +77,7 @@ func (dc *DirectionCalculator) calculateFromShape(ctx context.Context, stopID st
 func (dc *DirectionCalculator) calculateFromNextStop(ctx context.Context, stopID string) string {
 	stopTrips, err := dc.queries.GetStopsWithTripContext(ctx, stopID)
 	if err != nil || len(stopTrips) == 0 {
-		return ""
+		return unknownDirection
 	}
 
 	directions := make(map[string]int)
@@ -118,7 +122,7 @@ func (dc *DirectionCalculator) findClosestShapePoint(points []gtfsdb.GetShapePoi
 
 func (dc *DirectionCalculator) getMostCommonDirection(directions map[string]int) string {
 	maxCount := 0
-	result := ""
+	result := unknownDirection
 
 	for direction, count := range directions {
 		if count > maxCount {
