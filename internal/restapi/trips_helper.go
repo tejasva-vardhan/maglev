@@ -826,6 +826,111 @@ func (api *RestAPI) findNextStopAfter(
 	return "", 0
 }
 
+func (api *RestAPI) calculateBatchStopDistances(
+	timeStops []gtfsdb.StopTime,
+	shapePoints []gtfs.ShapePoint,
+	stopCoords map[string]struct{ lat, lon float64 },
+	agencyID string,
+) []models.StopTime {
+
+	stopTimesList := make([]models.StopTime, 0, len(timeStops))
+
+	if len(shapePoints) < 2 {
+		for _, stopTime := range timeStops {
+			stopTimesList = append(stopTimesList, models.StopTime{
+				StopID:              utils.FormCombinedID(agencyID, stopTime.StopID),
+				ArrivalTime:         int(stopTime.ArrivalTime / 1e9),
+				DepartureTime:       int(stopTime.DepartureTime / 1e9),
+				StopHeadsign:        utils.NullStringOrEmpty(stopTime.StopHeadsign),
+				DistanceAlongTrip:   0.0,
+				HistoricalOccupancy: "",
+			})
+		}
+		return stopTimesList
+	}
+
+	// Pre-calculate cumulative distances
+	cumulativeDistances := preCalculateCumulativeDistances(shapePoints)
+	if len(cumulativeDistances) != len(shapePoints) {
+		for _, stopTime := range timeStops {
+			stopTimesList = append(stopTimesList, models.StopTime{
+				StopID:              utils.FormCombinedID(agencyID, stopTime.StopID),
+				ArrivalTime:         int(stopTime.ArrivalTime / 1e9),
+				DepartureTime:       int(stopTime.DepartureTime / 1e9),
+				StopHeadsign:        utils.NullStringOrEmpty(stopTime.StopHeadsign),
+				DistanceAlongTrip:   0.0,
+				HistoricalOccupancy: "",
+			})
+		}
+		return stopTimesList
+	}
+
+	lastMatchedIndex := 0
+
+	for _, stopTime := range timeStops {
+		var distanceAlongTrip float64
+
+		// Only calculate if we have valid coordinates
+		if coords, exists := stopCoords[stopTime.StopID]; exists {
+			stopLat := coords.lat
+			stopLon := coords.lon
+
+			// ensure lastMatchedIndex didn't go out of bounds
+			if lastMatchedIndex >= len(shapePoints)-1 {
+				lastMatchedIndex = len(shapePoints) - 2
+			}
+
+			var minDistance = math.Inf(1)
+			var closestSegmentIndex = lastMatchedIndex
+			var projectionRatio float64
+
+			// Early exit threshold to speed up search
+			//This may be too conservative for some cases but helps performance significantly
+			const earlyExitThresholdMeters = 100.0
+
+			// Start from lastMatchedIndex
+			for i := lastMatchedIndex; i < len(shapePoints)-1; i++ {
+				distance, ratio := distanceToLineSegment(
+					stopLat, stopLon,
+					shapePoints[i].Latitude, shapePoints[i].Longitude,
+					shapePoints[i+1].Latitude, shapePoints[i+1].Longitude,
+				)
+
+				if distance < minDistance {
+					minDistance = distance
+					closestSegmentIndex = i
+					projectionRatio = ratio
+					lastMatchedIndex = i
+				} else if distance > minDistance+earlyExitThresholdMeters {
+					// Early exit:
+					break
+				}
+			}
+
+			// Calculate distance along trip
+			cumulativeDistance := cumulativeDistances[closestSegmentIndex]
+			if closestSegmentIndex < len(shapePoints)-1 {
+				segmentDistance := utils.Distance(
+					shapePoints[closestSegmentIndex].Latitude, shapePoints[closestSegmentIndex].Longitude,
+					shapePoints[closestSegmentIndex+1].Latitude, shapePoints[closestSegmentIndex+1].Longitude,
+				)
+				cumulativeDistance += segmentDistance * projectionRatio
+			}
+			distanceAlongTrip = cumulativeDistance
+		}
+
+		stopTimesList = append(stopTimesList, models.StopTime{
+			StopID:              utils.FormCombinedID(agencyID, stopTime.StopID),
+			ArrivalTime:         int(stopTime.ArrivalTime / 1e9),
+			DepartureTime:       int(stopTime.DepartureTime / 1e9),
+			StopHeadsign:        utils.NullStringOrEmpty(stopTime.StopHeadsign),
+			DistanceAlongTrip:   distanceAlongTrip,
+			HistoricalOccupancy: "",
+		})
+	}
+	return stopTimesList
+}
+
 func (api *RestAPI) findStopsByScheduleDeviation(
 	stopTimes []*gtfsdb.StopTime,
 	currentTime time.Time,
