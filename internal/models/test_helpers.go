@@ -6,7 +6,7 @@ import (
 )
 
 // GetFixturePath returns the absolute path to a fixture file in the "testdata" directory relative to the project's root.
-func GetFixturePath(t *testing.T, fixturePath string) string {
+func GetFixturePath(t testing.TB, fixturePath string) string {
 	t.Helper()
 
 	absPath, err := filepath.Abs(filepath.Join("..", "..", "testdata", fixturePath))
