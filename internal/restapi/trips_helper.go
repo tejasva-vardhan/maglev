@@ -3,7 +3,6 @@ package restapi
 import (
 	"context"
 	"math"
-	"sort"
 	"time"
 
 	"github.com/OneBusAway/go-gtfs"
@@ -411,75 +410,24 @@ func (api *RestAPI) setBlockTripSequence(ctx context.Context, tripID string, ser
 // for trips that are active on the given service date.
 // Uses GetTripsByBlockIDOrdered to perform a single SQL JOIN instead of N+1 queries.
 func (api *RestAPI) calculateBlockTripSequence(ctx context.Context, tripID string, serviceDate time.Time) int {
-	blockID, err := api.GtfsManager.GtfsDB.Queries.GetBlockIDByTripID(ctx, tripID)
-
-	if err != nil || !blockID.Valid || blockID.String == "" {
-		return 0
-	}
-
-	blockTrips, err := api.GtfsManager.GtfsDB.Queries.GetTripsByBlockID(ctx, blockID)
-	if err != nil || len(blockTrips) == 0 {
-		return 0
-	}
-
-	tripIDs := make([]string, len(blockTrips))
-	for i, bt := range blockTrips {
-		tripIDs[i] = bt.ID
-	}
-
-	allStopTimes, err := api.GtfsManager.GtfsDB.Queries.GetStopTimesForTripIDs(ctx, tripIDs)
+	// Get the trip to find both block_id and service_id in one query
+	trip, err := api.GtfsManager.GtfsDB.Queries.GetTrip(ctx, tripID)
 	if err != nil {
 		return 0
 	}
 
-	stopTimesByTrip := make(map[string][]gtfsdb.StopTime)
-	for _, st := range allStopTimes {
-		stopTimesByTrip[st.TripID] = append(stopTimesByTrip[st.TripID], st)
-	}
-
-	type TripWithDetails struct {
-		TripID    string
-		StartTime int
-	}
-
-	activeTrips := []TripWithDetails{}
-
-	for _, blockTrip := range blockTrips {
-		isActive, err := api.GtfsManager.IsServiceActiveOnDate(ctx, blockTrip.ServiceID, serviceDate)
-		if err != nil || isActive == 0 {
-			continue
-		}
-
-		stopTimes, exists := stopTimesByTrip[blockTrip.ID]
-		if !exists || len(stopTimes) == 0 {
-			continue
-		}
-
-		startTime := math.MaxInt
-		for _, st := range stopTimes {
-			if st.DepartureTime > 0 && int(st.DepartureTime) < startTime {
-				startTime = int(st.DepartureTime)
-			}
-		}
-
-		if startTime != math.MaxInt {
-			activeTrips = append(activeTrips, TripWithDetails{
-				TripID:    blockTrip.ID,
-				StartTime: startTime,
-			})
-		}
-	}
-
-	// Third, sort trips by start time, then by trip ID for deterministic ordering
-	sort.Slice(activeTrips, func(i, j int) bool {
-		if activeTrips[i].StartTime != activeTrips[j].StartTime {
-			return activeTrips[i].StartTime < activeTrips[j].StartTime
-		}
-		return activeTrips[i].TripID < activeTrips[j].TripID
+	// Use the optimized query that JOINs trips with stop_times in SQL,
+	// ordered by first departure time — replaces N+1 queries
+	orderedTrips, err := api.GtfsManager.GtfsDB.Queries.GetTripsByBlockIDOrdered(ctx, gtfsdb.GetTripsByBlockIDOrderedParams{
+		BlockID:    trip.BlockID,
+		ServiceIds: []string{trip.ServiceID},
 	})
+	if err != nil {
+		return 0
+	}
 
-	for i, trip := range activeTrips {
-		if trip.TripID == tripID {
+	for i, t := range orderedTrips {
+		if t.ID == tripID {
 			return i
 		}
 	}
@@ -1163,4 +1111,255 @@ func interpolateDistanceAtScheduledTime(
 	}
 
 	return cumulativeDistances[len(cumulativeDistances)-1]
+}
+
+func (api *RestAPI) calculateScheduleDeviationFromPosition(
+	ctx context.Context,
+	tripID string,
+	vehicle *gtfs.Vehicle,
+	currentTime time.Time,
+	gtfsRTDeviation int,
+) int {
+	if vehicle == nil || vehicle.Position == nil || vehicle.Position.Latitude == nil || vehicle.Position.Longitude == nil {
+		return gtfsRTDeviation
+	}
+
+	actualDistance := api.getVehicleDistanceAlongShapeContextual(ctx, tripID, vehicle)
+	if actualDistance <= 0 {
+		return gtfsRTDeviation
+	}
+
+	stopTimes, err := api.GtfsManager.GtfsDB.Queries.GetStopTimesForTrip(ctx, tripID)
+	if err != nil || len(stopTimes) == 0 {
+		return gtfsRTDeviation
+	}
+
+	serviceDateUnix := utils.CalculateServiceDate(currentTime).Unix()
+
+	var totalDistance float64
+	shapeRows, err := api.GtfsManager.GtfsDB.Queries.GetShapePointsByTripID(ctx, tripID)
+	if err == nil && len(shapeRows) > 1 {
+		shapePoints := make([]gtfs.ShapePoint, len(shapeRows))
+		for i, sp := range shapeRows {
+			shapePoints[i] = gtfs.ShapePoint{
+				Latitude:  sp.Lat,
+				Longitude: sp.Lon,
+			}
+		}
+		cumulativeDistances := preCalculateCumulativeDistances(shapePoints)
+		totalDistance = cumulativeDistances[len(cumulativeDistances)-1]
+	}
+
+	scheduledTimeAtPosition := api.getScheduledTimeAtDistance(actualDistance, stopTimes, totalDistance)
+	if scheduledTimeAtPosition < 0 {
+		return gtfsRTDeviation
+	}
+
+	currentTimestamp := currentTime.Unix()
+	effectiveScheduleTime := scheduledTimeAtPosition + serviceDateUnix
+	deviation := int(currentTimestamp - effectiveScheduleTime)
+
+	return deviation
+}
+
+func (api *RestAPI) getScheduledTimeAtDistance(distance float64, stopTimes []gtfsdb.StopTime, totalTripDistance float64) int64 {
+	if len(stopTimes) == 0 || totalTripDistance <= 0 {
+		return -1
+	}
+
+	hasShapeDist := false
+	for _, st := range stopTimes {
+		if st.ShapeDistTraveled.Valid && st.ShapeDistTraveled.Float64 > 0 {
+			hasShapeDist = true
+			break
+		}
+	}
+
+	if hasShapeDist {
+		for i := 0; i < len(stopTimes)-1; i++ {
+			if !stopTimes[i].ShapeDistTraveled.Valid || !stopTimes[i+1].ShapeDistTraveled.Valid {
+				continue
+			}
+
+			fromDist := stopTimes[i].ShapeDistTraveled.Float64
+			toDist := stopTimes[i+1].ShapeDistTraveled.Float64
+
+			if fromDist <= distance && distance <= toDist {
+				fromTime := stopTimes[i].ArrivalTime / 1e9
+				if fromTime == 0 {
+					fromTime = stopTimes[i].DepartureTime / 1e9
+				}
+
+				toTime := stopTimes[i+1].ArrivalTime / 1e9
+				if toTime == 0 {
+					toTime = stopTimes[i+1].DepartureTime / 1e9
+				}
+
+				ratio := (distance - fromDist) / (toDist - fromDist)
+				scheduledTime := float64(fromTime) + ratio*float64(toTime-fromTime)
+				return int64(scheduledTime)
+			}
+		}
+	} else {
+		totalStops := len(stopTimes)
+		stopSpacing := totalTripDistance / float64(totalStops-1)
+
+		for i := 0; i < totalStops-1; i++ {
+			fromDist := float64(i) * stopSpacing
+			toDist := float64(i+1) * stopSpacing
+
+			if fromDist <= distance && distance <= toDist {
+				fromTime := stopTimes[i].ArrivalTime / 1e9
+				if fromTime == 0 {
+					fromTime = stopTimes[i].DepartureTime / 1e9
+				}
+
+				toTime := stopTimes[i+1].ArrivalTime / 1e9
+				if toTime == 0 {
+					toTime = stopTimes[i+1].DepartureTime / 1e9
+				}
+
+				ratio := (distance - fromDist) / (toDist - fromDist)
+				scheduledTime := float64(fromTime) + ratio*float64(toTime-fromTime)
+				return int64(scheduledTime)
+			}
+		}
+	}
+
+	lastStop := stopTimes[len(stopTimes)-1]
+	scheduledTime := lastStop.ArrivalTime / 1e9
+	if scheduledTime == 0 {
+		scheduledTime = lastStop.DepartureTime / 1e9
+	}
+	return scheduledTime
+}
+
+func (api *RestAPI) calculateBlockLevelPosition(
+	ctx context.Context,
+	tripID string,
+	vehicle *gtfs.Vehicle,
+	currentTime time.Time,
+	scheduleDeviation int,
+) (activeTripID string, closestStopID string, nextStopID string, distanceAlongTrip float64, err error) {
+	trip, err := api.GtfsManager.GtfsDB.Queries.GetTrip(ctx, tripID)
+	if err != nil {
+		return tripID, "", "", 0, err
+	}
+
+	if !trip.BlockID.Valid {
+		return tripID, "", "", 0, nil
+	}
+
+	year, month, day := currentTime.Date()
+	serviceDate := time.Date(year, month, day, 0, 0, 0, 0, currentTime.Location())
+	serviceDateUnix := serviceDate.Unix()
+
+	currentTimestamp := currentTime.Unix()
+	effectiveScheduledTime := currentTimestamp - int64(scheduleDeviation)
+	effectiveTimeFromMidnight := effectiveScheduledTime - serviceDateUnix
+
+	blockTrips, err := api.GtfsManager.GtfsDB.Queries.GetTripsByBlockIDOrdered(ctx, gtfsdb.GetTripsByBlockIDOrderedParams{
+		BlockID:    trip.BlockID,
+		ServiceIds: []string{trip.ServiceID},
+	})
+	if err != nil {
+		return tripID, "", "", 0, err
+	}
+
+	var blockStopTimes []BlockStopTimeInfo
+	var cumulativeDistance float64
+
+	for _, blockTrip := range blockTrips {
+		stopTimes, err := api.GtfsManager.GtfsDB.Queries.GetStopTimesForTrip(ctx, blockTrip.ID)
+		if err != nil {
+			continue
+		}
+
+		shapeRows, _ := api.GtfsManager.GtfsDB.Queries.GetShapePointsByTripID(ctx, blockTrip.ID)
+		tripDistance := calculateTripDistance(shapeRows)
+
+		for i, st := range stopTimes {
+			arrivalTime := st.ArrivalTime / 1e9
+			if arrivalTime == 0 {
+				arrivalTime = st.DepartureTime / 1e9
+			}
+
+			var stopDistance float64
+			if len(stopTimes) > 1 {
+				stopDistance = cumulativeDistance + (float64(i) / float64(len(stopTimes)-1) * tripDistance)
+			} else {
+				stopDistance = cumulativeDistance
+			}
+
+			blockStopTimes = append(blockStopTimes, BlockStopTimeInfo{
+				TripID:        blockTrip.ID,
+				StopID:        st.StopID,
+				ArrivalTime:   arrivalTime,
+				StopSequence:  int(st.StopSequence),
+				Distance:      stopDistance,
+				IsFirstInTrip: i == 0,
+				IsLastInTrip:  i == len(stopTimes)-1,
+			})
+		}
+
+		cumulativeDistance += tripDistance
+	}
+
+	if len(blockStopTimes) == 0 {
+		return tripID, "", "", 0, nil
+	}
+
+	closestIndex := -1
+	var minTimeDiff int64 = math.MaxInt64
+
+	for i, bst := range blockStopTimes {
+		timeDiff := bst.ArrivalTime - effectiveTimeFromMidnight
+		if timeDiff < 0 {
+			timeDiff = -timeDiff
+		}
+		if timeDiff < minTimeDiff {
+			minTimeDiff = timeDiff
+			closestIndex = i
+		}
+	}
+
+	if closestIndex < 0 {
+		return tripID, "", "", 0, nil
+	}
+
+	activeTripID = blockStopTimes[closestIndex].TripID
+	closestStopID = blockStopTimes[closestIndex].StopID
+	distanceAlongTrip = blockStopTimes[closestIndex].Distance
+
+	if closestIndex+1 < len(blockStopTimes) {
+		nextStopID = blockStopTimes[closestIndex+1].StopID
+	}
+
+	return activeTripID, closestStopID, nextStopID, distanceAlongTrip, nil
+}
+
+type BlockStopTimeInfo struct {
+	TripID        string
+	StopID        string
+	ArrivalTime   int64
+	StopSequence  int
+	Distance      float64
+	IsFirstInTrip bool
+	IsLastInTrip  bool
+}
+
+func calculateTripDistance(shapeRows []gtfsdb.Shape) float64 {
+	if len(shapeRows) < 2 {
+		return 0
+	}
+
+	totalDistance := 0.0
+	for i := 1; i < len(shapeRows); i++ {
+		dist := utils.Distance(
+			shapeRows[i-1].Lat, shapeRows[i-1].Lon,
+			shapeRows[i].Lat, shapeRows[i].Lon,
+		)
+		totalDistance += dist
+	}
+	return totalDistance
 }

@@ -365,11 +365,6 @@ func (api *RestAPI) buildStopReferences(ctx context.Context, calc *GTFS.Advanced
 			continue
 		}
 
-		direction := models.UnknownValue
-		if stop.Direction.Valid && stop.Direction.String != "" {
-			direction = stop.Direction.String
-		}
-
 		combinedRouteIDs := routeIDsByStop[originalStopID]
 
 		stopModel := models.Stop{
