@@ -157,3 +157,67 @@ func getCurrentVehicleStopSequence(vehicle *gtfs.Vehicle) *int {
 	val := int(*vehicle.CurrentStopSequence)
 	return &val
 }
+
+func (api *RestAPI) projectPositionOntoRoute(ctx context.Context, tripID string, actualPos models.Location) *models.Location {
+	shapeRows, err := api.GtfsManager.GtfsDB.Queries.GetShapePointsByTripID(ctx, tripID)
+	if err != nil || len(shapeRows) < 2 {
+		return nil
+	}
+
+	shapePoints := make([]gtfs.ShapePoint, len(shapeRows))
+	for i, sp := range shapeRows {
+		shapePoints[i] = gtfs.ShapePoint{
+			Latitude:  sp.Lat,
+			Longitude: sp.Lon,
+		}
+	}
+
+	minDistance := math.MaxFloat64
+	var closestPoint models.Location
+
+	for i := 0; i < len(shapePoints)-1; i++ {
+		distance, projectedPoint := projectPointToSegment(
+			actualPos.Lat, actualPos.Lon,
+			shapePoints[i].Latitude, shapePoints[i].Longitude,
+			shapePoints[i+1].Latitude, shapePoints[i+1].Longitude,
+		)
+
+		if distance < minDistance {
+			minDistance = distance
+			closestPoint = projectedPoint
+		}
+	}
+
+	if minDistance <= 200 {
+		return &closestPoint
+	}
+
+	return nil
+}
+
+func projectPointToSegment(px, py, x1, y1, x2, y2 float64) (float64, models.Location) {
+	dx := x2 - x1
+	dy := y2 - y1
+
+	if dx == 0 && dy == 0 {
+		dist := utils.Distance(px, py, x1, y1)
+		return dist, models.Location{Lat: x1, Lon: y1}
+	}
+
+	t := ((px-x1)*dx + (py-y1)*dy) / (dx*dx + dy*dy)
+
+	if t < 0 {
+		dist := utils.Distance(px, py, x1, y1)
+		return dist, models.Location{Lat: x1, Lon: y1}
+	}
+	if t > 1 {
+		dist := utils.Distance(px, py, x2, y2)
+		return dist, models.Location{Lat: x2, Lon: y2}
+	}
+
+	projLat := x1 + t*dx
+	projLon := y1 + t*dy
+
+	dist := utils.Distance(px, py, projLat, projLon)
+	return dist, models.Location{Lat: projLat, Lon: projLon}
+}
