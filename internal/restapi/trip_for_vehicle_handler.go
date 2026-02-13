@@ -149,15 +149,7 @@ func (api *RestAPI) tripForVehicleHandler(w http.ResponseWriter, r *http.Request
 		currentTime = api.Clock.Now().In(loc)
 	}
 
-	var serviceDate time.Time
-	if params.ServiceDate != nil {
-		serviceDate = *params.ServiceDate
-	} else {
-		// Use time.Date() to get local midnight, not Truncate() which uses UTC
-		y, m, d := currentTime.Date()
-		serviceDate = time.Date(y, m, d, 0, 0, 0, 0, loc)
-	}
-	serviceDateMillis := serviceDate.Unix() * 1000
+	serviceDate, serviceDateMillis := utils.ServiceDateMillis(params.ServiceDate, currentTime)
 
 	var status *models.TripStatusForTripDetails
 	if params.IncludeStatus {
