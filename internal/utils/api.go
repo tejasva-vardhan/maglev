@@ -28,6 +28,11 @@ func ServiceDateMillis(explicitServiceDate *time.Time, currentTime time.Time) (t
 	return serviceDate, serviceDate.Unix() * 1000
 }
 
+func CalculateSecondsSinceServiceDate(currentTime time.Time, serviceDate time.Time) int64 {
+	duration := currentTime.Sub(serviceDate)
+	return int64(duration.Seconds())
+}
+
 // ExtractCodeID extracts the `code_id` from a string in the format `{agency_id}_{code_id}`.
 func ExtractCodeID(combinedID string) (string, error) {
 	parts := strings.SplitN(combinedID, "_", 2)
