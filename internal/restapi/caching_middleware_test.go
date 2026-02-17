@@ -36,13 +36,18 @@ func TestCacheControlHeaders(t *testing.T) {
 			endpoint:       "/api/where/report-problem-with-stop/123.json?key=TEST",
 			expectedHeader: "no-cache, no-store, must-revalidate", // 0 seconds
 		},
+		{
+			name:           "Error Response (No Cache on 404)",
+			endpoint:       "/api/where/stop/nonexistent_stop_id_123",
+			expectedHeader: "no-cache, no-store, must-revalidate",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			resp, err := http.Get(server.URL + tt.endpoint)
 			assert.NoError(t, err)
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 
 			gotHeader := resp.Header.Get("Cache-Control")
 			assert.Equal(t, tt.expectedHeader, gotHeader, "Cache-Control header mismatch for %s", tt.endpoint)

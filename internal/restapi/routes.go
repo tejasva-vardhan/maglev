@@ -72,7 +72,7 @@ func (api *RestAPI) SetRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/where/current-time.json", CacheControlMiddleware(models.CacheDurationShort, rateLimitAndValidateAPIKey(api, api.currentTimeHandler)))
 	mux.Handle("GET /api/where/vehicles-for-agency/{id}", CacheControlMiddleware(models.CacheDurationShort, rateLimitAndValidateAPIKey(api, api.vehiclesForAgencyHandler)))
 	mux.Handle("GET /api/where/stops-for-location.json", CacheControlMiddleware(models.CacheDurationShort, rateLimitAndValidateAPIKey(api, api.stopsForLocationHandler)))
-	mux.Handle("GET /api/where/trip/{id}", CacheControlMiddleware(models.CacheDurationShort, rateLimitAndValidateAPIKey(api, api.tripHandler)))
+	mux.Handle("GET /api/where/trip/{id}", CacheControlMiddleware(models.CacheDurationLong, rateLimitAndValidateAPIKey(api, api.tripHandler)))
 	mux.Handle("GET /api/where/routes-for-location.json", CacheControlMiddleware(models.CacheDurationShort, rateLimitAndValidateAPIKey(api, api.routesForLocationHandler)))
 	mux.Handle("GET /api/where/trip-details/{id}", CacheControlMiddleware(models.CacheDurationShort, rateLimitAndValidateAPIKey(api, api.tripDetailsHandler)))
 	mux.Handle("GET /api/where/trip-for-vehicle/{id}", CacheControlMiddleware(models.CacheDurationShort, rateLimitAndValidateAPIKey(api, api.tripForVehicleHandler)))
