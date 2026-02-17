@@ -88,8 +88,8 @@ func TestSearchRoutesByFullText(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Len(t, results, 2)
-		// Both routes share agency_id and similar bm25 scores,
-		// so tiebreaker is r.id: r1 < r3
+		// r1 matches "Downtown" in both long_name and desc, giving it
+		// a better bm25 score than r3 (long_name only). Both share agency_id.
 		assert.Equal(t, "r1", results[0].ID)
 		assert.Equal(t, "r3", results[1].ID)
 	})
