@@ -9,7 +9,6 @@ import (
 	"maglev.onebusaway.org/internal/utils"
 )
 
-// GetVehicleStatusAndPhase returns status and phase based on GTFS-RT CurrentStatus
 func GetVehicleStatusAndPhase(vehicle *gtfs.Vehicle) (status string, phase string) {
 	if vehicle == nil {
 		return "SCHEDULED", "scheduled"
@@ -75,9 +74,7 @@ func (api *RestAPI) BuildVehicleStatus(
 	}
 
 	status.Predicted = true
-
 	status.Scheduled = false
-
 }
 
 func GetVehicleActiveTripID(vehicle *gtfs.Vehicle) string {
@@ -86,14 +83,6 @@ func GetVehicleActiveTripID(vehicle *gtfs.Vehicle) string {
 	}
 
 	return vehicle.Trip.ID.ID
-}
-
-func getCurrentVehicleStopSequence(vehicle *gtfs.Vehicle) *int {
-	if vehicle == nil || vehicle.CurrentStopSequence == nil {
-		return nil
-	}
-	val := int(*vehicle.CurrentStopSequence)
-	return &val
 }
 
 func (api *RestAPI) projectPositionOntoRoute(ctx context.Context, tripID string, actualPos models.Location) *models.Location {
@@ -158,4 +147,12 @@ func projectPointToSegment(px, py, x1, y1, x2, y2 float64) (float64, models.Loca
 
 	dist := utils.Distance(px, py, projLat, projLon)
 	return dist, models.Location{Lat: projLat, Lon: projLon}
+}
+
+func getCurrentVehicleStopSequence(vehicle *gtfs.Vehicle) *int {
+	if vehicle == nil || vehicle.CurrentStopSequence == nil {
+		return nil
+	}
+	val := int(*vehicle.CurrentStopSequence)
+	return &val
 }
