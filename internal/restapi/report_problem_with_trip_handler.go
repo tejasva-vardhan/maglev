@@ -37,7 +37,7 @@ func (api *RestAPI) reportProblemWithTripHandler(w http.ResponseWriter, r *http.
 	}
 
 	// Safety check: Ensure DB is initialized
-	if api.GtfsManager == nil || api.GtfsManager.GtfsDB == nil {
+	if api.GtfsManager == nil || api.GtfsManager.GtfsDB == nil || api.GtfsManager.GtfsDB.Queries == nil {
 		logger.Error("report problem with trip failed: GTFS DB not initialized")
 		http.Error(w, `{"code":500, "text":"internal server error"}`, http.StatusInternalServerError)
 		return
@@ -49,11 +49,12 @@ func (api *RestAPI) reportProblemWithTripHandler(w http.ResponseWriter, r *http.
 	vehicleID := query.Get("vehicleId")
 	stopID := query.Get("stopId")
 	code := query.Get("code")
-	userComment := query.Get("userComment")
+	userComment := utils.TruncateComment(query.Get("userComment"))
 	userOnVehicle := query.Get("userOnVehicle")
 	userVehicleNumber := query.Get("userVehicleNumber")
-	userLat := query.Get("userLat")
-	userLon := query.Get("userLon")
+	userLatStr := utils.ValidateNumericParam(query.Get("userLat"))
+	userLonStr := utils.ValidateNumericParam(query.Get("userLon"))
+
 	userLocationAccuracy := query.Get("userLocationAccuracy")
 
 	// Log the problem report for observability
@@ -67,8 +68,8 @@ func (api *RestAPI) reportProblemWithTripHandler(w http.ResponseWriter, r *http.
 		slog.String("user_comment", userComment),
 		slog.String("user_on_vehicle", userOnVehicle),
 		slog.String("user_vehicle_number", userVehicleNumber),
-		slog.String("user_lat", userLat),
-		slog.String("user_lon", userLon),
+		slog.String("user_lat", userLatStr),
+		slog.String("user_lon", userLonStr),
 		slog.String("user_location_accuracy", userLocationAccuracy))
 
 	// Store the problem report in the database
@@ -80,20 +81,13 @@ func (api *RestAPI) reportProblemWithTripHandler(w http.ResponseWriter, r *http.
 		StopID:               gtfsdb.ToNullString(stopID),
 		Code:                 gtfsdb.ToNullString(code),
 		UserComment:          gtfsdb.ToNullString(userComment),
-		UserLat:              gtfsdb.ParseNullFloat(userLat),
-		UserLon:              gtfsdb.ParseNullFloat(userLon),
+		UserLat:              gtfsdb.ParseNullFloat(userLatStr),
+		UserLon:              gtfsdb.ParseNullFloat(userLonStr),
 		UserLocationAccuracy: gtfsdb.ParseNullFloat(userLocationAccuracy),
 		UserOnVehicle:        gtfsdb.ParseNullBool(userOnVehicle),
 		UserVehicleNumber:    gtfsdb.ToNullString(userVehicleNumber),
 		CreatedAt:            now,
 		SubmittedAt:          now,
-	}
-
-	// Store in database with consolidated safety check
-	if api.GtfsManager == nil || api.GtfsManager.GtfsDB == nil || api.GtfsManager.GtfsDB.Queries == nil {
-		logger.Error("report problem with trip failed: GTFS DB not initialized")
-		http.Error(w, `{"code":500, "text":"internal server error"}`, http.StatusInternalServerError)
-		return
 	}
 
 	err = api.GtfsManager.GtfsDB.Queries.CreateProblemReportTrip(r.Context(), params)

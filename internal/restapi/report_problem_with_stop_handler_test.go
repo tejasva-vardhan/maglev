@@ -57,17 +57,27 @@ func TestReportProblemWithStop_MinimalParams(t *testing.T) {
 	require.Equal(t, 200, model.Code)
 }
 
-func TestReportProblemWithStop_InvalidCoordinates(t *testing.T) {
+func TestReportProblemWithStopSanitization(t *testing.T) {
 	api := createTestApi(t)
 	defer api.Shutdown()
 
-	stopID := "1_75403"
+	stopId := "1_75403"
+	urlInvalidGeo := fmt.Sprintf("/api/where/report-problem-with-stop/%s.json?key=TEST&code=stop_name_wrong&userLat=invalid&userLon=not_a_number", stopId)
 
-	// Invalid latitude/longitude values - should still succeed
-	url := fmt.Sprintf("/api/where/report-problem-with-stop/%s.json?key=TEST&userLat=invalid&userLon=notanumber", stopID)
+	resp, model := serveApiAndRetrieveEndpoint(t, api, urlInvalidGeo)
 
-	resp, model := serveApiAndRetrieveEndpoint(t, api, url)
-	// Should still return OK - invalid coords are handled gracefully
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-	require.Equal(t, 200, model.Code)
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "Should handle invalid userLat/userLon gracefully without 500 error")
+	assert.Equal(t, 200, model.Code)
+	assert.Equal(t, "OK", model.Text)
+
+	longComment := make([]byte, 1000)
+	for i := range longComment {
+		longComment[i] = 'a'
+	}
+	urlLongComment := fmt.Sprintf("/api/where/report-problem-with-stop/%s.json?key=TEST&code=stop_name_wrong&userComment=%s", stopId, string(longComment))
+
+	respLong, modelLong := serveApiAndRetrieveEndpoint(t, api, urlLongComment)
+
+	assert.Equal(t, http.StatusOK, respLong.StatusCode, "Should handle massive user comments gracefully")
+	assert.Equal(t, 200, modelLong.Code)
 }

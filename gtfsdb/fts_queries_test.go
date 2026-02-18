@@ -47,7 +47,7 @@ func TestSearchRoutesByFullText(t *testing.T) {
 			Desc: toNullString("Express service through downtown"),
 			Type: 3, Url: toNullString("http://test.com/r1"),
 			Color: toNullString("FF0000"), TextColor: toNullString("FFFFFF"),
-			ContinuousPickup: sql.NullInt64{Int64: 1, Valid: true},
+			ContinuousPickup:  sql.NullInt64{Int64: 1, Valid: true},
 			ContinuousDropOff: sql.NullInt64{Int64: 2, Valid: true},
 		},
 		{
@@ -64,7 +64,7 @@ func TestSearchRoutesByFullText(t *testing.T) {
 		{
 			ID: "r4", AgencyID: "agency1",
 			LongName: toNullString("Riverfront Circulator"),
-			Type: 3,
+			Type:     3,
 		},
 	}
 	for _, r := range routes {
@@ -79,6 +79,19 @@ func TestSearchRoutesByFullText(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.Len(t, results, 2)
+	})
+
+	t.Run("results ordered by relevance then id", func(t *testing.T) {
+		results, err := client.Queries.SearchRoutesByFullText(ctx, SearchRoutesByFullTextParams{
+			Query: "Downtown",
+			Limit: 10,
+		})
+		require.NoError(t, err)
+		require.Len(t, results, 2)
+		// r1 matches "Downtown" in both long_name and desc, giving it
+		// a better bm25 score than r3 (long_name only). Both share agency_id.
+		assert.Equal(t, "r1", results[0].ID)
+		assert.Equal(t, "r3", results[1].ID)
 	})
 
 	t.Run("matches by short name", func(t *testing.T) {
@@ -201,7 +214,7 @@ func TestSearchStopsByName(t *testing.T) {
 		{
 			ID: "s1", Name: toNullString("Main Street Station"),
 			Code: toNullString("MS01"),
-			Lat: 40.0, Lon: -74.0,
+			Lat:  40.0, Lon: -74.0,
 			LocationType:       sql.NullInt64{Int64: 1, Valid: true},
 			WheelchairBoarding: sql.NullInt64{Int64: 1, Valid: true},
 			Direction:          toNullString("N"),
@@ -274,6 +287,26 @@ func TestSearchStopsByName(t *testing.T) {
 		assert.Equal(t, int64(1), r.LocationType.Int64)
 		assert.Equal(t, int64(1), r.WheelchairBoarding.Int64)
 		assert.Equal(t, "N", r.Direction.String)
+		assert.False(t, r.ParentStation.Valid)
+	})
+
+	t.Run("reads non-null parent_station correctly", func(t *testing.T) {
+		_, err := client.DB.ExecContext(ctx, "UPDATE stops SET parent_station = 'hub1' WHERE id = 's1'")
+		require.NoError(t, err)
+		defer func() {
+			_, err := client.DB.ExecContext(ctx, "UPDATE stops SET parent_station = NULL WHERE id = 's1'")
+			require.NoError(t, err)
+		}()
+
+		results, err := client.Queries.SearchStopsByName(ctx, SearchStopsByNameParams{
+			SearchQuery: "Main Street Station",
+			Limit:       10,
+		})
+		require.NoError(t, err)
+		require.Len(t, results, 1)
+		r := results[0]
+		assert.True(t, r.ParentStation.Valid)
+		assert.Equal(t, "hub1", r.ParentStation.String)
 	})
 
 	t.Run("prefix search with wildcard", func(t *testing.T) {
