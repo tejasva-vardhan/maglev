@@ -43,6 +43,20 @@ func TestReportProblemWithStopEndToEnd(t *testing.T) {
 	assert.Equal(t, "id cannot be empty", nullModel.Text)
 }
 
+func TestReportProblemWithStop_MinimalParams(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+
+	// Test with only stop_id (no optional params)
+	stopID := "1_75403"
+
+	url := fmt.Sprintf("/api/where/report-problem-with-stop/%s.json?key=TEST", stopID)
+
+	resp, model := serveApiAndRetrieveEndpoint(t, api, url)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, 200, model.Code)
+}
+
 func TestReportProblemWithStopSanitization(t *testing.T) {
 	api := createTestApi(t)
 	defer api.Shutdown()
