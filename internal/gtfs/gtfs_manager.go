@@ -20,6 +20,14 @@ import (
 
 const NoRadiusLimit = -1
 
+// RegionBounds represents the geographic boundaries of the GTFS region
+type RegionBounds struct {
+	Lat     float64
+	Lon     float64
+	LatSpan float64
+	LonSpan float64
+}
+
 // Manager manages the GTFS data and provides methods to access it
 type Manager struct {
 	gtfsData                       *gtfs.Static
@@ -41,6 +49,7 @@ type Manager struct {
 	shutdownOnce                   sync.Once
 	stopSpatialIndex               *rtree.RTree
 	blockLayoverIndices            map[string][]*BlockLayoverIndex
+	regionBounds                   *RegionBounds
 	isHealthy                      bool
 }
 

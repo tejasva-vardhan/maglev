@@ -234,6 +234,8 @@ func (manager *Manager) ForceUpdate(ctx context.Context) error {
 		return err
 	}
 
+	newRegionBounds := ComputeRegionBounds(newStaticData.Shapes)
+
 	if err := ctx.Err(); err != nil {
 		if closeErr := newGtfsDB.Close(); closeErr != nil {
 			logging.LogError(logger, "Failed to close new GTFS DB during cancellation cleanup", closeErr)
@@ -302,6 +304,7 @@ func (manager *Manager) ForceUpdate(ctx context.Context) error {
 	manager.GtfsDB = client
 	manager.blockLayoverIndices = newBlockLayoverIndices
 	manager.stopSpatialIndex = newStopSpatialIndex
+	manager.regionBounds = newRegionBounds
 	manager.lastUpdated = time.Now()
 
 	manager.isHealthy = true
@@ -322,6 +325,7 @@ func (manager *Manager) setStaticGTFS(staticData *gtfs.Static) {
 	manager.lastUpdated = time.Now()
 	manager.isHealthy = true
 	manager.blockLayoverIndices = buildBlockLayoverIndices(staticData)
+	manager.regionBounds = ComputeRegionBounds(staticData.Shapes)
 
 	// Rebuild spatial index with updated data
 	ctx := context.Background()
