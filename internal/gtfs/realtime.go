@@ -225,7 +225,6 @@ func filterRealTimeVehicleByValidId(manager *Manager) {
 }
 
 func rebuildRealTimeTripLookup(manager *Manager) {
-	// Create a new map instead of clearing the old one for better performance
 	manager.realTimeTripLookup = make(map[string]int, len(manager.realTimeTrips))
 	for i, trip := range manager.realTimeTrips {
 		manager.realTimeTripLookup[trip.ID.ID] = i
@@ -233,7 +232,6 @@ func rebuildRealTimeTripLookup(manager *Manager) {
 }
 
 func rebuildRealTimeVehicleLookupByTrip(manager *Manager) {
-	// Create a new map instead of clearing the old one for better performance
 	manager.realTimeVehicleLookupByTrip = make(map[string]int, len(manager.realTimeVehicles))
 	for i, vehicle := range manager.realTimeVehicles {
 		if vehicle.Trip != nil && vehicle.Trip.ID.ID != "" {
@@ -243,7 +241,6 @@ func rebuildRealTimeVehicleLookupByTrip(manager *Manager) {
 }
 
 func rebuildRealTimeVehicleLookupByVehicle(manager *Manager) {
-	// Create a new map instead of clearing the old one for better performance
 	manager.realTimeVehicleLookupByVehicle = make(map[string]int, len(manager.realTimeVehicles))
 	for i, vehicle := range manager.realTimeVehicles {
 		if vehicle.ID.ID != "" {

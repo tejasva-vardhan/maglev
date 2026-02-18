@@ -1,6 +1,7 @@
 package gtfs
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/OneBusAway/go-gtfs"
@@ -16,7 +17,7 @@ func BenchmarkRebuildRealTimeTripLookup(b *testing.B) {
 	// Populate with sample trips
 	for i := 0; i < 1000; i++ {
 		manager.realTimeTrips[i] = gtfs.Trip{
-			ID: gtfs.TripID{ID: string(rune(i))},
+			ID: gtfs.TripID{ID: fmt.Sprintf("trip_%d", i)},
 		}
 	}
 
@@ -37,10 +38,9 @@ func BenchmarkRebuildRealTimeVehicleLookupByTrip(b *testing.B) {
 
 	// Populate with sample vehicles
 	for i := 0; i < 1000; i++ {
-		tripID := string(rune(i))
 		manager.realTimeVehicles[i] = gtfs.Vehicle{
 			Trip: &gtfs.Trip{
-				ID: gtfs.TripID{ID: tripID},
+				ID: gtfs.TripID{ID: fmt.Sprintf("trip_%d", i)},
 			},
 		}
 	}
@@ -62,9 +62,8 @@ func BenchmarkRebuildRealTimeVehicleLookupByVehicle(b *testing.B) {
 
 	// Populate with sample vehicles
 	for i := 0; i < 1000; i++ {
-		vehicleID := string(rune(i))
 		manager.realTimeVehicles[i] = gtfs.Vehicle{
-			ID: &gtfs.VehicleID{ID: vehicleID},
+			ID: &gtfs.VehicleID{ID: fmt.Sprintf("vehicle_%d", i)},
 		}
 	}
 
