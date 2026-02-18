@@ -786,7 +786,14 @@ func (api *RestAPI) GetSituationIDsForTrip(ctx context.Context, tripID string) [
 
 	situationIDs := []string{}
 	for _, alert := range alerts {
-		situationIDs = append(situationIDs, alert.ID)
+		if alert.ID == "" {
+			continue
+		}
+		if agencyID != "" {
+			situationIDs = append(situationIDs, utils.FormCombinedID(agencyID, alert.ID))
+		} else {
+			situationIDs = append(situationIDs, alert.ID)
+		}
 	}
 
 	return situationIDs
