@@ -14,8 +14,13 @@ clean:
 	rm -f maglev
 	rm -f coverage.out
 
-coverage-report:
-	go test ./... -cover | awk '{print $$2, $$5}' | jq -R 'split(" ") | {pkg: .[0], coverage: .[1]}'
+check-awk-jq:
+	@which jq > /dev/null 2>&1 || (echo "Error: jq is not installed. Install with: apt install jq, or brew install jq" && exit 1)
+	@which awk > /dev/null 2>&1 || (echo "Error: awk is not installed." && exit 1)
+
+coverage-report: check-awk-jq
+	go test ./... -cover > /tmp/go-coverage.txt 2>&1 || (cat /tmp/go-coverage.txt && exit 1)
+	grep '^ok' /tmp/go-coverage.txt | awk '{print $$2, $$5}' | jq -R 'split(" ") | {pkg: .[0], coverage: .[1]}'
 
 coverage:
 	go test -coverprofile=coverage.out ./...
