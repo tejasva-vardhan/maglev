@@ -2,8 +2,11 @@ package app
 
 import (
 	"log/slog"
+
 	"maglev.onebusaway.org/internal/appconf"
+	"maglev.onebusaway.org/internal/clock"
 	"maglev.onebusaway.org/internal/gtfs"
+	"maglev.onebusaway.org/internal/metrics"
 )
 
 // Application holds the dependencies for our HTTP handlers, helpers,
@@ -14,5 +17,7 @@ type Application struct {
 	GtfsConfig          gtfs.Config
 	Logger              *slog.Logger
 	GtfsManager         *gtfs.Manager
-	DirectionCalculator *gtfs.DirectionCalculator
+	DirectionCalculator *gtfs.AdvancedDirectionCalculator
+	Clock               clock.Clock
+	Metrics             *metrics.Metrics
 }

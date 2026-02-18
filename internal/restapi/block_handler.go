@@ -7,23 +7,53 @@ import (
 	"sort"
 
 	"maglev.onebusaway.org/gtfsdb"
+	GTFS "maglev.onebusaway.org/internal/gtfs"
 	"maglev.onebusaway.org/internal/models"
 	"maglev.onebusaway.org/internal/utils"
 )
 
 func (api *RestAPI) blockHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := context.Background()
-	id := utils.ExtractIDFromParams(r)
-	agencyID, blockID, err := utils.ExtractAgencyIDAndCodeID(id)
-
-	if err != nil || blockID == "" {
-		http.Error(w, "null", http.StatusBadRequest)
+	ctx := r.Context()
+	if ctx.Err() != nil {
+		api.serverErrorResponse(w, r, ctx.Err())
 		return
 	}
 
+	id := utils.ExtractIDFromParams(r)
+
+	if err := utils.ValidateID(id); err != nil {
+		fieldErrors := map[string][]string{
+			"id": {err.Error()},
+		}
+		api.validationErrorResponse(w, r, fieldErrors)
+		return
+	}
+
+	agencyID, blockID, err := utils.ExtractAgencyIDAndCodeID(id)
+
+	//  Return JSON 400 response for invalid block IDs
+	// We use an explicit struct here to ensure the text is exactly "invalid block id"
+	if err != nil || blockID == "" {
+		api.sendError(w, r, http.StatusBadRequest, "invalid block id")
+		return
+	}
+
+	api.GtfsManager.RLock()
+	defer api.GtfsManager.RUnlock()
+
 	block, err := api.GtfsManager.GtfsDB.Queries.GetBlockDetails(ctx, sql.NullString{String: blockID, Valid: true})
 	if err != nil {
-		api.serverErrorResponse(w, r, err)
+		if ctx.Err() != nil {
+			api.serverErrorResponse(w, r, ctx.Err())
+			return
+		}
+		api.sendNotFound(w, r)
+		return
+	}
+
+	//  Return JSON 404 response if no block data is found
+	if len(block) == 0 {
+		api.sendNotFound(w, r)
 		return
 	}
 
@@ -34,12 +64,14 @@ func (api *RestAPI) blockHandler(w http.ResponseWriter, r *http.Request) {
 	blockResponse := models.BlockResponse{
 		Data: blockData,
 	}
-	references, err := api.getReferences(ctx, agencyID, block)
+
+	calc := GTFS.NewAdvancedDirectionCalculator(api.GtfsManager.GtfsDB.Queries)
+	references, err := api.getReferences(ctx, agencyID, calc, block)
 	if err != nil {
 		api.serverErrorResponse(w, r, err)
 		return
 	}
-	response := models.NewEntryResponse(blockResponse, references)
+	response := models.NewEntryResponse(blockResponse, references, api.Clock)
 	api.sendResponse(w, r, response)
 }
 
@@ -142,7 +174,8 @@ func transformBlockToEntry(block []gtfsdb.GetBlockDetailsRow, blockID, agencyID 
 	}
 }
 
-func (api *RestAPI) getReferences(ctx context.Context, agencyID string, block []gtfsdb.GetBlockDetailsRow) (models.ReferencesModel, error) {
+// IMPORTANT: Caller must hold manager.RLock() before calling this method.
+func (api *RestAPI) getReferences(ctx context.Context, agencyID string, calc *GTFS.AdvancedDirectionCalculator, block []gtfsdb.GetBlockDetailsRow) (models.ReferencesModel, error) {
 	routeIDs := make(map[string]struct{})
 	stopIDs := make(map[string]struct{})
 	tripIDs := make(map[string]struct{})
@@ -198,7 +231,7 @@ func (api *RestAPI) getReferences(ctx context.Context, agencyID string, block []
 			Code:      stop.Code.String,
 			Lat:       stop.Lat,
 			Lon:       stop.Lon,
-			Direction: api.calculateStopDirection(ctx, stop.ID),
+			Direction: calc.CalculateStopDirection(ctx, stop.ID, stop.Direction),
 		})
 	}
 

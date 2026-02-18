@@ -44,6 +44,10 @@ func (c *Client) Close() error {
 	return c.DB.Close()
 }
 
+func (c *Client) GetDBPath() string {
+	return c.config.DBPath
+}
+
 // DownloadAndStore downloads GTFS data from the given URL and stores it in the database
 func (c *Client) DownloadAndStore(ctx context.Context, url, authHeaderKey, authHeaderValue string) error {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -56,19 +60,30 @@ func (c *Client) DownloadAndStore(ctx context.Context, url, authHeaderKey, authH
 		req.Header.Set(authHeaderKey, authHeaderValue)
 	}
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 5 * time.Minute,
+		Transport: &http.Transport{
+			TLSHandshakeTimeout:   10 * time.Second,
+			ResponseHeaderTimeout: 30 * time.Second,
+			IdleConnTimeout:       90 * time.Second,
+		}}
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	b, err := io.ReadAll(resp.Body)
+	const maxBodySize = 200 * 1024 * 1024
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodySize+1))
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	err = c.processAndStoreGTFSDataWithSource(b, url)
+	if int64(len(body)) > maxBodySize {
+		return fmt.Errorf("static GTFS response exceeds size limit of %d bytes", maxBodySize)
+	}
+
+	err = c.processAndStoreGTFSDataWithSource(body, url)
 
 	return err
 }

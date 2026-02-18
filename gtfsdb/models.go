@@ -62,6 +62,35 @@ type ImportMetadatum struct {
 	FileSource string
 }
 
+type ProblemReportsStop struct {
+	ID                   int64
+	StopID               string
+	Code                 sql.NullString
+	UserComment          sql.NullString
+	UserLat              sql.NullFloat64
+	UserLon              sql.NullFloat64
+	UserLocationAccuracy sql.NullFloat64
+	CreatedAt            int64
+	SubmittedAt          int64
+}
+
+type ProblemReportsTrip struct {
+	ID                   int64
+	TripID               string
+	ServiceDate          sql.NullString
+	VehicleID            sql.NullString
+	StopID               sql.NullString
+	Code                 sql.NullString
+	UserComment          sql.NullString
+	UserLat              sql.NullFloat64
+	UserLon              sql.NullFloat64
+	UserLocationAccuracy sql.NullFloat64
+	UserOnVehicle        sql.NullInt64
+	UserVehicleNumber    sql.NullString
+	CreatedAt            int64
+	SubmittedAt          int64
+}
+
 type Route struct {
 	ID                string
 	AgencyID          string
@@ -74,6 +103,14 @@ type Route struct {
 	TextColor         sql.NullString
 	ContinuousPickup  sql.NullInt64
 	ContinuousDropOff sql.NullInt64
+}
+
+type RoutesFt struct {
+	ID        string
+	AgencyID  string
+	ShortName string
+	LongName  string
+	Desc      string
 }
 
 type Shape struct {
@@ -99,6 +136,7 @@ type Stop struct {
 	WheelchairBoarding sql.NullInt64
 	PlatformCode       sql.NullString
 	Direction          sql.NullString
+	ParentStation      sql.NullString
 }
 
 type StopTime struct {
@@ -112,6 +150,11 @@ type StopTime struct {
 	DropOffType       sql.NullInt64
 	ShapeDistTraveled sql.NullFloat64
 	Timepoint         sql.NullInt64
+}
+
+type StopsFt struct {
+	ID       string
+	StopName string
 }
 
 type StopsRtreeNode struct {

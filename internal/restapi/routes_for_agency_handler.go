@@ -1,25 +1,41 @@
 package restapi
 
 import (
+	"net/http"
+
 	"maglev.onebusaway.org/internal/models"
 	"maglev.onebusaway.org/internal/utils"
-	"net/http"
 )
 
 func (api *RestAPI) routesForAgencyHandler(w http.ResponseWriter, r *http.Request) {
 	id := utils.ExtractIDFromParams(r)
 
+	if err := utils.ValidateID(id); err != nil {
+		fieldErrors := map[string][]string{
+			"id": {err.Error()},
+		}
+		api.validationErrorResponse(w, r, fieldErrors)
+		return
+	}
+
 	agency := api.GtfsManager.FindAgency(id)
+
 	if agency == nil {
-		http.Error(w, "null", http.StatusNotFound)
+		api.sendNull(w, r)
 		return
 	}
 
 	routesForAgency := api.GtfsManager.RoutesForAgencyID(id)
+
+	// Apply pagination
+	offset, limit := utils.ParsePaginationParams(r)
+	routesForAgency, limitExceeded := utils.PaginateSlice(routesForAgency, offset, limit)
+	// Safe allocation logic
 	routesList := make([]models.Route, 0, len(routesForAgency))
+
 	for _, route := range routesForAgency {
 		routesList = append(routesList, models.NewRoute(
-			route.Id, route.Agency.Id, route.ShortName, route.LongName,
+			utils.FormCombinedID(route.Agency.Id, route.Id), route.Agency.Id, route.ShortName, route.LongName,
 			route.Description, models.RouteType(route.Type),
 			route.Url, route.Color, route.TextColor, route.ShortName,
 		))
@@ -40,6 +56,6 @@ func (api *RestAPI) routesForAgencyHandler(w http.ResponseWriter, r *http.Reques
 		Trips:      []interface{}{},
 	}
 
-	response := models.NewListResponse(routesList, references)
+	response := models.NewListResponse(routesList, references, limitExceeded, api.Clock)
 	api.sendResponse(w, r, response)
 }

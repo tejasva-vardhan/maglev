@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -179,6 +180,19 @@ func (c *Client) processAndStoreGTFSDataWithSource(b []byte, source string) erro
 
 	var allStopParams []CreateStopParams
 	for _, s := range staticData.Stops {
+		// Skip stops without coordinates to prevent nil pointer dereference and avoid
+		// storing invalid (0,0) placeholder coordinates that would contaminate spatial
+		// indexing and API responses. Per GTFS spec, lat/lon are optional for generic
+		// nodes (type=3) and boarding areas (type=4), which are used for modeling
+		// pathways within stations.
+		//
+		// See: https://github.com/OneBusAway/maglev/pull/209
+		//
+		// Future: If pathways or station accessibility features are needed, consider
+		// making lat/lon nullable in the schema and updating handlers accordingly.
+		if s.Latitude == nil || s.Longitude == nil {
+			continue
+		}
 		params := CreateStopParams{
 			ID:                 s.Id,
 			Code:               toNullString(s.Code),
@@ -440,12 +454,46 @@ func toNullFloat64(f float64) sql.NullFloat64 {
 	return sql.NullFloat64{}
 }
 
-// toNullString converts a string to sql.NullString
+// toNullString converts a string to sql.NullString (unexported, for internal use)
 func toNullString(s string) sql.NullString {
 	return sql.NullString{
 		String: s,
 		Valid:  s != "",
 	}
+}
+
+// ToNullString converts a string to sql.NullString, with empty strings becoming NULL (exported).
+func ToNullString(s string) sql.NullString {
+	return toNullString(s)
+}
+
+// ParseNullFloat parses a string to sql.NullFloat64, with empty or invalid values becoming NULL.
+func ParseNullFloat(s string) sql.NullFloat64 {
+	if s == "" {
+		return sql.NullFloat64{Valid: false}
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return sql.NullFloat64{Valid: false}
+	}
+	return sql.NullFloat64{Float64: f, Valid: true}
+}
+
+// ParseNullBool parses a boolean string to sql.NullInt64 (0 or 1), with empty/invalid values becoming NULL.
+func ParseNullBool(s string) sql.NullInt64 {
+	if s == "" {
+		return sql.NullInt64{Valid: false}
+	}
+	// Uses strconv.ParseBool semantics: accepts "1", "t", "T", "TRUE", "true", "True",
+	// "0", "f", "F", "FALSE", "false", "False"
+	b, err := strconv.ParseBool(s)
+	if err != nil {
+		return sql.NullInt64{Valid: false}
+	}
+	if b {
+		return sql.NullInt64{Int64: 1, Valid: true}
+	}
+	return sql.NullInt64{Int64: 0, Valid: true}
 }
 
 func pickFirstAvailable(a, b string) string {
@@ -618,10 +666,14 @@ func (c *Client) bulkInsertStopTimes(ctx context.Context, stopTimes []CreateStop
 
 	// Feed batch indices to workers
 	go func() {
+		defer close(batchChan)
 		for i := 0; i < numBatches; i++ {
-			batchChan <- i
+			select {
+			case <-ctx.Done():
+				return
+			case batchChan <- i:
+			}
 		}
-		close(batchChan)
 	}()
 
 	// Close results channel when all workers are done
@@ -771,10 +823,14 @@ func (c *Client) bulkInsertShapes(ctx context.Context, shapes []CreateShapeParam
 
 	// Feed batch indices to workers
 	go func() {
+		defer close(batchChan)
 		for i := 0; i < numBatches; i++ {
-			batchChan <- i
+			select {
+			case <-ctx.Done():
+				return
+			case batchChan <- i:
+			}
 		}
-		close(batchChan)
 	}()
 
 	// ===== PHASE 2: COLLECT PREPARED BATCHES =====
@@ -929,10 +985,10 @@ func configureConnectionPool(db *sql.DB, config Config) {
 
 		// Set maximum number of idle connections to 5
 		db.SetMaxIdleConns(5)
-	}
 
-	// Set maximum lifetime of connections to 5 minutes
-	db.SetConnMaxLifetime(5 * time.Minute)
+		// Set maximum lifetime of connections to 5 minutes
+		db.SetConnMaxLifetime(5 * time.Minute)
+	}
 }
 
 // blockTripIndexKey represents the grouping key for BlockTripIndex

@@ -2,6 +2,8 @@ package utils
 
 import (
 	"fmt"
+	"log/slog"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -50,9 +52,9 @@ func FormCombinedID(agencyID, codeID string) string {
 func MapWheelchairBoarding(wheelchairBoarding gtfs.WheelchairBoarding) string {
 	switch wheelchairBoarding {
 	case gtfs.WheelchairBoarding_Possible:
-		return "ACCESSIBLE"
+		return models.Accessible
 	case gtfs.WheelchairBoarding_NotPossible:
-		return "NOT_ACCESSIBLE"
+		return models.NotAccessible
 	default:
 		return models.UnknownValue
 	}
@@ -114,18 +116,127 @@ func ParseTimeParameter(timeParam string, currentLocation *time.Location) (strin
 		return "", time.Time{}, fieldErrors, false
 	}
 
-	// Set time to midnight for accurate comparison
-	currentTime := time.Now().In(currentLocation)
-	todayMidnight := time.Date(currentTime.Year(), currentTime.Month(), currentTime.Day(), 0, 0, 0, 0, currentLocation)
-	parsedTimeMidnight := time.Date(parsedTime.Year(), parsedTime.Month(), parsedTime.Day(), 0, 0, 0, 0, currentLocation)
-
-	if parsedTimeMidnight.After(todayMidnight) {
-		fieldErrors := map[string][]string{
-			"time": {"Invalid field value for field \"time\"."},
-		}
-		return "", time.Time{}, fieldErrors, false
-	}
-
 	// Valid date, use it
 	return parsedTime.Format("20060102"), parsedTime, nil, true
+}
+
+func LoadLocationWithUTCFallBack(timeZone string, agencyId string) *time.Location {
+	loc, err := time.LoadLocation(timeZone)
+	if err != nil {
+		slog.Warn("invalid agency timezone, using UTC",
+			slog.String("agencyID", agencyId),
+			slog.String("timezone", timeZone),
+			slog.String("error", err.Error()))
+		loc = time.UTC
+	}
+	return loc
+}
+
+// ParseMaxCount parses the maxCount query parameter with validation.
+// It accepts a default value and enforces a maximum of 250 (matching Java's MaxCountSupport).
+// Returns an error in fieldErrors if the value is <= 0 or > 250.
+func ParseMaxCount(queryParams url.Values, defaultCount int, fieldErrors map[string][]string) (int, map[string][]string) {
+	if fieldErrors == nil {
+		fieldErrors = make(map[string][]string)
+	}
+
+	maxCount := defaultCount
+	if maxCountStr := queryParams.Get("maxCount"); maxCountStr != "" {
+		parsedMaxCount, err := strconv.Atoi(maxCountStr)
+		if err == nil {
+			maxCount = parsedMaxCount
+			if maxCount <= 0 {
+				fieldErrors["maxCount"] = []string{"must be greater than zero"}
+				maxCount = defaultCount
+			} else if maxCount > models.MaxAllowedCount {
+				fieldErrors["maxCount"] = []string{"must not exceed 250"}
+				maxCount = defaultCount
+			}
+		} else {
+			fieldErrors["maxCount"] = []string{"Invalid field value for field \"maxCount\"."}
+		}
+	}
+	return maxCount, fieldErrors
+}
+
+// ParsePaginationParams parses offset and limit from request parameters.
+// maxCount is the primary parameter for limit, falling back to limit.
+// If neither is present, limit is -1 (return all).
+// Default offset is 0.
+func ParsePaginationParams(r *http.Request) (offset int, limit int) {
+	queryParams := r.URL.Query()
+
+	offset = 0
+	if val := queryParams.Get("offset"); val != "" {
+		if parsed, err := strconv.Atoi(val); err == nil && parsed >= 0 {
+			offset = parsed
+		}
+	}
+
+	limit = -1 // Default to no limit
+
+	// Check maxCount first (OBA convention)
+	if val := queryParams.Get("maxCount"); val != "" {
+		if parsed, err := strconv.Atoi(val); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	} else if val := queryParams.Get("limit"); val != "" {
+		// Fallback to limit
+		if parsed, err := strconv.Atoi(val); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	// Cap limit at 1000 if it's set
+	if limit > 1000 {
+		limit = 1000
+	}
+
+	return offset, limit
+}
+
+// PaginateSlice slices a slice based on offset and limit.
+// Returns the sliced items and a boolean indicating if the limit was exceeded (more items exist).
+func PaginateSlice[T any](items []T, offset, limit int) ([]T, bool) {
+	if offset >= len(items) {
+		return []T{}, false
+	}
+
+	// If limit is -1, return everything from offset
+	if limit == -1 {
+		return items[offset:], false
+	}
+
+	end := offset + limit
+	limitExceeded := false
+	if end < len(items) {
+		limitExceeded = true
+	} else {
+		end = len(items)
+	}
+
+	return items[offset:end], limitExceeded
+}
+
+// MaxCommentLength defines the maximum allowed characters for a user comment
+const MaxCommentLength = 500
+
+// TruncateComment safely truncates a comment to MaxCommentLength runes.
+func TruncateComment(s string) string {
+	runes := []rune(s)
+	if len(runes) > MaxCommentLength {
+		return string(runes[:MaxCommentLength])
+	}
+	return s
+}
+
+// ValidateNumericParam returns the string if it's a valid float, empty string otherwise.
+func ValidateNumericParam(s string) string {
+	if s == "" {
+		return ""
+	}
+	if _, err := strconv.ParseFloat(s, 64); err != nil {
+		return ""
+	}
+	return s
 }

@@ -11,6 +11,17 @@ func (api *RestAPI) stopIDsForAgencyHandler(w http.ResponseWriter, r *http.Reque
 
 	id := utils.ExtractIDFromParams(r)
 
+	if err := utils.ValidateID(id); err != nil {
+		fieldErrors := map[string][]string{
+			"id": {err.Error()},
+		}
+		api.validationErrorResponse(w, r, fieldErrors)
+		return
+	}
+
+	api.GtfsManager.RLock()
+	defer api.GtfsManager.RUnlock()
+
 	agency := api.GtfsManager.FindAgency(id)
 
 	if agency == nil {
@@ -38,6 +49,6 @@ func (api *RestAPI) stopIDsForAgencyHandler(w http.ResponseWriter, r *http.Reque
 		response = append(response, utils.FormCombinedID(id, stopID))
 	}
 
-	api.sendResponse(w, r, models.NewListResponse(response, models.NewEmptyReferences()))
+	api.sendResponse(w, r, models.NewListResponse(response, models.NewEmptyReferences(), false, api.Clock))
 
 }

@@ -4,13 +4,15 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/OneBusAway/go-gtfs"
 	"maglev.onebusaway.org/internal/models"
 	"maglev.onebusaway.org/internal/utils"
 )
 
 func (api *RestAPI) stopsForAgencyHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	api.GtfsManager.RLock()
+	defer api.GtfsManager.RUnlock()
 
 	// Check if context is already cancelled
 	if ctx.Err() != nil {
@@ -19,6 +21,14 @@ func (api *RestAPI) stopsForAgencyHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	id := utils.ExtractIDFromParams(r)
+
+	if err := utils.ValidateID(id); err != nil {
+		fieldErrors := map[string][]string{
+			"id": {err.Error()},
+		}
+		api.validationErrorResponse(w, r, fieldErrors)
+		return
+	}
 
 	// Validate agency exists
 	agency := api.GtfsManager.FindAgency(id)
@@ -72,37 +82,48 @@ func (api *RestAPI) stopsForAgencyHandler(w http.ResponseWriter, r *http.Request
 		Trips:      []interface{}{},
 	}
 
-	response := models.NewListResponse(stopsList, references)
+	response := models.NewListResponse(stopsList, references, false, api.Clock)
 	api.sendResponse(w, r, response)
 }
 
+// IMPORTANT: Caller must hold manager.RLock() before calling this method.
 func (api *RestAPI) buildStopsListForAgency(ctx context.Context, agencyID string, stopIDs []string) ([]models.Stop, error) {
-	stopsList := make([]models.Stop, 0, len(stopIDs))
+	// If no stops, return empty list
+	if len(stopIDs) == 0 {
+		return []models.Stop{}, nil
+	}
 
-	for _, stopID := range stopIDs {
-		stop, err := api.GtfsManager.GtfsDB.Queries.GetStop(ctx, stopID)
-		if err != nil {
-			continue
+	// Batch fetch all stops in one query
+	stops, err := api.GtfsManager.GtfsDB.Queries.GetStopsByIDs(ctx, stopIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	// Batch fetch all route IDs for these stops in one query
+	routeIDsRows, err := api.GtfsManager.GtfsDB.Queries.GetRouteIDsForStops(ctx, stopIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build a map of stop ID to route IDs in memory
+	routesByStop := make(map[string][]string)
+	for _, row := range routeIDsRows {
+		if rid, ok := row.RouteID.(string); ok {
+			routesByStop[row.StopID] = append(routesByStop[row.StopID], rid)
 		}
+	}
 
-		routeIds, err := api.GtfsManager.GtfsDB.Queries.GetRouteIDsForStop(ctx, stop.ID)
-		if err != nil {
-			continue
-		}
-
-		routeIdsString := make([]string, len(routeIds))
-		for i, id := range routeIds {
-			routeIdsString[i] = utils.FormCombinedID(agencyID, id.(string))
-		}
-
-		direction := models.UnknownValue
-		if stop.Direction.Valid && stop.Direction.String != "" {
-			direction = stop.Direction.String
+	// Construct the stops list
+	stopsList := make([]models.Stop, 0, len(stops))
+	for _, stop := range stops {
+		routeIdsString := routesByStop[stop.ID]
+		if routeIdsString == nil {
+			routeIdsString = []string{}
 		}
 
 		stopsList = append(stopsList, models.Stop{
 			Code:               stop.Code.String,
-			Direction:          direction,
+			Direction:          utils.NullStringOrEmpty(stop.Direction),
 			ID:                 utils.FormCombinedID(agencyID, stop.ID),
 			Lat:                stop.Lat,
 			LocationType:       int(stop.LocationType.Int64),
@@ -110,7 +131,7 @@ func (api *RestAPI) buildStopsListForAgency(ctx context.Context, agencyID string
 			Name:               stop.Name.String,
 			RouteIDs:           routeIdsString,
 			StaticRouteIDs:     routeIdsString,
-			WheelchairBoarding: utils.MapWheelchairBoarding(gtfs.WheelchairBoarding(stop.WheelchairBoarding.Int64)),
+			WheelchairBoarding: utils.MapWheelchairBoarding(utils.NullWheelchairBoardingOrUnknown(stop.WheelchairBoarding)),
 		})
 	}
 

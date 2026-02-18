@@ -31,6 +31,7 @@ type JSONConfig struct {
 	Port           int            `json:"port"`
 	Env            string         `json:"env"`
 	ApiKeys        []string       `json:"api-keys"`
+	ExemptApiKeys  []string       `json:"exempt-api-keys"`
 	RateLimit      int            `json:"rate-limit"`
 	GtfsStaticFeed GtfsStaticFeed `json:"gtfs-static-feed"`
 	GtfsRtFeeds    []GtfsRtFeed   `json:"gtfs-rt-feeds"`
@@ -47,6 +48,9 @@ func (j *JSONConfig) setDefaults() {
 	}
 	if len(j.ApiKeys) == 0 {
 		j.ApiKeys = []string{"test"}
+	}
+	if len(j.ExemptApiKeys) == 0 {
+		j.ExemptApiKeys = []string{"org.onebusaway.iphone"}
 	}
 	if j.RateLimit == 0 {
 		j.RateLimit = 100
@@ -166,11 +170,12 @@ func validatePath(path, fieldName string) error {
 // ToAppConfig converts JSONConfig to appconf.Config
 func (j *JSONConfig) ToAppConfig() Config {
 	return Config{
-		Port:      j.Port,
-		Env:       EnvFlagToEnvironment(j.Env),
-		ApiKeys:   j.ApiKeys,
-		Verbose:   true, // Always set to true like in main.go
-		RateLimit: j.RateLimit,
+		Port:          j.Port,
+		Env:           EnvFlagToEnvironment(j.Env),
+		ApiKeys:       j.ApiKeys,
+		ExemptApiKeys: j.ExemptApiKeys,
+		Verbose:       true, // Always set to true like in main.go
+		RateLimit:     j.RateLimit,
 	}
 }
 
@@ -253,6 +258,47 @@ func LoadFromFile(path string) (*JSONConfig, error) {
 
 	// Apply defaults
 	config.setDefaults()
+
+	// Override API Keys (Split by comma, trim spaces, ignore empty)
+	if envKeys := os.Getenv("GTFS_API_KEYS"); envKeys != "" {
+		rawKeys := strings.Split(envKeys, ",")
+		var cleanKeys []string
+		for _, k := range rawKeys {
+			if trimmed := strings.TrimSpace(k); trimmed != "" {
+				cleanKeys = append(cleanKeys, trimmed)
+			}
+		}
+		if len(cleanKeys) > 0 {
+			config.ApiKeys = cleanKeys
+		}
+	}
+
+	// Override Static Feed Auth (Name + Value)
+	if staticName := os.Getenv("GTFS_STATIC_AUTH_NAME"); staticName != "" {
+		config.GtfsStaticFeed.AuthHeaderName = staticName
+	}
+	if staticValue := os.Getenv("GTFS_STATIC_AUTH_VALUE"); staticValue != "" {
+		config.GtfsStaticFeed.AuthHeaderValue = staticValue
+	}
+
+	// Override Realtime Feed Auth (Name + Value)
+	// Note: Currently only overrides the first configured realtime feed explicitly
+	rtName := os.Getenv("GTFS_REALTIME_AUTH_NAME")
+	rtValue := os.Getenv("GTFS_REALTIME_AUTH_VALUE")
+
+	if rtName != "" || rtValue != "" {
+		if len(config.GtfsRtFeeds) > 0 {
+			if rtName != "" {
+				config.GtfsRtFeeds[0].RealTimeAuthHeaderName = rtName
+			}
+			if rtValue != "" {
+				config.GtfsRtFeeds[0].RealTimeAuthHeaderValue = rtValue
+			}
+		} else {
+			slog.Warn("GTFS_REALTIME_AUTH env vars set but no Realtime feeds configured",
+				"component", "config_loader")
+		}
+	}
 
 	// Validate
 	if err := config.validate(); err != nil {

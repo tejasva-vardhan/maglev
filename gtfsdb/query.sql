@@ -152,6 +152,7 @@ ORDER BY
     agency_id,
     id;
 
+
 -- name: GetRouteIDsForAgency :many
 SELECT
     r.id
@@ -222,11 +223,25 @@ WHERE
 
 -- name: GetStop :one
 SELECT
-    *
+    id,
+    code,
+    name,
+    desc,
+    lat,
+    lon,
+    zone_id,
+    url,
+    location_type,
+    timezone,
+    wheelchair_boarding,
+    platform_code,
+    direction
 FROM
     stops
 WHERE
-    id = ?;
+    id = ?
+LIMIT
+    1;
 
 -- name: GetStopForAgency :one
 -- Return the stop only if it is served by any route that belongs to the specified agency.
@@ -277,7 +292,9 @@ SELECT
 FROM
     shapes
 WHERE
-    shape_id = ?;
+    shape_id = ?
+ORDER BY
+    shape_pt_sequence;
 
 -- name: GetStopIDsForRoute :many
 SELECT DISTINCT
@@ -351,7 +368,6 @@ FROM base_services
 WHERE service_id NOT IN (SELECT service_id FROM removed_services)
 UNION
 SELECT DISTINCT service_id FROM added_services;
-
 
 -- name: GetTripsForRouteInActiveServiceIDs :many
 SELECT DISTINCT *
@@ -597,6 +613,18 @@ WHERE
 ORDER BY
     s.shape_pt_sequence ASC;
 
+-- name: GetStopsWithShapeContextByIDs :many
+SELECT 
+    st.stop_id, 
+    t.shape_id, 
+    s.lat, 
+    s.lon, 
+    st.shape_dist_traveled
+FROM stop_times st
+JOIN trips t ON st.trip_id = t.id
+JOIN stops s ON st.stop_id = s.id
+WHERE st.stop_id IN (sqlc.slice('stop_ids'));    
+
 -- name: GetTripsByBlockIDOrdered :many
 SELECT
     t.id,
@@ -717,7 +745,7 @@ WHERE
 ORDER BY
     st.arrival_time LIMIT 50;
 -- name: GetTripsByServiceID :many
-SELECT *
+SELECT id, route_id, service_id, trip_headsign
 FROM trips
 WHERE service_id IN (sqlc.slice('service_ids'));
 
@@ -928,3 +956,65 @@ FROM trips t
 JOIN block_trip_entry bte ON t.id = bte.trip_id
 WHERE bte.block_trip_index_id IN (sqlc.slice('index_ids'))
   AND bte.service_id IN (sqlc.slice('service_ids'));
+
+
+-- name: GetShapePointsByIDs :many
+SELECT shape_id, lat, lon, shape_pt_sequence, shape_dist_traveled
+FROM shapes
+WHERE shape_id IN (sqlc.slice('shape_ids'))
+ORDER BY shape_id, shape_pt_sequence;
+
+-- name: GetStopTimesForTripIDs :many
+SELECT * FROM stop_times
+WHERE trip_id IN (sqlc.slice('trip_ids'))
+ORDER BY trip_id, stop_sequence;
+
+-- name: GetTripsByBlockIDs :many
+SELECT t.*
+FROM trips t
+JOIN stop_times st ON t.id = st.trip_id
+WHERE t.block_id IN (sqlc.slice('block_ids'))
+  AND t.service_id IN (sqlc.slice('service_ids'))
+GROUP BY t.id
+ORDER BY t.block_id, MIN(st.departure_time), t.id;
+
+-- Problem Report Queries
+
+-- name: CreateProblemReportTrip :exec
+INSERT INTO problem_reports_trip (
+    trip_id,
+    service_date,
+    vehicle_id,
+    stop_id,
+    code,
+    user_comment,
+    user_lat,
+    user_lon,
+    user_location_accuracy,
+    user_on_vehicle,
+    user_vehicle_number,
+    created_at,
+    submitted_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: CreateProblemReportStop :exec
+INSERT INTO problem_reports_stop (
+    stop_id,
+    code,
+    user_comment,
+    user_lat,
+    user_lon,
+    user_location_accuracy,
+    created_at,
+    submitted_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: GetProblemReportsByTrip :many
+SELECT * FROM problem_reports_trip
+WHERE trip_id = ?
+ORDER BY created_at DESC;
+
+-- name: GetProblemReportsByStop :many
+SELECT * FROM problem_reports_stop
+WHERE stop_id = ?
+ORDER BY created_at DESC;

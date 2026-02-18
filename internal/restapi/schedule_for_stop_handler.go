@@ -24,11 +24,17 @@ func (api *RestAPI) scheduleForStopHandler(w http.ResponseWriter, r *http.Reques
 
 	agencyID, stopID, err := utils.ExtractAgencyIDAndCodeID(queryParamID)
 	if err != nil {
-		api.serverErrorResponse(w, r, err)
+		fieldErrors := map[string][]string{
+			"id": {err.Error()},
+		}
+		api.validationErrorResponse(w, r, fieldErrors)
 		return
 	}
 
 	ctx := r.Context()
+
+	api.GtfsManager.RLock()
+	defer api.GtfsManager.RUnlock()
 
 	// Get the date parameter or use current date
 	dateParam := r.URL.Query().Get("date")
@@ -42,12 +48,20 @@ func (api *RestAPI) scheduleForStopHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	agency, err := api.GtfsManager.GtfsDB.Queries.GetAgency(ctx, agencyID)
+
+	if err != nil {
+		api.sendNotFound(w, r)
+		return
+	}
+
+	loc := utils.LoadLocationWithUTCFallBack(agency.Timezone, agency.ID)
 	var date int64
 	var targetDate string
 	var weekday string
 
 	if dateParam != "" {
-		parsedDate, err := time.Parse("2006-01-02", dateParam)
+		parsedDate, err := time.ParseInLocation("2006-01-02", dateParam, loc)
 		if err != nil {
 			fieldErrors := map[string][]string{
 				"date": {"Invalid date format. Use YYYY-MM-DD"},
@@ -59,14 +73,16 @@ func (api *RestAPI) scheduleForStopHandler(w http.ResponseWriter, r *http.Reques
 		targetDate = parsedDate.Format("20060102")
 		weekday = strings.ToLower(parsedDate.Weekday().String())
 	} else {
-		now := time.Now()
-		date = now.UnixMilli()
-		targetDate = now.Format("20060102")
-		weekday = strings.ToLower(now.Weekday().String())
+		now := api.Clock.Now().In(loc)
+		y, m, d := now.Date()
+		startOfDay := time.Date(y, m, d, 0, 0, 0, 0, loc)
+		date = startOfDay.UnixMilli()
+		targetDate = startOfDay.Format("20060102")
+		weekday = strings.ToLower(startOfDay.Weekday().String())
 	}
 
 	// Verify stop exists
-	_, err = api.GtfsManager.GtfsDB.Queries.GetStop(ctx, stopID)
+	stop, err := api.GtfsManager.GtfsDB.Queries.GetStop(ctx, stopID)
 	if err != nil {
 		api.sendNotFound(w, r)
 		return
@@ -87,6 +103,7 @@ func (api *RestAPI) scheduleForStopHandler(w http.ResponseWriter, r *http.Reques
 		api.sendResponse(w, r, models.NewEntryResponse(
 			models.NewScheduleForStopEntry(utils.FormCombinedID(agencyID, stopID), date, nil),
 			models.NewEmptyReferences(),
+			api.Clock,
 		))
 		return
 	}
@@ -106,6 +123,21 @@ func (api *RestAPI) scheduleForStopHandler(w http.ResponseWriter, r *http.Reques
 
 	// Build references maps
 	agencyRefs := make(map[string]models.AgencyReference)
+
+	// add the already fetched agency
+	agencyRefs[agencyID] = models.NewAgencyReference(
+		agency.ID,
+		agency.Name,
+		agency.Url,
+		agency.Timezone,
+		agency.Lang.String,
+		agency.Phone.String,
+		agency.Email.String,
+		agency.FareUrl.String,
+		"",    // disclaimer
+		false, // privateService
+	)
+
 	routeRefs := make(map[string]models.Route)
 	tripIDsSet := make(map[string]bool)
 
@@ -120,9 +152,9 @@ func (api *RestAPI) scheduleForStopHandler(w http.ResponseWriter, r *http.Reques
 
 		tripIDsSet[row.TripID] = true
 
-		// Convert GTFS time (nanoseconds since midnight) to Unix timestamp in milliseconds
+		// Convert GTFS time (nanoseconds since midnight) to Unix timestamp in the agency's timezone in milliseconds
 		// GTFS times are stored as time.Duration values (nanoseconds), need to add to the target date
-		startOfDay := time.Unix(date/1000, 0).Truncate(24 * time.Hour)
+		startOfDay := time.UnixMilli(date).In(loc)
 		arrivalDuration := time.Duration(row.ArrivalTime)
 		departureDuration := time.Duration(row.DepartureTime)
 		arrivalTimeMs := startOfDay.Add(arrivalDuration).UnixMilli()
@@ -131,7 +163,7 @@ func (api *RestAPI) scheduleForStopHandler(w http.ResponseWriter, r *http.Reques
 		stopTime := models.NewScheduleStopTime(
 			arrivalTimeMs,
 			departureTimeMs,
-			row.ServiceID,
+			utils.FormCombinedID(agencyID, row.ServiceID),
 			row.StopHeadsign.String,
 			combinedTripID,
 		)
@@ -167,17 +199,17 @@ func (api *RestAPI) scheduleForStopHandler(w http.ResponseWriter, r *http.Reques
 
 		// Add agency to references if not already present
 		if _, exists := agencyRefs[row.AgencyID]; !exists {
-			agency, err := api.GtfsManager.GtfsDB.Queries.GetAgency(ctx, row.AgencyID)
+			agencyOfCurrentRow, err := api.GtfsManager.GtfsDB.Queries.GetAgency(ctx, row.AgencyID)
 			if err == nil {
 				agencyModel := models.NewAgencyReference(
-					agency.ID,
-					agency.Name,
-					agency.Url,
-					agency.Timezone,
-					agency.Lang.String,
-					agency.Phone.String,
-					agency.Email.String,
-					agency.FareUrl.String,
+					agencyOfCurrentRow.ID,
+					agencyOfCurrentRow.Name,
+					agencyOfCurrentRow.Url,
+					agencyOfCurrentRow.Timezone,
+					agencyOfCurrentRow.Lang.String,
+					agencyOfCurrentRow.Phone.String,
+					agencyOfCurrentRow.Email.String,
+					agencyOfCurrentRow.FareUrl.String,
 					"",    // disclaimer
 					false, // privateService
 				)
@@ -237,8 +269,8 @@ func (api *RestAPI) scheduleForStopHandler(w http.ResponseWriter, r *http.Reques
 		combinedTripID := utils.FormCombinedID(agencyID, trip.ID)
 		tripRef := models.NewTripReference(
 			combinedTripID,
-			trip.RouteID,
-			trip.ServiceID,
+			utils.FormCombinedID(agencyID, trip.RouteID),
+			utils.FormCombinedID(agencyID, trip.ServiceID),
 			trip.TripHeadsign.String,
 			trip.TripShortName.String,
 			trip.DirectionID.Int64,
@@ -248,7 +280,27 @@ func (api *RestAPI) scheduleForStopHandler(w http.ResponseWriter, r *http.Reques
 		references.Trips = append(references.Trips, tripRef)
 	}
 
+	routeIDsWithAgency := make([]string, 0, len(routeIDs))
+	for _, ri := range routeIDs {
+		routeIDsWithAgency = append(routeIDsWithAgency, utils.FormCombinedID(agencyID, ri))
+	}
+
+	stopRef := models.NewStop(
+		utils.NullStringOrEmpty(stop.Code),
+		utils.NullStringOrEmpty(stop.Direction),
+		utils.FormCombinedID(agencyID, stop.ID),
+		utils.NullStringOrEmpty(stop.Name),
+		"",
+		utils.MapWheelchairBoarding(utils.NullWheelchairBoardingOrUnknown(stop.WheelchairBoarding)),
+		stop.Lat,
+		stop.Lon,
+		int(stop.LocationType.Int64),
+		routeIDsWithAgency,
+		routeIDsWithAgency,
+	)
+
+	references.Stops = append(references.Stops, stopRef)
 	// Create and send response
-	response := models.NewEntryResponse(entry, references)
+	response := models.NewEntryResponse(entry, references, api.Clock)
 	api.sendResponse(w, r, response)
 }

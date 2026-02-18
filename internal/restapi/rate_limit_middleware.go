@@ -2,28 +2,41 @@ package restapi
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"golang.org/x/time/rate"
+	"maglev.onebusaway.org/internal/clock"
 )
+
+// rateLimitClient tracks the limiter and its last usage time.
+// This allows us to remove inactive users without disrupting active ones.
+type rateLimitClient struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
+}
 
 // RateLimitMiddleware provides per-API-key rate limiting
 type RateLimitMiddleware struct {
-	limiters    map[string]*rate.Limiter
+	limiters    map[string]*rateLimitClient
 	mu          sync.RWMutex
 	rateLimit   rate.Limit
 	burstSize   int
 	cleanupTick *time.Ticker
 	exemptKeys  map[string]bool
+	stopChan    chan struct{}
+	stopOnce    sync.Once
+	clock       clock.Clock
 }
 
 // NewRateLimitMiddleware creates a new rate limiting middleware
 // ratePerSecond: number of requests allowed per second per API key
 // burstSize: number of requests allowed in a burst per API key
-func NewRateLimitMiddleware(ratePerSecond int, interval time.Duration) func(http.Handler) http.Handler {
+func NewRateLimitMiddleware(ratePerSecond int, interval time.Duration, exemptKeys []string, clock clock.Clock) *RateLimitMiddleware {
 	// Handle zero rate limit case
 	var rateLimit rate.Limit
 	if ratePerSecond <= 0 {
@@ -35,44 +48,53 @@ func NewRateLimitMiddleware(ratePerSecond int, interval time.Duration) func(http
 		rateLimit = rate.Every(interval / time.Duration(ratePerSecond))
 	}
 
+	exemptMap := make(map[string]bool)
+	for _, key := range exemptKeys {
+		trimmedKey := strings.TrimSpace(key)
+		if trimmedKey != "" {
+			exemptMap[trimmedKey] = true
+		}
+	}
+
 	middleware := &RateLimitMiddleware{
-		limiters:    make(map[string]*rate.Limiter),
+		limiters:    make(map[string]*rateLimitClient),
 		rateLimit:   rateLimit,
 		burstSize:   ratePerSecond,
 		cleanupTick: time.NewTicker(5 * time.Minute), // Cleanup old limiters every 5 minutes
-		exemptKeys: map[string]bool{
-			"org.onebusaway.iphone": true, // Exempt OneBusAway iPhone app
-		},
+		exemptKeys:  exemptMap,
+		stopChan:    make(chan struct{}),
+		clock:       clock,
 	}
 
 	// Start cleanup goroutine
 	go middleware.cleanup()
 
-	return middleware.rateLimitHandler
+	return middleware
+}
+
+// Handler returns the HTTP middleware handler function
+func (rl *RateLimitMiddleware) Handler() func(http.Handler) http.Handler {
+	return rl.rateLimitHandler
 }
 
 // getLimiter gets or creates a rate limiter for the given API key
+// and updates the last usage timestamp.
 func (rl *RateLimitMiddleware) getLimiter(apiKey string) *rate.Limiter {
-	rl.mu.RLock()
-	limiter, exists := rl.limiters[apiKey]
-	rl.mu.RUnlock()
-
-	if exists {
-		return limiter
-	}
-
-	// Create new limiter
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
-	// Double-check after acquiring write lock
-	if limiter, exists := rl.limiters[apiKey]; exists {
-		return limiter
+	// If the client exists, update the lastSeen time and return the limiter
+	if client, exists := rl.limiters[apiKey]; exists {
+		client.lastSeen = rl.clock.Now()
+		return client.limiter
 	}
 
-	// Create new limiter with the configured rate and burst
-	limiter = rate.NewLimiter(rl.rateLimit, rl.burstSize)
-	rl.limiters[apiKey] = limiter
+	// Create new limiter and wrap it in our client struct
+	limiter := rate.NewLimiter(rl.rateLimit, rl.burstSize)
+	rl.limiters[apiKey] = &rateLimitClient{
+		limiter:  limiter,
+		lastSeen: rl.clock.Now(),
+	}
 
 	return limiter
 }
@@ -142,38 +164,52 @@ func (rl *RateLimitMiddleware) sendRateLimitExceeded(w http.ResponseWriter, r *h
 				"stopTimes": []interface{}{},
 			},
 		},
-		"currentTime": time.Now().UnixMilli(),
+		"currentTime": rl.clock.Now().UnixMilli(),
 		"version":     2,
 	}
 
-	_ = json.NewEncoder(w).Encode(errorResponse)
+	if err := json.NewEncoder(w).Encode(errorResponse); err != nil {
+		slog.Error("failed to encode rate limit response", "error", err)
+	}
 }
 
 // cleanup periodically removes old, unused limiters to prevent memory leaks
 func (rl *RateLimitMiddleware) cleanup() {
-	for range rl.cleanupTick.C {
-		rl.mu.Lock()
+	// Define how long a client must be idle before eviction
+	threshold := 10 * time.Minute
 
-		// Remove limiters that haven't been used recently
-		// For simplicity, we'll remove all limiters and let them be recreated as needed
-		// In a production system, you might want to track last access time
-		for key := range rl.limiters {
-			// Keep exempted keys and recently active limiters
-			if !rl.exemptKeys[key] {
-				// Simple cleanup: remove limiters that have tokens available (not recently used)
-				if limiter := rl.limiters[key]; limiter.Tokens() > 0 {
-					delete(rl.limiters, key)
+	for {
+		select {
+		case <-rl.cleanupTick.C:
+			rl.mu.Lock()
+			now := rl.clock.Now()
+
+			for key, client := range rl.limiters {
+				// Skip exempted keys
+				if !rl.exemptKeys[key] {
+					// using Time-Based Eviction (LRU)
+					// only delete if the client hasn't been seen in 10 minutes.
+					if now.Sub(client.lastSeen) > threshold {
+						delete(rl.limiters, key)
+					}
 				}
 			}
-		}
 
-		rl.mu.Unlock()
+			rl.mu.Unlock()
+		case <-rl.stopChan:
+			return
+		}
 	}
 }
 
-// Stop stops the cleanup goroutine
+// Stop stops the cleanup goroutine. It is safe to call multiple times.
+// Note: This does not affect in-flight requests - it only stops the
+// background cleanup goroutine.
 func (rl *RateLimitMiddleware) Stop() {
-	if rl.cleanupTick != nil {
-		rl.cleanupTick.Stop()
-	}
+	rl.stopOnce.Do(func() {
+		close(rl.stopChan)
+		if rl.cleanupTick != nil {
+			rl.cleanupTick.Stop()
+		}
+	})
 }

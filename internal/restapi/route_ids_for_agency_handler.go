@@ -10,6 +10,17 @@ import (
 func (api *RestAPI) routeIDsForAgencyHandler(w http.ResponseWriter, r *http.Request) {
 	id := utils.ExtractIDFromParams(r)
 
+	if err := utils.ValidateID(id); err != nil {
+		fieldErrors := map[string][]string{
+			"id": {err.Error()},
+		}
+		api.validationErrorResponse(w, r, fieldErrors)
+		return
+	}
+
+	api.GtfsManager.RLock()
+	defer api.GtfsManager.RUnlock()
+
 	agency := api.GtfsManager.FindAgency(id)
 
 	if agency == nil {
@@ -31,5 +42,5 @@ func (api *RestAPI) routeIDsForAgencyHandler(w http.ResponseWriter, r *http.Requ
 		response = append(response, utils.FormCombinedID(id, routeID))
 	}
 
-	api.sendResponse(w, r, models.NewListResponse(response, models.NewEmptyReferences()))
+	api.sendResponse(w, r, models.NewListResponse(response, models.NewEmptyReferences(), false, api.Clock))
 }

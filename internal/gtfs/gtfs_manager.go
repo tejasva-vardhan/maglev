@@ -3,7 +3,7 @@ package gtfs
 import (
 	"context"
 	"fmt"
-	"os"
+	"log/slog"
 	"sort"
 	"strings"
 	"sync"
@@ -15,13 +15,21 @@ import (
 	"github.com/OneBusAway/go-gtfs"
 	_ "github.com/mattn/go-sqlite3" // CGo-based SQLite driver
 	"github.com/tidwall/rtree"
+	"maglev.onebusaway.org/internal/logging"
 )
 
 const NoRadiusLimit = -1
 
+// RegionBounds represents the geographic boundaries of the GTFS region
+type RegionBounds struct {
+	Lat     float64
+	Lon     float64
+	LatSpan float64
+	LonSpan float64
+}
+
 // Manager manages the GTFS data and provides methods to access it
 type Manager struct {
-	gtfsSource                     string
 	gtfsData                       *gtfs.Static
 	GtfsDB                         *gtfsdb.Client
 	lastUpdated                    time.Time
@@ -33,6 +41,9 @@ type Manager struct {
 	realTimeTripLookup             map[string]int
 	realTimeVehicleLookupByTrip    map[string]int
 	realTimeVehicleLookupByVehicle map[string]int
+	agenciesMap                    map[string]*gtfs.Agency
+	routesMap                      map[string]*gtfs.Route
+	staticUpdateMutex              sync.Mutex   // Protects against concurrent ForceUpdate calls
 	staticMutex                    sync.RWMutex // Protects gtfsData and lastUpdated
 	config                         Config
 	shutdownChan                   chan struct{}
@@ -40,6 +51,8 @@ type Manager struct {
 	shutdownOnce                   sync.Once
 	stopSpatialIndex               *rtree.RTree
 	blockLayoverIndices            map[string][]*BlockLayoverIndex
+	regionBounds                   *RegionBounds
+	isHealthy                      bool
 }
 
 // InitGTFSManager initializes the Manager with the GTFS data from the given source
@@ -53,7 +66,6 @@ func InitGTFSManager(config Config) (*Manager, error) {
 	}
 
 	manager := &Manager{
-		gtfsSource:                     config.GtfsURL,
 		isLocalFile:                    isLocalFile,
 		config:                         config,
 		shutdownChan:                   make(chan struct{}),
@@ -63,7 +75,7 @@ func InitGTFSManager(config Config) (*Manager, error) {
 	}
 	manager.setStaticGTFS(staticData)
 
-	gtfsDB, err := buildGtfsDB(config, isLocalFile)
+	gtfsDB, err := buildGtfsDB(config, isLocalFile, "")
 	if err != nil {
 		return nil, fmt.Errorf("error building GTFS database: %w", err)
 	}
@@ -93,62 +105,88 @@ func InitGTFSManager(config Config) (*Manager, error) {
 	return manager, nil
 }
 
+// SetGtfsURL updates the GTFS URL in the configuration.
+// It uses a mutex to ensure thread safety.
+func (manager *Manager) SetGtfsURL(url string) {
+	manager.staticUpdateMutex.Lock()
+	defer manager.staticUpdateMutex.Unlock()
+	manager.config.GtfsURL = url
+	manager.isLocalFile = !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://")
+}
+
 // Shutdown gracefully shuts down the manager and its background goroutines
 func (manager *Manager) Shutdown() {
 	manager.shutdownOnce.Do(func() {
 		close(manager.shutdownChan)
 		manager.wg.Wait()
 		if manager.GtfsDB != nil {
-			_ = manager.GtfsDB.Close()
+			if err := manager.GtfsDB.Close(); err != nil {
+				logger := slog.Default().With(slog.String("component", "gtfs_manager"))
+				logging.LogError(logger, "failed to close GTFS database", err)
+			}
 		}
 	})
 }
 
-func (manager *Manager) GetAgencies() []gtfs.Agency {
+// IMPORTANT: Caller must hold manager.RLock() before calling this method.
+func (manager *Manager) RLock() {
 	manager.staticMutex.RLock()
-	defer manager.staticMutex.RUnlock()
+}
+
+// IMPORTANT: Caller must hold manager.RLock() before calling this method.
+func (manager *Manager) RUnlock() {
+	manager.staticMutex.RUnlock()
+}
+
+// IMPORTANT: Caller must hold manager.RLock() before calling this method.
+func (manager *Manager) GetAgencies() []gtfs.Agency {
 	return manager.gtfsData.Agencies
 }
 
+// IMPORTANT: Caller must hold manager.RLock() before calling this method.
 func (manager *Manager) GetTrips() []gtfs.ScheduledTrip {
-	manager.staticMutex.RLock()
-	defer manager.staticMutex.RUnlock()
 	return manager.gtfsData.Trips
 }
 
+// IMPORTANT: Caller must hold manager.RLock() before calling this method.
 func (manager *Manager) GetStaticData() *gtfs.Static {
-	manager.staticMutex.RLock()
-	defer manager.staticMutex.RUnlock()
 	return manager.gtfsData
 }
 
+// IMPORTANT: Caller must hold manager.RLock() before calling this method.
 func (manager *Manager) GetStops() []gtfs.Stop {
-	manager.staticMutex.RLock()
-	defer manager.staticMutex.RUnlock()
 	return manager.gtfsData.Stops
 }
 
+// IMPORTANT: Caller must hold manager.RLock() before calling this method.
 func (manager *Manager) GetBlockLayoverIndicesForRoute(routeID string) []*BlockLayoverIndex {
-	manager.staticMutex.RLock()
-	defer manager.staticMutex.RUnlock()
 	return getBlockLayoverIndicesForRoute(manager.blockLayoverIndices, routeID)
 }
 
+// IMPORTANT: Caller must hold manager.RLock() before calling this method.
 func (manager *Manager) FindAgency(id string) *gtfs.Agency {
-	manager.staticMutex.RLock()
-	defer manager.staticMutex.RUnlock()
-	for _, agency := range manager.gtfsData.Agencies {
-		if agency.Id == id {
-			return &agency
-		}
+	if agency, ok := manager.agenciesMap[id]; ok {
+		return agency
 	}
 	return nil
 }
 
+// IMPORTANT: Caller must hold manager.RLock() before calling this method.
+func (manager *Manager) FindRoute(id string) *gtfs.Route {
+	if route, ok := manager.routesMap[id]; ok {
+		return route
+	}
+	return nil
+}
+
+// IMPORTANT: Caller must hold manager.RLock() before calling this method.
+func (manager *Manager) GetRoutes() []gtfs.Route {
+	return manager.gtfsData.Routes
+}
+
 // RoutesForAgencyID retrieves all routes associated with the specified agency ID from the GTFS data.
+// IMPORTANT: Caller must hold manager.RLock() before calling this method.
 func (manager *Manager) RoutesForAgencyID(agencyID string) []*gtfs.Route {
-	manager.staticMutex.RLock()
-	defer manager.staticMutex.RUnlock()
 	var agencyRoutes []*gtfs.Route
 
 	for i := range manager.gtfsData.Routes {
@@ -165,6 +203,9 @@ type stopWithDistance struct {
 	distance float64
 }
 
+// GetStopsForLocation retrieves stops near a given location using the spatial index.
+// It supports filtering by route types and querying for specific stop codes.
+// IMPORTANT: Caller must hold manager.RLock() before calling this method.
 func (manager *Manager) GetStopsForLocation(
 	ctx context.Context,
 	lat, lon, radius, latSpan, lonSpan float64,
@@ -293,15 +334,18 @@ func (manager *Manager) GetStopsForLocation(
 		return candidates[i].distance < candidates[j].distance
 	})
 
-	// Limit to maxCount
+	// When isForRoutes is true, return all matching stops without applying maxCount limit.
+	// This prevents artificially limiting route results when the stop count would truncate
+	// routes that exist at stops beyond the maxCount threshold.
 	var stops []gtfsdb.Stop
-	for i := 0; i < len(candidates) && i < maxCount; i++ {
+	for i := 0; i < len(candidates) && (i < maxCount || isForRoutes); i++ {
 		stops = append(stops, candidates[i].stop)
 	}
 
 	return stops
 }
 
+// IMPORTANT: Caller must hold manager.RLock() before calling this method.
 func (manager *Manager) VehiclesForAgencyID(agencyID string) []gtfs.Vehicle {
 	routes := manager.RoutesForAgencyID(agencyID)
 	routeIDs := make(map[string]bool) // all route IDs for the agency.
@@ -324,16 +368,23 @@ func (manager *Manager) VehiclesForAgencyID(agencyID string) []gtfs.Vehicle {
 // GetVehicleForTrip retrieves a vehicle for a specific trip ID or finds the first vehicle that is part of the block
 // for that trip. Note we depend on getting the vehicle that may not match the trip ID exactly,
 // but is part of the same block.
+// IMPORTANT: Caller must hold manager.RLock() before calling this method.
 func (manager *Manager) GetVehicleForTrip(tripID string) *gtfs.Vehicle {
-	manager.realTimeMutex.RLock()
-	defer manager.realTimeMutex.RUnlock()
-
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
+	logger := slog.Default().With(slog.String("component", "gtfs_manager"))
+
 	requestedTrip, err := manager.GtfsDB.Queries.GetTrip(ctx, tripID)
-	if err != nil || !requestedTrip.BlockID.Valid {
-		fmt.Fprintf(os.Stderr, "Could not get block ID for trip %s: %v\n", tripID, err)
+	if err != nil {
+		logging.LogError(logger, "could not get trip", err,
+			slog.String("trip_id", tripID))
+		return nil
+	}
+
+	if !requestedTrip.BlockID.Valid {
+		logger.Debug("trip has no block ID, cannot find vehicle by block",
+			slog.String("trip_id", tripID))
 		return nil
 	}
 
@@ -341,7 +392,8 @@ func (manager *Manager) GetVehicleForTrip(tripID string) *gtfs.Vehicle {
 
 	blockTrips, err := manager.GtfsDB.Queries.GetTripsByBlockID(ctx, requestedTrip.BlockID)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not get trips for block %s: %v\n", requestedBlockID, err)
+		logging.LogError(logger, "could not get trips for block", err,
+			slog.String("block_id", requestedBlockID))
 		return nil
 	}
 
@@ -350,9 +402,16 @@ func (manager *Manager) GetVehicleForTrip(tripID string) *gtfs.Vehicle {
 		blockTripIDs[trip.ID] = true
 	}
 
+	manager.realTimeMutex.RLock()
+	defer manager.realTimeMutex.RUnlock()
+
+	// Iterate over all vehicles to find any vehicle serving a trip in this block.
+	// We use iteration rather than realTimeVehicleLookupByTrip because we need to
+	// match against any trip in the block, not a specific trip ID.
 	for _, v := range manager.realTimeVehicles {
 		if v.Trip != nil && v.Trip.ID.ID != "" && blockTripIDs[v.Trip.ID.ID] {
-			return &v
+			vehicle := v
+			return &vehicle
 		}
 	}
 	return nil
@@ -364,7 +423,8 @@ func (manager *Manager) GetVehicleByID(vehicleID string) (*gtfs.Vehicle, error) 
 	defer manager.realTimeMutex.RUnlock()
 
 	if index, exists := manager.realTimeVehicleLookupByVehicle[vehicleID]; exists {
-		return &manager.realTimeVehicles[index], nil
+		vehicle := manager.realTimeVehicles[index]
+		return &vehicle, nil
 	}
 
 	return nil, fmt.Errorf("vehicle with ID %s not found", vehicleID)
@@ -394,7 +454,8 @@ func (manager *Manager) GetTripUpdateByID(tripID string) (*gtfs.Trip, error) {
 	manager.realTimeMutex.RLock()
 	defer manager.realTimeMutex.RUnlock()
 	if index, exists := manager.realTimeTripLookup[tripID]; exists {
-		return &manager.realTimeTrips[index], nil
+		trip := manager.realTimeTrips[index]
+		return &trip, nil
 	}
 	return nil, fmt.Errorf("trip with ID %s not found", tripID)
 }
@@ -405,10 +466,9 @@ func (manager *Manager) GetAllTripUpdates() []gtfs.Trip {
 	return manager.realTimeTrips
 }
 
+// IMPORTANT: Caller must hold manager.RLock() before calling this method.
 func (manager *Manager) PrintStatistics() {
-	manager.staticMutex.RLock()
-	defer manager.staticMutex.RUnlock()
-	fmt.Printf("Source: %s (Local File: %v)\n", manager.gtfsSource, manager.isLocalFile)
+	fmt.Printf("Source: %s (Local File: %v)\n", manager.config.GtfsURL, manager.isLocalFile)
 	fmt.Printf("Last Updated: %s\n", manager.lastUpdated)
 	fmt.Println("Stops Count: ", len(manager.gtfsData.Stops))
 	fmt.Println("Routes Count: ", len(manager.gtfsData.Routes))
@@ -416,6 +476,7 @@ func (manager *Manager) PrintStatistics() {
 	fmt.Println("Agencies Count: ", len(manager.gtfsData.Agencies))
 }
 
+// IMPORTANT: Caller must hold manager.RLock() before calling this method.
 func (manager *Manager) IsServiceActiveOnDate(ctx context.Context, serviceID string, date time.Time) (int64, error) {
 	serviceDate := date.Format("20060102")
 
@@ -459,4 +520,25 @@ func (manager *Manager) IsServiceActiveOnDate(ctx context.Context, serviceID str
 	default:
 		return 0, nil
 	}
+}
+
+// IsHealthy returns true if the GTFS data is loaded and valid.
+func (manager *Manager) IsHealthy() bool {
+	manager.staticMutex.RLock()
+	defer manager.staticMutex.RUnlock()
+	return manager.isHealthy
+}
+
+// MarkHealthy sets the manager status to healthy.
+func (manager *Manager) MarkHealthy() {
+	manager.staticMutex.Lock()
+	defer manager.staticMutex.Unlock()
+	manager.isHealthy = true
+}
+
+// MarkUnhealthy sets the manager status to unhealthy.
+func (manager *Manager) MarkUnhealthy() {
+	manager.staticMutex.Lock()
+	defer manager.staticMutex.Unlock()
+	manager.isHealthy = false
 }

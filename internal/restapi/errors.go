@@ -2,8 +2,9 @@ package restapi
 
 import (
 	"encoding/json"
-	"maglev.onebusaway.org/internal/models"
 	"net/http"
+
+	"maglev.onebusaway.org/internal/models"
 )
 
 // invalidAPIKeyResponse sends a 401 Unauthorized response with the required format
@@ -17,7 +18,7 @@ func (api *RestAPI) invalidAPIKeyResponse(w http.ResponseWriter, r *http.Request
 		Version     int    `json:"version"`
 	}{
 		Code:        http.StatusUnauthorized,
-		CurrentTime: models.ResponseCurrentTime(),
+		CurrentTime: models.ResponseCurrentTime(api.Clock),
 		Text:        "permission denied",
 		Version:     1, // Note: This is version 1, not 2 as in a successful response. Probably a mistake, but back-compat.
 	}
@@ -31,6 +32,7 @@ func (api *RestAPI) invalidAPIKeyResponse(w http.ResponseWriter, r *http.Request
 }
 
 func (api *RestAPI) serverErrorResponse(w http.ResponseWriter, r *http.Request, err error) {
+	api.Logger.Error("internal server error", "error", err, "path", r.URL.Path)
 	// Send a 500 Internal Server Error response
 	response := struct {
 		Code        int    `json:"code"`
@@ -39,7 +41,7 @@ func (api *RestAPI) serverErrorResponse(w http.ResponseWriter, r *http.Request, 
 		Version     int    `json:"version"`
 	}{
 		Code:        http.StatusInternalServerError,
-		CurrentTime: models.ResponseCurrentTime(),
+		CurrentTime: models.ResponseCurrentTime(api.Clock),
 		Text:        "internal server error",
 		Version:     1,
 	}
@@ -54,11 +56,30 @@ func (api *RestAPI) serverErrorResponse(w http.ResponseWriter, r *http.Request, 
 
 // validationErrorResponse sends a 400 Bad Request response with field-specific validation errors
 func (api *RestAPI) validationErrorResponse(w http.ResponseWriter, r *http.Request, fieldErrors map[string][]string) {
-	// Create response with the required format for validation errors
+	errorText := "validation error"
+	for _, errs := range fieldErrors {
+		if len(errs) > 0 {
+			errorText = errs[0]
+			break
+		}
+	}
+
 	response := struct {
-		FieldErrors map[string][]string `json:"fieldErrors"`
+		Code        int         `json:"code"`
+		CurrentTime int64       `json:"currentTime"`
+		Text        string      `json:"text"`
+		Version     int         `json:"version"`
+		Data        interface{} `json:"data"`
 	}{
-		FieldErrors: fieldErrors,
+		Code:        http.StatusBadRequest,
+		CurrentTime: models.ResponseCurrentTime(api.Clock),
+		Text:        errorText,
+		Version:     2,
+		Data: struct {
+			FieldErrors map[string][]string `json:"fieldErrors"`
+		}{
+			FieldErrors: fieldErrors,
+		},
 	}
 
 	w.Header().Set("Content-Type", "application/json")

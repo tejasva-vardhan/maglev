@@ -3,9 +3,11 @@ package restapi
 import (
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"maglev.onebusaway.org/internal/clock"
 )
 
 func TestStopsForLocationHandlerRequiresValidApiKey(t *testing.T) {
@@ -16,7 +18,14 @@ func TestStopsForLocationHandlerRequiresValidApiKey(t *testing.T) {
 }
 
 func TestStopsForLocationHandlerEndToEnd(t *testing.T) {
-	_, resp, model := serveAndRetrieveEndpoint(t, "/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.426966&radius=2500")
+	// Mock clock set to Dec 26, 2025. This date was chosen by evaluating the test
+	// criteria: we need a day with active stops within the queried location.
+	// Any date that satisfies the test requirements against the test GTFS data can be used
+	// in the test.
+
+	clock := clock.NewMockClock(time.Date(2025, 12, 26, 14, 00, 00, 0, time.UTC))
+	api := createTestApiWithClock(t, clock)
+	resp, model := serveApiAndRetrieveEndpoint(t, api, "/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.426966&radius=2500")
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, http.StatusOK, model.Code)
@@ -68,6 +77,21 @@ func TestStopsForLocationHandlerEndToEnd(t *testing.T) {
 	assert.Contains(t, route, "shortName")
 	assert.Contains(t, route, "longName")
 	assert.Contains(t, route, "type")
+
+	referencedRouteIds := collectAllNestedIdsFromObjects(t, list, "routeIds")
+	referencedRouteIds = append(referencedRouteIds, collectAllNestedIdsFromObjects(t, list, "staticRouteIds")...)
+	require.NotEmpty(t, referencedRouteIds, "Test data must have route references to verify")
+	routeIds := collectAllIdsFromObjects(t, routes, "id")
+	for _, routeId := range referencedRouteIds {
+		assert.Contains(t, routeIds, routeId, "Stop routeId should reference known route")
+	}
+
+	referencedAgencyIds := collectAllIdsFromObjects(t, routes, "agencyId")
+	require.NotEmpty(t, referencedAgencyIds, "Test data must have agency references to verify")
+	agencyIds := collectAllIdsFromObjects(t, agencies, "id")
+	for _, agencyId := range referencedAgencyIds {
+		assert.Contains(t, agencyIds, agencyId, "Route agencyId should reference known agency")
+	}
 
 	assert.Empty(t, refs["situations"])
 	assert.Empty(t, refs["stopTimes"])
@@ -126,6 +150,20 @@ func TestStopsForLocationLatAndLan(t *testing.T) {
 	require.True(t, ok)
 	assert.NotEmpty(t, list)
 }
+
+func TestStopsForLocationIsLimitExceeded(t *testing.T) {
+	_, resp, model := serveAndRetrieveEndpoint(t, "/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.362535&radius=1000&maxCount=1")
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	data, ok := model.Data.(map[string]interface{})
+	require.True(t, ok)
+	list, ok := data["list"].([]interface{})
+	require.True(t, ok)
+	assert.Len(t, list, 1)
+	isLimitExceeded, ok := data["limitExceeded"].(bool)
+	require.True(t, ok)
+	assert.True(t, isLimitExceeded)
+}
+
 func TestStopsForLocationHandlerValidatesParameters(t *testing.T) {
 	_, resp, _ := serveAndRetrieveEndpoint(t, "/api/where/stops-for-location.json?key=TEST&lat=invalid&lon=-121.74")
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
@@ -140,5 +178,10 @@ func TestStopsForLocationHandlerValidatesLatLonSpan(t *testing.T) {
 }
 func TestStopsForLocationHandlerValidatesRadius(t *testing.T) {
 	_, resp, _ := serveAndRetrieveEndpoint(t, "/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.426966&radius=invalid")
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestStopsForLocationHandlerValidatesMaxCount(t *testing.T) {
+	_, resp, _ := serveAndRetrieveEndpoint(t, "/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.426966&maxCount=invalid")
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }

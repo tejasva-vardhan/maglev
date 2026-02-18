@@ -3,13 +3,17 @@ package restapi
 import (
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"maglev.onebusaway.org/internal/clock"
 	"maglev.onebusaway.org/internal/utils"
 )
 
 func TestScheduleForStopHandler(t *testing.T) {
-	api := createTestApi(t)
+	clock := clock.NewMockClock(time.Date(2025, 12, 26, 12, 0, 0, 0, time.UTC))
+	api := createTestApiWithClock(t, clock)
+	defer api.Shutdown()
 
 	// Get available agencies and stops for testing
 	agencies := api.GtfsManager.GetAgencies()
@@ -42,7 +46,14 @@ func TestScheduleForStopHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resp, model := serveApiAndRetrieveEndpoint(t, api, "/api/where/schedule-for-stop/"+tt.stopID+".json?key=TEST&date=2025-06-12")
+
+			// If we expect a valid response, force a known valid date (2025-06-12).
+			url := "/api/where/schedule-for-stop/" + tt.stopID + ".json?key=TEST"
+			if tt.expectValidResponse {
+				url += "&date=2025-06-12"
+			}
+
+			resp, model := serveApiAndRetrieveEndpoint(t, api, url)
 
 			assert.Equal(t, tt.expectedStatus, resp.StatusCode)
 			assert.Equal(t, tt.expectedStatus, model.Code)
@@ -65,6 +76,7 @@ func TestScheduleForStopHandler(t *testing.T) {
 
 func TestScheduleForStopHandlerDateParam(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	// Get valid stop for testing
 	agencies := api.GtfsManager.GetAgencies()
@@ -73,6 +85,7 @@ func TestScheduleForStopHandlerDateParam(t *testing.T) {
 
 	// Test valid date parameter
 	t.Run("Valid date parameter", func(t *testing.T) {
+		// NOTE: Hardcoded date 2025-06-12 used for test consistency with GTFS data validity
 		endpoint := "/api/where/schedule-for-stop/" + stopID + ".json?key=TEST&date=2025-06-12"
 		resp, model := serveApiAndRetrieveEndpoint(t, api, endpoint)
 
@@ -88,8 +101,37 @@ func TestScheduleForStopHandlerDateParam(t *testing.T) {
 	})
 }
 
+func TestScheduleForStopHandlerAgencyTimeZone(t *testing.T) {
+	clk := clock.NewMockClock(
+		time.Date(2025, 12, 26, 23, 30, 0, 0, time.UTC),
+	)
+	api := createTestApiWithClock(t, clk)
+	defer api.Shutdown()
+
+	agencies := api.GtfsManager.GetAgencies()
+	stops := api.GtfsManager.GetStops()
+
+	agency := agencies[0]
+	stopID := utils.FormCombinedID(agency.Id, stops[0].Id)
+
+	endpoint := "/api/where/schedule-for-stop/" + stopID + ".json?key=TEST"
+	_, model := serveApiAndRetrieveEndpoint(t, api, endpoint)
+
+	data := model.Data.(map[string]interface{})
+	entry, ok := data["entry"].(map[string]interface{})
+	assert.True(t, ok)
+	assert.NotNil(t, entry["date"])
+
+	loc, _ := time.LoadLocation(agency.Timezone)
+	localAgencyTime := clk.Now().In(loc)
+	y, m, d := localAgencyTime.Date()
+	expected := time.Date(y, m, d, 0, 0, 0, 0, loc).UnixMilli()
+	assert.Equal(t, float64(expected), entry["date"])
+}
+
 func TestScheduleForStopHandlerWithDateFiltering(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	// Get valid stop for testing
 	agencies := api.GtfsManager.GetAgencies()
@@ -102,6 +144,9 @@ func TestScheduleForStopHandlerWithDateFiltering(t *testing.T) {
 		expectedStatus int
 		validateResult func(t *testing.T, entry map[string]interface{})
 	}{
+		// NOTE: These dates (2025-06-12, etc.) are chosen to match the validity period of the
+		// test GTFS data loaded in createTestApi. If the test data changes, these dates
+		// must be updated to avoid test failures.
 		{
 			name:           "Thursday date - query executes successfully",
 			date:           "2025-06-12",
@@ -155,14 +200,16 @@ func TestScheduleForStopHandlerWithDateFiltering(t *testing.T) {
 	}
 }
 
-func TestScheduleForStopHandlerTripReferences(t *testing.T) {
+func TestScheduleForStopHandlerReferences(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	agencies := api.GtfsManager.GetAgencies()
 	stops := api.GtfsManager.GetStops()
 	stopID := utils.FormCombinedID(agencies[0].Id, stops[0].Id)
 
 	t.Run("Response structure is correct", func(t *testing.T) {
+		// NOTE: Hardcoded date 2025-06-12 matches GTFS data validity
 		endpoint := "/api/where/schedule-for-stop/" + stopID + ".json?key=TEST&date=2025-06-12"
 		resp, model := serveApiAndRetrieveEndpoint(t, api, endpoint)
 
@@ -180,11 +227,26 @@ func TestScheduleForStopHandlerTripReferences(t *testing.T) {
 		assert.Contains(t, entry, "stopId", "Entry should have stopId")
 		assert.Contains(t, entry, "date", "Entry should have date")
 
+		references := data["references"].(map[string]interface{})
+
+		agenciesRef, ok := references["agencies"].([]interface{})
+		assert.True(t, ok, "Agencies should exist")
+		assert.True(t, len(agenciesRef) >= 1, "Should Have at least one Agency")
+
+		stopsRef, ok := references["stops"].([]interface{})
+		assert.True(t, ok, "Stops should exist in references")
+		assert.Len(t, stopsRef, 1, "Should have exactly one stop")
+
+		_, ok = references["trips"].([]interface{})
+		assert.True(t, ok, "Trips should exist in references")
+		_, ok = references["routes"].([]interface{})
+		assert.True(t, ok, "Routes should exist in references")
 	})
 }
 
 func TestScheduleForStopHandlerInvalidDateFormat(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	agencies := api.GtfsManager.GetAgencies()
 	stops := api.GtfsManager.GetStops()
@@ -227,12 +289,14 @@ func TestScheduleForStopHandlerInvalidDateFormat(t *testing.T) {
 
 func TestScheduleForStopHandlerScheduleContent(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	agencies := api.GtfsManager.GetAgencies()
 	stops := api.GtfsManager.GetStops()
 	stopID := utils.FormCombinedID(agencies[0].Id, stops[0].Id)
 
 	t.Run("Handler executes successfully", func(t *testing.T) {
+		// NOTE: Hardcoded date matches GTFS data validity
 		endpoint := "/api/where/schedule-for-stop/" + stopID + ".json?key=TEST&date=2025-06-12"
 		resp, model := serveApiAndRetrieveEndpoint(t, api, endpoint)
 
@@ -251,13 +315,16 @@ func TestScheduleForStopHandlerScheduleContent(t *testing.T) {
 }
 
 func TestScheduleForStopHandlerEmptyRoutes(t *testing.T) {
-	api := createTestApi(t)
+	clk := clock.NewMockClock(time.Date(2025, 12, 26, 12, 0, 0, 0, time.UTC))
+	api := createTestApiWithClock(t, clk)
+	defer api.Shutdown()
 
 	agencies := api.GtfsManager.GetAgencies()
 	stops := api.GtfsManager.GetStops()
 
 	t.Run("Stop with no routes returns empty schedule", func(t *testing.T) {
 		stopID := utils.FormCombinedID(agencies[0].Id, stops[0].Id)
+		// NOTE: Hardcoded date matches GTFS data validity
 		endpoint := "/api/where/schedule-for-stop/" + stopID + ".json?key=TEST&date=2025-06-12"
 		resp, model := serveApiAndRetrieveEndpoint(t, api, endpoint)
 
@@ -276,6 +343,7 @@ func TestScheduleForStopHandlerEmptyRoutes(t *testing.T) {
 // TestScheduleForStopQueryValidation verifies the SQL query logic
 func TestScheduleForStopQueryValidation(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	agencies := api.GtfsManager.GetAgencies()
 	stops := api.GtfsManager.GetStops()
@@ -349,6 +417,11 @@ func TestScheduleForStopQueryValidation(t *testing.T) {
 					require.True(ok, "TripID should be a string")
 					require.NotEmpty(tripID, "TripID should not be empty")
 					require.Contains(tripID, "_", "TripID should be in combined format (agency_trip)")
+
+					serviceID, ok := stopTime["serviceId"].(string)
+					require.True(ok, "ServiceID should be a string")
+					require.NotEmpty(serviceID, "ServiceID should not be empty")
+					require.Contains(serviceID, "_", "serviceId should have agency prefix")
 				}
 			}
 		}
@@ -430,4 +503,16 @@ func TestScheduleForStopQueryValidation(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestScheduleForStopHandlerWithMalformedID(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+
+	malformedID := "1110"
+	endpoint := "/api/where/schedule-for-stop/" + malformedID + ".json?key=TEST"
+
+	resp, _ := serveApiAndRetrieveEndpoint(t, api, endpoint)
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "Status code should be 400 Bad Request")
 }

@@ -2,6 +2,7 @@ package restapi
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"testing"
 	"time"
@@ -19,6 +20,7 @@ func TestTripDetailsHandlerRequiresValidApiKey(t *testing.T) {
 
 func TestTripDetailsHandlerEndToEnd(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	agency := api.GtfsManager.GetAgencies()[0]
 	trips := api.GtfsManager.GetTrips()
@@ -40,6 +42,22 @@ func TestTripDetailsHandlerEndToEnd(t *testing.T) {
 
 	assert.Equal(t, tripID, entry["tripId"])
 	assert.NotNil(t, entry["serviceDate"])
+
+	// Testing Default Path where no Service Date is given
+	loc, err := time.LoadLocation(agency.Timezone)
+	assert.Nil(t, err)
+
+	currentTimeInLoc := time.Now().In(loc)
+	y, m, d := currentTimeInLoc.Date()
+	expectedServiceDate := time.Date(y, m, d, 0, 0, 0, 0, loc)
+	expectedServiceDateMillis := expectedServiceDate.Unix() * 1000
+	assert.Equal(t, float64(expectedServiceDateMillis), entry["serviceDate"])
+
+	// Test if the fields are being omitted on empty or not
+	_, exists := entry["situationIds"]
+	assert.True(t, exists)
+	_, exists = entry["frequency"]
+	assert.True(t, exists)
 
 	schedule, ok := entry["schedule"].(map[string]interface{})
 	if ok {
@@ -125,6 +143,7 @@ func TestTripDetailsHandlerWithInvalidTripID(t *testing.T) {
 
 func TestTripDetailsHandlerWithServiceDate(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	agency := api.GtfsManager.GetAgencies()[0]
 	trips := api.GtfsManager.GetTrips()
@@ -152,6 +171,7 @@ func TestTripDetailsHandlerWithServiceDate(t *testing.T) {
 
 func TestTripDetailsHandlerWithIncludeTrip(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	agency := api.GtfsManager.GetAgencies()[0]
 	trips := api.GtfsManager.GetTrips()
@@ -181,6 +201,7 @@ func TestTripDetailsHandlerWithIncludeTrip(t *testing.T) {
 
 func TestTripDetailsHandlerWithIncludeSchedule(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	agency := api.GtfsManager.GetAgencies()[0]
 	trips := api.GtfsManager.GetTrips()
@@ -219,6 +240,7 @@ func TestTripDetailsHandlerWithIncludeSchedule(t *testing.T) {
 
 func TestTripDetailsHandlerWithIncludeStatus(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	agency := api.GtfsManager.GetAgencies()[0]
 	trips := api.GtfsManager.GetTrips()
@@ -245,6 +267,7 @@ func TestTripDetailsHandlerWithIncludeStatus(t *testing.T) {
 
 func TestTripDetailsHandlerWithTimeParameter(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	agency := api.GtfsManager.GetAgencies()[0]
 	trips := api.GtfsManager.GetTrips()
@@ -273,6 +296,7 @@ func TestTripDetailsHandlerWithTimeParameter(t *testing.T) {
 
 func TestTripDetailsHandlerWithAllParametersFalse(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	agency := api.GtfsManager.GetAgencies()[0]
 	trips := api.GtfsManager.GetTrips()
@@ -316,4 +340,66 @@ func TestTripDetailsHandlerWithAllParametersFalse(t *testing.T) {
 	agencies, ok := references["agencies"].([]interface{})
 	assert.True(t, ok)
 	assert.NotEmpty(t, agencies)
+}
+
+func TestTripDetailsHandlerWithMalformedID(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+
+	malformedID := "1110"
+	endpoint := "/api/where/trip-details/" + malformedID + ".json?key=TEST"
+
+	resp, _ := serveApiAndRetrieveEndpoint(t, api, endpoint)
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "Status code should be 400 Bad Request")
+}
+
+func TestTripDetailsHandlerWithInvalidParams(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+
+	agency := api.GtfsManager.GetAgencies()[0]
+	trips := api.GtfsManager.GetTrips()
+	tripID := utils.FormCombinedID(agency.Id, trips[0].ID)
+
+	endpoint := "/api/where/trip-details/" + tripID + ".json?key=TEST&serviceDate=invalid"
+
+	resp, _ := serveApiAndRetrieveEndpoint(t, api, endpoint)
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+	endpoint = "/api/where/trip-details/" + tripID + ".json?key=TEST&time=invalid"
+
+	resp2, _ := serveApiAndRetrieveEndpoint(t, api, endpoint)
+
+	assert.Equal(t, http.StatusBadRequest, resp2.StatusCode)
+}
+
+func TestParseTripIdDetailsParams_Unit(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+
+	req := httptest.NewRequest("GET", "/?includeTrip=false&includeSchedule=false&serviceDate=1609459200000", nil)
+	params, errs := api.parseTripIdDetailsParams(req)
+
+	assert.Nil(t, errs)
+	assert.False(t, params.IncludeTrip)
+	assert.False(t, params.IncludeSchedule)
+	assert.NotNil(t, params.ServiceDate)
+
+	reqDefault := httptest.NewRequest("GET", "/", nil)
+	paramsDefault, errsDefault := api.parseTripIdDetailsParams(reqDefault)
+
+	assert.Nil(t, errsDefault)
+	assert.True(t, paramsDefault.IncludeTrip)
+	assert.True(t, paramsDefault.IncludeStatus)
+	assert.True(t, paramsDefault.IncludeSchedule)
+
+	reqInvalid := httptest.NewRequest("GET", "/?time=invalid&serviceDate=invalid", nil)
+	_, errsInvalid := api.parseTripIdDetailsParams(reqInvalid)
+
+	assert.NotNil(t, errsInvalid)
+	assert.Contains(t, errsInvalid, "time")
+	assert.Contains(t, errsInvalid, "serviceDate")
+	assert.Equal(t, "must be a valid Unix timestamp in milliseconds", errsInvalid["time"][0])
 }

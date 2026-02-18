@@ -1,6 +1,10 @@
 package gtfs
 
 import (
+	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 
@@ -46,7 +50,7 @@ func TestGetAlertsForTrip(t *testing.T) {
 		},
 	}
 
-	alerts := manager.GetAlertsForTrip("trip123")
+	alerts := manager.GetAlertsForTrip(context.Background(), "trip123")
 
 	assert.Len(t, alerts, 1)
 	assert.Equal(t, "alert1", alerts[0].ID)
@@ -142,4 +146,58 @@ func TestRebuildRealTimeVehicleLookupByVehicle(t *testing.T) {
 	assert.Len(t, manager.realTimeVehicleLookupByVehicle, 2)
 	assert.Equal(t, 0, manager.realTimeVehicleLookupByVehicle["vehicle1"])
 	assert.Equal(t, 1, manager.realTimeVehicleLookupByVehicle["vehicle2"])
+}
+
+func TestRebuildRealTimeVehicleLookupByVehicle_WithInvalidIDs(t *testing.T) {
+	manager := &Manager{
+		realTimeVehicles: []gtfs.Vehicle{
+			{
+				ID: &gtfs.VehicleID{ID: "vehicle1"},
+			},
+			{
+				// Vehicle with nil ID - should be skipped
+				ID: nil,
+			},
+			{
+				// Vehicle with empty ID - should be skipped
+				ID: &gtfs.VehicleID{ID: ""},
+			},
+			{
+				ID: &gtfs.VehicleID{ID: "vehicle3"},
+			},
+		},
+	}
+
+	filterRealTimeVehicleByValidId(manager)
+	rebuildRealTimeVehicleLookupByVehicle(manager)
+
+	assert.NotNil(t, manager.realTimeVehicleLookupByVehicle)
+	assert.Len(t, manager.realTimeVehicleLookupByVehicle, 2)
+	assert.Equal(t, 0, manager.realTimeVehicleLookupByVehicle["vehicle1"])
+	assert.Equal(t, 2, manager.realTimeVehicleLookupByVehicle["vehicle3"])
+}
+
+func TestLoadRealtimeData_Non200StatusCode(t *testing.T) {
+	tests := []struct {
+		name       string
+		statusCode int
+	}{
+		{"InternalServerError", http.StatusInternalServerError},
+		{"NotFound", http.StatusNotFound},
+		{"Forbidden", http.StatusForbidden},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tt.statusCode)
+			}))
+			defer server.Close()
+
+			result, err := loadRealtimeData(context.Background(), server.URL, nil)
+			assert.Error(t, err)
+			assert.Nil(t, result)
+			assert.Contains(t, err.Error(), fmt.Sprintf("%d", tt.statusCode))
+		})
+	}
 }

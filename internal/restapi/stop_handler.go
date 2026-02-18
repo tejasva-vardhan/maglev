@@ -19,11 +19,19 @@ func (api *RestAPI) stopHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// agencyID here is specifically the *Stop's* agency.
+	// Routes serving this stop might belong to different agencies.
 	agencyID, stopID, err := utils.ExtractAgencyIDAndCodeID(queryParamID)
 	if err != nil {
-		api.serverErrorResponse(w, r, err)
+		fieldErrors := map[string][]string{
+			"id": {err.Error()},
+		}
+		api.validationErrorResponse(w, r, fieldErrors)
 		return
 	}
+
+	api.GtfsManager.RLock()
+	defer api.GtfsManager.RUnlock()
 
 	ctx := r.Context()
 
@@ -41,27 +49,31 @@ func (api *RestAPI) stopHandler(w http.ResponseWriter, r *http.Request) {
 
 	combinedRouteIDs := make([]string, len(routes))
 	for i, route := range routes {
-		combinedRouteIDs[i] = utils.FormCombinedID(agencyID, route.ID)
+		// Use route.AgencyID, not the stop's agencyID.
+		// A stop can be served by routes from other agencies.
+		combinedRouteIDs[i] = utils.FormCombinedID(route.AgencyID, route.ID)
 	}
 
 	stopData := &models.Stop{
 		ID:                 utils.FormCombinedID(agencyID, stop.ID),
-		Name:               stop.Name.String,
+		Name:               utils.NullStringOrEmpty(stop.Name),
 		Lat:                stop.Lat,
 		Lon:                stop.Lon,
-		Code:               stop.Code.String,
-		Direction:          "",
+		Code:               utils.NullStringOrEmpty(stop.Code),
+		Direction:          utils.NullStringOrEmpty(stop.Direction),
 		LocationType:       int(stop.LocationType.Int64),
-		WheelchairBoarding: models.UnknownValue,
+		WheelchairBoarding: utils.MapWheelchairBoarding(utils.NullWheelchairBoardingOrUnknown(stop.WheelchairBoarding)),
 		RouteIDs:           combinedRouteIDs,
 		StaticRouteIDs:     combinedRouteIDs,
 	}
 
 	references := models.NewEmptyReferences()
+	uniqueAgencyIDs := make(map[string]bool)
 
+	// Add routes to references and collect unique agency IDs
 	for _, route := range routes {
 		routeModel := models.NewRoute(
-			utils.FormCombinedID(agencyID, route.ID),
+			utils.FormCombinedID(route.AgencyID, route.ID),
 			route.AgencyID,
 			route.ShortName.String,
 			route.LongName.String,
@@ -73,11 +85,12 @@ func (api *RestAPI) stopHandler(w http.ResponseWriter, r *http.Request) {
 			route.ShortName.String,
 		)
 		references.Routes = append(references.Routes, routeModel)
+		uniqueAgencyIDs[route.AgencyID] = true
 	}
 
-	if len(routes) > 0 {
-		route := routes[0]
-		agency, err := api.GtfsManager.GtfsDB.Queries.GetAgency(ctx, route.AgencyID)
+	// Fetch references for ALL unique agencies involved, not just the first one.
+	for aid := range uniqueAgencyIDs {
+		agency, err := api.GtfsManager.GtfsDB.Queries.GetAgency(ctx, aid)
 		if err == nil {
 			agencyModel := models.NewAgencyReference(
 				agency.ID,
@@ -88,13 +101,13 @@ func (api *RestAPI) stopHandler(w http.ResponseWriter, r *http.Request) {
 				agency.Phone.String,
 				agency.Email.String,
 				agency.FareUrl.String,
-				"",    // disclaimer
-				false, // privateService
+				"",
+				false,
 			)
 			references.Agencies = append(references.Agencies, agencyModel)
 		}
 	}
 
-	response := models.NewEntryResponse(stopData, references)
+	response := models.NewEntryResponse(stopData, references, api.Clock)
 	api.sendResponse(w, r, response)
 }

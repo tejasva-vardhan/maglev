@@ -2,7 +2,9 @@ package utils
 
 import (
 	"fmt"
+	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -237,12 +239,12 @@ func TestMapWheelchairBoarding(t *testing.T) {
 		{
 			name:     "Possible",
 			input:    gtfs.WheelchairBoarding_Possible,
-			expected: "ACCESSIBLE",
+			expected: models.Accessible,
 		},
 		{
 			name:     "Not possible",
 			input:    gtfs.WheelchairBoarding_NotPossible,
-			expected: "NOT_ACCESSIBLE",
+			expected: models.NotAccessible,
 		},
 		{
 			name:     "Not specified (default)",
@@ -444,18 +446,28 @@ func TestParseTimeParameter(t *testing.T) {
 			expectedErrorKey: "time",
 		},
 		{
-			name:             "Future date (should fail)",
-			timeParam:        now.AddDate(0, 0, 1).Format("2006-01-02"),
-			expectedDate:     "",
-			expectError:      true,
-			expectedErrorKey: "time",
+			name:         "Future date",
+			timeParam:    now.AddDate(0, 0, 1).Format("2006-01-02"),
+			expectedDate: now.AddDate(0, 0, 1).Format("20060102"),
+			expectError:  false,
+			validateParsedTime: func(t *testing.T, parsedTime time.Time) {
+				tomorrow := now.AddDate(0, 0, 1)
+				assert.Equal(t, tomorrow.Year(), parsedTime.Year())
+				assert.Equal(t, tomorrow.Month(), parsedTime.Month())
+				assert.Equal(t, tomorrow.Day(), parsedTime.Day())
+			},
 		},
 		{
-			name:             "Future epoch (should fail)",
-			timeParam:        fmt.Sprintf("%d", now.AddDate(0, 0, 1).Unix()*1000),
-			expectedDate:     "",
-			expectError:      true,
-			expectedErrorKey: "time",
+			name:         "Future epoch",
+			timeParam:    fmt.Sprintf("%d", now.AddDate(0, 0, 1).Unix()*1000),
+			expectedDate: now.AddDate(0, 0, 1).Format("20060102"),
+			expectError:  false,
+			validateParsedTime: func(t *testing.T, parsedTime time.Time) {
+				tomorrow := now.AddDate(0, 0, 1)
+				assert.Equal(t, tomorrow.Year(), parsedTime.Year())
+				assert.Equal(t, tomorrow.Month(), parsedTime.Month())
+				assert.Equal(t, tomorrow.Day(), parsedTime.Day())
+			},
 		},
 	}
 
@@ -514,4 +526,392 @@ func TestParseTimeParameter_EdgeCases(t *testing.T) {
 		assert.NotNil(t, fieldErrors)
 		assert.Contains(t, fieldErrors, "time")
 	})
+}
+
+func TestLoadLocationWithUTCFallBack(t *testing.T) {
+	t.Run("Valid location", func(t *testing.T) {
+		loc := LoadLocationWithUTCFallBack("America/Los_Angeles", "test-agency")
+
+		assert.NotNil(t, loc)
+		assert.Equal(t, "America/Los_Angeles", loc.String())
+	})
+
+	t.Run("Invalid location falls back to UTC", func(t *testing.T) {
+		loc := LoadLocationWithUTCFallBack("Invalid/Timezone", "test-agency")
+
+		assert.NotNil(t, loc)
+		assert.Equal(t, time.UTC, loc)
+	})
+}
+
+func TestParseMaxCount(t *testing.T) {
+	tests := []struct {
+		name             string
+		expectError      bool
+		expectedErrorKey string
+		countQueryParams url.Values
+		defaultCount     int
+		expectedMaxCount int
+	}{
+		{
+			name:             "Default Value, No MaxCount Provided",
+			defaultCount:     100,
+			expectedMaxCount: 100,
+			expectError:      false,
+			countQueryParams: url.Values{},
+			expectedErrorKey: "maxCount",
+		},
+		{
+			name: "Boundary Values, MaxCount is 1",
+			countQueryParams: url.Values{
+				"maxCount": []string{"1"},
+			},
+			defaultCount:     100,
+			expectedMaxCount: 1,
+			expectError:      false,
+			expectedErrorKey: "maxCount",
+		},
+		{
+			name: "Boundary Values, MaxCount is 250",
+			countQueryParams: url.Values{
+				"maxCount": []string{"250"},
+			},
+			defaultCount:     100,
+			expectedMaxCount: 250,
+			expectError:      false,
+			expectedErrorKey: "maxCount",
+		},
+		{
+			name: "Boundary Values, MaxCount is 251",
+			countQueryParams: url.Values{
+				"maxCount": []string{"251"},
+			},
+			defaultCount:     100,
+			expectError:      true,
+			expectedErrorKey: "maxCount",
+		},
+		{
+			name: "MaxCount is 0",
+			countQueryParams: url.Values{
+				"maxCount": []string{"0"},
+			},
+			defaultCount:     100,
+			expectError:      true,
+			expectedErrorKey: "maxCount",
+		},
+		{
+			name: "maxCount is float",
+			countQueryParams: url.Values{
+				"maxCount": []string{"5.9"},
+			},
+			defaultCount:     100,
+			expectError:      true,
+			expectedErrorKey: "maxCount",
+		},
+		{
+			name: "maxCount is non numeric",
+			countQueryParams: url.Values{
+				"maxCount": []string{"Not a number"},
+			},
+			defaultCount:     100,
+			expectError:      true,
+			expectedErrorKey: "maxCount",
+		},
+		{
+			name: "maxCount is negative",
+			countQueryParams: url.Values{
+				"maxCount": []string{"-1"},
+			},
+			defaultCount:     100,
+			expectError:      true,
+			expectedErrorKey: "maxCount",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resultedMaxCount, fieldErrors := ParseMaxCount(tt.countQueryParams, tt.defaultCount, nil)
+			if tt.expectError {
+				assert.Contains(t, fieldErrors, tt.expectedErrorKey)
+
+			} else {
+				assert.NotContains(t, fieldErrors, tt.expectedErrorKey)
+				assert.Equal(t, tt.expectedMaxCount, resultedMaxCount)
+			}
+		})
+	}
+}
+
+func TestParsePaginationParams(t *testing.T) {
+	tests := []struct {
+		name           string
+		urlParams      string
+		expectedOffset int
+		expectedLimit  int
+	}{
+		{
+			name:           "Default values (no limit)",
+			urlParams:      "",
+			expectedOffset: 0,
+			expectedLimit:  -1,
+		},
+		{
+			name:           "Valid offset and limit",
+			urlParams:      "?offset=10&limit=50",
+			expectedOffset: 10,
+			expectedLimit:  50,
+		},
+		{
+			name:           "Valid offset and maxCount (maxCount takes priority)",
+			urlParams:      "?offset=10&maxCount=50",
+			expectedOffset: 10,
+			expectedLimit:  50,
+		},
+		{
+			name:           "Both limit and maxCount (maxCount wins)",
+			urlParams:      "?limit=20&maxCount=50",
+			expectedOffset: 0,
+			expectedLimit:  50,
+		},
+		{
+			name:           "Invalid offset (negative)",
+			urlParams:      "?offset=-5",
+			expectedOffset: 0,
+			expectedLimit:  -1,
+		},
+		{
+			name:           "Invalid limit (zero)",
+			urlParams:      "?limit=0",
+			expectedOffset: 0,
+			expectedLimit:  -1,
+		},
+		{
+			name:           "Invalid limit (negative)",
+			urlParams:      "?limit=-10",
+			expectedOffset: 0,
+			expectedLimit:  -1,
+		},
+		{
+			name:           "Limit exceeds max",
+			urlParams:      "?limit=5000",
+			expectedOffset: 0,
+			expectedLimit:  1000,
+		},
+		{
+			name:           "maxCount exceeds max",
+			urlParams:      "?maxCount=5000",
+			expectedOffset: 0,
+			expectedLimit:  1000,
+		},
+		{
+			name:           "Non-numeric values",
+			urlParams:      "?offset=abc&limit=xyz",
+			expectedOffset: 0,
+			expectedLimit:  -1,
+		},
+		{
+			name:           "Explicit offset zero and small limit",
+			urlParams:      "?offset=0&limit=1",
+			expectedOffset: 0,
+			expectedLimit:  1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, _ := http.NewRequest("GET", "/test"+tt.urlParams, nil)
+			offset, limit := ParsePaginationParams(req)
+
+			assert.Equal(t, tt.expectedOffset, offset)
+			assert.Equal(t, tt.expectedLimit, limit)
+		})
+	}
+}
+
+func TestPaginateSlice(t *testing.T) {
+	tests := []struct {
+		name          string
+		items         []int
+		offset        int
+		limit         int
+		expected      []int
+		limitExceeded bool
+	}{
+		{
+			name:          "No limit",
+			items:         []int{1, 2, 3},
+			offset:        0,
+			limit:         -1,
+			expected:      []int{1, 2, 3},
+			limitExceeded: false,
+		},
+		{
+			name:          "No limit with offset",
+			items:         []int{1, 2, 3, 4, 5},
+			offset:        2,
+			limit:         -1,
+			expected:      []int{3, 4, 5},
+			limitExceeded: false,
+		},
+		{
+			name:          "Limit fits exactly",
+			items:         []int{1, 2, 3},
+			offset:        0,
+			limit:         3,
+			expected:      []int{1, 2, 3},
+			limitExceeded: false,
+		},
+		{
+			name:          "Limit exceeds length",
+			items:         []int{1, 2, 3},
+			offset:        0,
+			limit:         5,
+			expected:      []int{1, 2, 3},
+			limitExceeded: false,
+		},
+		{
+			name:          "Limit causes truncation",
+			items:         []int{1, 2, 3, 4, 5},
+			offset:        0,
+			limit:         3,
+			expected:      []int{1, 2, 3},
+			limitExceeded: true,
+		},
+		{
+			name:          "Offset and limit within bounds",
+			items:         []int{1, 2, 3, 4, 5},
+			offset:        1,
+			limit:         2,
+			expected:      []int{2, 3},
+			limitExceeded: true,
+		},
+		{
+			name:          "Offset at end",
+			items:         []int{1, 2, 3},
+			offset:        3,
+			limit:         5,
+			expected:      []int{},
+			limitExceeded: false,
+		},
+		{
+			name:          "Offset beyond end",
+			items:         []int{1, 2, 3},
+			offset:        5,
+			limit:         5,
+			expected:      []int{},
+			limitExceeded: false,
+		},
+		{
+			name:          "Empty slice",
+			items:         []int{},
+			offset:        0,
+			limit:         5,
+			expected:      []int{},
+			limitExceeded: false,
+		},
+		{
+			name:          "Nil slice",
+			items:         nil,
+			offset:        0,
+			limit:         5,
+			expected:      []int{},
+			limitExceeded: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, limitExceeded := PaginateSlice(tt.items, tt.offset, tt.limit)
+			assert.Equal(t, tt.expected, result)
+			assert.Equal(t, tt.limitExceeded, limitExceeded)
+		})
+	}
+}
+
+func TestTruncateComment(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "Short string (under limit)",
+			input:    "Hello World",
+			expected: "Hello World",
+		},
+		{
+			name:     "Exact limit (500 chars)",
+			input:    strings.Repeat("a", 500),
+			expected: strings.Repeat("a", 500),
+		},
+		{
+			name:     "Over limit (501 chars)",
+			input:    strings.Repeat("a", 501),
+			expected: strings.Repeat("a", 500),
+		},
+		{
+			name:     "Multi-byte characters (Arabic)",
+			input:    "مرحبا بك في مصر",
+			expected: "مرحبا بك في مصر",
+		},
+		{
+			name:     "Multi-byte overflow (Emoji)",
+			input:    strings.Repeat("🦁", 501),
+			expected: strings.Repeat("🦁", 500),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := TruncateComment(tt.input)
+			assert.Equal(t, tt.expected, result)
+			assert.True(t, len([]rune(result)) <= MaxCommentLength)
+		})
+	}
+}
+
+func TestValidateNumericParam(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "Valid float",
+			input:    "47.6097",
+			expected: "47.6097",
+		},
+		{
+			name:     "Valid negative float",
+			input:    "-122.3331",
+			expected: "-122.3331",
+		},
+		{
+			name:     "Invalid text",
+			input:    "invalid-coord",
+			expected: "",
+		},
+		{
+			name:     "Mixed text and numbers",
+			input:    "12abc",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ValidateNumericParam(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }

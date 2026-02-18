@@ -2,6 +2,7 @@ package gtfs
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -11,6 +12,36 @@ import (
 	"github.com/OneBusAway/go-gtfs"
 	"maglev.onebusaway.org/internal/logging"
 )
+
+// realtimeHTTPClient is a dedicated HTTP client for GTFS-RT feed fetching,
+// configured with explicit timeouts and transport limits to avoid the pitfalls
+// of http.DefaultClient (no timeout, shared global state).
+// The transport is cloned from http.DefaultTransport to preserve important
+// defaults (ProxyFromEnvironment, DialContext, HTTP/2, keepalives).
+var realtimeHTTPClient = newRealtimeHTTPClient()
+
+func newRealtimeHTTPClient() *http.Client {
+	var transport *http.Transport
+	if t, ok := http.DefaultTransport.(*http.Transport); ok {
+		transport = t.Clone()
+	} else {
+		transport = &http.Transport{}
+	}
+	transport.MaxIdleConns = 50
+	transport.MaxIdleConnsPerHost = 10
+	transport.IdleConnTimeout = 90 * time.Second
+	transport.TLSHandshakeTimeout = 10 * time.Second
+	transport.ExpectContinueTimeout = 1 * time.Second
+
+	return &http.Client{
+		// Timeout acts as an absolute safety net per request. The caller in
+		// updateGTFSRealtimePeriodically also sets a 15s context timeout;
+		// the stricter of the two wins. Keep this <= the context timeout so
+		// the client enforces the bound even if a caller forgets a context.
+		Timeout:   10 * time.Second,
+		Transport: transport,
+	}
+}
 
 // GetRealTimeTrips returns the real-time trip updates
 func (manager *Manager) GetRealTimeTrips() []gtfs.Trip {
@@ -36,20 +67,30 @@ func loadRealtimeData(ctx context.Context, source string, headers map[string]str
 		req.Header.Add(key, value)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := realtimeHTTPClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to execute GTFS-RT request: %w", err)
 	}
+
 	defer logging.SafeCloseWithLogging(resp.Body,
 		slog.Default().With(slog.String("component", "gtfs_realtime_downloader")),
 		"http_response_body")
 
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("gtfs-rt fetch failed: %s returned %s", source, resp.Status)
 	}
 
-	return gtfs.ParseRealtime(b, &gtfs.ParseRealtimeOptions{})
+	const maxBodySize = 25 * 1024 * 1024
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodySize+1))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if int64(len(body)) > maxBodySize {
+		return nil, fmt.Errorf("GTFS-RT response exceeds size limit of %d bytes", maxBodySize)
+	}
+
+	return gtfs.ParseRealtime(body, &gtfs.ParseRealtimeOptions{})
 }
 
 func (manager *Manager) GetAlertsForRoute(routeID string) []gtfs.Alert {
@@ -70,22 +111,25 @@ func (manager *Manager) GetAlertsForRoute(routeID string) []gtfs.Alert {
 	return alerts
 }
 
-func (manager *Manager) GetAlertsForTrip(tripID string) []gtfs.Alert {
-	manager.realTimeMutex.RLock()
-	defer manager.realTimeMutex.RUnlock()
-
+// GetAlertsForTrip returns alerts matching the trip, its route, or agency.
+// IMPORTANT: Caller must hold manager.RLock() before calling this method.
+func (manager *Manager) GetAlertsForTrip(ctx context.Context, tripID string) []gtfs.Alert {
 	var routeID string
 	var agencyID string
+
 	if manager.GtfsDB != nil {
-		trip, err := manager.GtfsDB.Queries.GetTrip(context.Background(), tripID)
+		trip, err := manager.GtfsDB.Queries.GetTrip(ctx, tripID)
 		if err == nil {
 			routeID = trip.RouteID
-			route, err := manager.GtfsDB.Queries.GetRoute(context.Background(), routeID)
+			route, err := manager.GtfsDB.Queries.GetRoute(ctx, routeID)
 			if err == nil {
 				agencyID = route.AgencyID
 			}
 		}
 	}
+
+	manager.realTimeMutex.RLock()
+	defer manager.realTimeMutex.RUnlock()
 
 	alertMap := make(map[string]gtfs.Alert)
 
@@ -201,6 +245,7 @@ func (manager *Manager) updateGTFSRealtime(ctx context.Context, config Config) {
 	}
 	if vehicleData != nil && vehicleErr == nil {
 		manager.realTimeVehicles = vehicleData.Vehicles
+		filterRealTimeVehicleByValidId(manager)
 		rebuildRealTimeVehicleLookupByTrip(manager)
 		rebuildRealTimeVehicleLookupByVehicle(manager)
 	}
@@ -212,27 +257,25 @@ func (manager *Manager) updateGTFSRealtime(ctx context.Context, config Config) {
 	}
 }
 
-func rebuildRealTimeTripLookup(manager *Manager) {
-	if manager.realTimeTripLookup == nil {
-		manager.realTimeTripLookup = make(map[string]int)
-	} else {
-		for k := range manager.realTimeTripLookup {
-			delete(manager.realTimeTripLookup, k)
+func filterRealTimeVehicleByValidId(manager *Manager) {
+	validVehicles := make([]gtfs.Vehicle, 0, len(manager.realTimeVehicles))
+	for _, v := range manager.realTimeVehicles {
+		if v.ID != nil {
+			validVehicles = append(validVehicles, v)
 		}
 	}
+	manager.realTimeVehicles = validVehicles
+}
+
+func rebuildRealTimeTripLookup(manager *Manager) {
+	manager.realTimeTripLookup = make(map[string]int, len(manager.realTimeTrips))
 	for i, trip := range manager.realTimeTrips {
 		manager.realTimeTripLookup[trip.ID.ID] = i
 	}
 }
 
 func rebuildRealTimeVehicleLookupByTrip(manager *Manager) {
-	if manager.realTimeVehicleLookupByTrip == nil {
-		manager.realTimeVehicleLookupByTrip = make(map[string]int)
-	} else {
-		for k := range manager.realTimeVehicleLookupByTrip {
-			delete(manager.realTimeVehicleLookupByTrip, k)
-		}
-	}
+	manager.realTimeVehicleLookupByTrip = make(map[string]int, len(manager.realTimeVehicles))
 	for i, vehicle := range manager.realTimeVehicles {
 		if vehicle.Trip != nil && vehicle.Trip.ID.ID != "" {
 			manager.realTimeVehicleLookupByTrip[vehicle.Trip.ID.ID] = i
@@ -241,15 +284,11 @@ func rebuildRealTimeVehicleLookupByTrip(manager *Manager) {
 }
 
 func rebuildRealTimeVehicleLookupByVehicle(manager *Manager) {
-	if manager.realTimeVehicleLookupByVehicle == nil {
-		manager.realTimeVehicleLookupByVehicle = make(map[string]int)
-	} else {
-		for k := range manager.realTimeVehicleLookupByVehicle {
-			delete(manager.realTimeVehicleLookupByVehicle, k)
-		}
-	}
+	manager.realTimeVehicleLookupByVehicle = make(map[string]int, len(manager.realTimeVehicles))
 	for i, vehicle := range manager.realTimeVehicles {
-		manager.realTimeVehicleLookupByVehicle[vehicle.ID.ID] = i
+		if vehicle.ID.ID != "" {
+			manager.realTimeVehicleLookupByVehicle[vehicle.ID.ID] = i
+		}
 	}
 }
 

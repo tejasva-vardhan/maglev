@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"maglev.onebusaway.org/gtfsdb"
+	GTFS "maglev.onebusaway.org/internal/gtfs"
 	"maglev.onebusaway.org/internal/models"
 	"maglev.onebusaway.org/internal/utils"
 )
@@ -19,53 +20,98 @@ type TripDetailsParams struct {
 	Time            *time.Time
 }
 
-func (api *RestAPI) parseTripIdDetailsParams(r *http.Request) TripDetailsParams {
+// parseTripIdDetailsParams parses and validates parameters.
+func (api *RestAPI) parseTripIdDetailsParams(r *http.Request) (TripDetailsParams, map[string][]string) {
 	params := TripDetailsParams{
 		IncludeTrip:     true,
 		IncludeSchedule: true,
 		IncludeStatus:   true,
 	}
 
+	fieldErrors := make(map[string][]string)
+
+	// Validate serviceDate
 	if serviceDateStr := r.URL.Query().Get("serviceDate"); serviceDateStr != "" {
 		if serviceDateMs, err := strconv.ParseInt(serviceDateStr, 10, 64); err == nil {
 			serviceDate := time.Unix(serviceDateMs/1000, 0)
 			params.ServiceDate = &serviceDate
+		} else {
+			fieldErrors["serviceDate"] = []string{"must be a valid Unix timestamp in milliseconds"}
 		}
 	}
 
 	if includeTripStr := r.URL.Query().Get("includeTrip"); includeTripStr != "" {
-		params.IncludeTrip = includeTripStr == "true"
+		if val, err := strconv.ParseBool(includeTripStr); err == nil {
+			params.IncludeTrip = val
+		} else {
+			fieldErrors["includeTrip"] = []string{"must be a boolean value (true/false)"}
+		}
 	}
 
 	if includeScheduleStr := r.URL.Query().Get("includeSchedule"); includeScheduleStr != "" {
-		params.IncludeSchedule = includeScheduleStr == "true"
+		if val, err := strconv.ParseBool(includeScheduleStr); err == nil {
+			params.IncludeSchedule = val
+		} else {
+			fieldErrors["includeSchedule"] = []string{"must be a boolean value (true/false)"}
+		}
 	}
 
 	if includeStatusStr := r.URL.Query().Get("includeStatus"); includeStatusStr != "" {
-		params.IncludeStatus = includeStatusStr == "true"
+		if val, err := strconv.ParseBool(includeStatusStr); err == nil {
+			params.IncludeStatus = val
+		} else {
+			fieldErrors["includeStatus"] = []string{"must be a boolean value (true/false)"}
+		}
 	}
 
+	// Validate time
 	if timeStr := r.URL.Query().Get("time"); timeStr != "" {
 		if timeMs, err := strconv.ParseInt(timeStr, 10, 64); err == nil {
 			timeParam := time.Unix(timeMs/1000, 0)
 			params.Time = &timeParam
+		} else {
+			fieldErrors["time"] = []string{"must be a valid Unix timestamp in milliseconds"}
 		}
 	}
 
-	return params
+	if len(fieldErrors) > 0 {
+		return params, fieldErrors
+	}
+
+	return params, nil
 }
 
 func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 	queryParamID := utils.ExtractIDFromParams(r)
+
+	if err := utils.ValidateID(queryParamID); err != nil {
+		fieldErrors := map[string][]string{
+			"id": {err.Error()},
+		}
+		api.validationErrorResponse(w, r, fieldErrors)
+		return
+	}
+
 	agencyID, tripID, err := utils.ExtractAgencyIDAndCodeID(queryParamID)
 	if err != nil {
-		api.serverErrorResponse(w, r, err)
+		fieldErrors := map[string][]string{
+			"id": {err.Error()},
+		}
+		api.validationErrorResponse(w, r, fieldErrors)
 		return
 	}
 
 	ctx := r.Context()
 
-	params := api.parseTripIdDetailsParams(r)
+	api.GtfsManager.RLock()
+	defer api.GtfsManager.RUnlock()
+
+	// Capture parsing errors
+	params, fieldErrors := api.parseTripIdDetailsParams(r)
+	if len(fieldErrors) > 0 {
+		api.validationErrorResponse(w, r, fieldErrors)
+		return
+	}
 
 	trip, err := api.GtfsManager.GtfsDB.Queries.GetTrip(ctx, tripID)
 	if err != nil {
@@ -85,20 +131,22 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	loc, _ := time.LoadLocation(agency.Timezone)
+	loc := utils.LoadLocationWithUTCFallBack(agency.Timezone, agency.ID)
 
 	var currentTime time.Time
 	if params.Time != nil {
 		currentTime = params.Time.In(loc)
 	} else {
-		currentTime = time.Now().In(loc)
+		currentTime = api.Clock.Now().In(loc)
 	}
 
 	var serviceDate time.Time
 	if params.ServiceDate != nil {
 		serviceDate = *params.ServiceDate
 	} else {
-		serviceDate = currentTime.Truncate(24 * time.Hour)
+		// Use time.Date() to get local midnight, not Truncate() which uses UTC
+		y, m, d := currentTime.Date()
+		serviceDate = time.Date(y, m, d, 0, 0, 0, 0, loc)
 	}
 
 	serviceDateMillis := serviceDate.Unix() * 1000
@@ -123,7 +171,7 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 		ServiceDate:  serviceDateMillis,
 		Schedule:     schedule,
 		Frequency:    nil,
-		SituationIDs: api.GetSituationIDsForTrip(tripID),
+		SituationIDs: api.GetSituationIDsForTrip(r.Context(), tripID),
 	}
 
 	if status != nil && status.VehicleID != "" {
@@ -161,6 +209,8 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 		references.Trips = referencedTripsIface
 	}
 
+	calc := GTFS.NewAdvancedDirectionCalculator(api.GtfsManager.GtfsDB.Queries)
+
 	agencyModel := models.NewAgencyReference(
 		agency.ID,
 		agency.Name,
@@ -176,7 +226,7 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 	references.Agencies = append(references.Agencies, agencyModel)
 
 	if params.IncludeSchedule && schedule != nil {
-		stops, err := api.buildStopReferences(ctx, agencyID, schedule.StopTimes)
+		stops, err := api.buildStopReferences(ctx, calc, agencyID, schedule.StopTimes)
 		if err != nil {
 			api.serverErrorResponse(w, r, err)
 			return
@@ -196,10 +246,11 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 		references.Routes = routesIface
 	}
 
-	response := models.NewEntryResponse(tripDetails, references)
+	response := models.NewEntryResponse(tripDetails, references, api.Clock)
 	api.sendResponse(w, r, response)
 }
 
+// IMPORTANT: Caller must hold manager.RLock() before calling this method.
 func (api *RestAPI) buildReferencedTrips(ctx context.Context, agencyID string, tripsToInclude []string, mainTrip gtfsdb.Trip) ([]*models.Trip, error) {
 	referencedTrips := []*models.Trip{}
 
@@ -248,7 +299,8 @@ func (api *RestAPI) buildReferencedTrips(ctx context.Context, agencyID string, t
 	return referencedTrips, nil
 }
 
-func (api *RestAPI) buildStopReferences(ctx context.Context, agencyID string, stopTimes []models.StopTime) ([]models.Stop, error) {
+// IMPORTANT: Caller must hold manager.RLock() before calling this method.
+func (api *RestAPI) buildStopReferences(ctx context.Context, calc *GTFS.AdvancedDirectionCalculator, agencyID string, stopTimes []models.StopTime) ([]models.Stop, error) {
 	stopIDSet := make(map[string]bool)
 	originalStopIDs := make([]string, 0, len(stopTimes))
 
@@ -330,9 +382,9 @@ func (api *RestAPI) buildStopReferences(ctx context.Context, agencyID string, st
 			Lat:                stop.Lat,
 			Lon:                stop.Lon,
 			Code:               stop.Code.String,
-			Direction:          api.calculateStopDirection(ctx, stop.ID),
+			Direction:          calc.CalculateStopDirection(ctx, stop.ID, stop.Direction),
 			LocationType:       int(stop.LocationType.Int64),
-			WheelchairBoarding: models.UnknownValue,
+			WheelchairBoarding: utils.MapWheelchairBoarding(utils.NullWheelchairBoardingOrUnknown(stop.WheelchairBoarding)),
 			RouteIDs:           combinedRouteIDs,
 			StaticRouteIDs:     combinedRouteIDs,
 		}
@@ -342,6 +394,7 @@ func (api *RestAPI) buildStopReferences(ctx context.Context, agencyID string, st
 	return modelStops, nil
 }
 
+// IMPORTANT: Caller must hold manager.RLock() before calling this method.
 func (api *RestAPI) BuildRouteReference(ctx context.Context, agencyID string, stops []models.Stop) ([]models.Route, error) {
 
 	routeIDSet := make(map[string]bool)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log/slog"
 	"os"
@@ -13,6 +14,7 @@ func main() {
 	var cfg appconf.Config
 	var gtfsCfg gtfs.Config
 	var apiKeysFlag string
+	var exemptApiKeysFlag string
 	var envFlag string
 	var configFile string
 	var dumpConfig bool
@@ -23,6 +25,7 @@ func main() {
 	flag.IntVar(&cfg.Port, "port", 4000, "API server port")
 	flag.StringVar(&envFlag, "env", "development", "Environment (development|test|production)")
 	flag.StringVar(&apiKeysFlag, "api-keys", "test", "Comma Separated API Keys (test, etc)")
+	flag.StringVar(&exemptApiKeysFlag, "exempt-api-keys", "org.onebusaway.iphone", "Comma separated list of API keys exempt from rate limiting")
 	flag.IntVar(&cfg.RateLimit, "rate-limit", 100, "Requests per second per API key for rate limiting")
 	flag.StringVar(&gtfsCfg.GtfsURL, "gtfs-url", "https://www.soundtransit.org/GTFS-rail/40_gtfs.zip", "URL for a static GTFS zip file")
 	flag.StringVar(&gtfsCfg.StaticAuthHeaderKey, "gtfs-static-auth-header-name", "", "Optional header name for static GTFS feed auth")
@@ -84,6 +87,11 @@ func main() {
 		// Parse API keys
 		cfg.ApiKeys = ParseAPIKeys(apiKeysFlag)
 
+		// Parse Exempt API Keys
+		if exemptApiKeysFlag != "" {
+			cfg.ExemptApiKeys = ParseAPIKeys(exemptApiKeysFlag)
+		}
+
 		// Convert environment flag to enum
 		cfg.Env = appconf.EnvFlagToEnvironment(envFlag)
 
@@ -106,10 +114,10 @@ func main() {
 	}
 
 	// Create HTTP server
-	srv := CreateServer(coreApp, cfg)
+	srv, api := CreateServer(coreApp, cfg)
 
 	// Run server with graceful shutdown
-	if err := Run(srv, coreApp.GtfsManager, coreApp.Logger); err != nil {
+	if err := Run(context.Background(), srv, coreApp, api, coreApp.Logger); err != nil {
 		coreApp.Logger.Error("server error", "error", err)
 		os.Exit(1)
 	}

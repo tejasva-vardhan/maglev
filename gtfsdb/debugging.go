@@ -3,11 +3,12 @@ package gtfsdb
 import (
 	"database/sql"
 	"fmt"
-	"github.com/OneBusAway/go-gtfs"
 	"log"
 	"log/slog"
-	"maglev.onebusaway.org/internal/logging"
 	"strings"
+
+	"github.com/OneBusAway/go-gtfs"
+	"maglev.onebusaway.org/internal/logging"
 )
 
 func PrintSimpleSchema(db *sql.DB) error { // nolint:unused
@@ -62,8 +63,8 @@ func (c *Client) TableCounts() (map[string]int, error) {
 	defer logging.SafeCloseWithLogging(rows,
 		slog.Default().With(slog.String("component", "debugging")),
 		"database_rows")
-	var tables []string
 
+	var tables []string
 	for rows.Next() {
 		var tableName string
 		if err := rows.Scan(&tableName); err != nil {
@@ -74,9 +75,29 @@ func (c *Client) TableCounts() (map[string]int, error) {
 
 	counts := make(map[string]int)
 
+	tableCountQueries := map[string]string{
+		"agencies":         "SELECT COUNT(*) FROM agencies",
+		"routes":           "SELECT COUNT(*) FROM routes",
+		"stops":            "SELECT COUNT(*) FROM stops",
+		"trips":            "SELECT COUNT(*) FROM trips",
+		"stop_times":       "SELECT COUNT(*) FROM stop_times",
+		"calendar":         "SELECT COUNT(*) FROM calendar",
+		"calendar_dates":   "SELECT COUNT(*) FROM calendar_dates",
+		"shapes":           "SELECT COUNT(*) FROM shapes",
+		"transfers":        "SELECT COUNT(*) FROM transfers",
+		"feed_info":        "SELECT COUNT(*) FROM feed_info",
+		"block_trip_index": "SELECT COUNT(*) FROM block_trip_index",
+		"block_trip_entry": "SELECT COUNT(*) FROM block_trip_entry",
+		"import_metadata":  "SELECT COUNT(*) FROM import_metadata",
+	}
+
 	for _, table := range tables {
+		query, ok := tableCountQueries[table]
+		if !ok {
+			continue
+		}
+
 		var count int
-		query := fmt.Sprintf("SELECT COUNT(*) FROM %s", table)
 		err := c.DB.QueryRow(query).Scan(&count)
 		if err != nil {
 			return nil, err

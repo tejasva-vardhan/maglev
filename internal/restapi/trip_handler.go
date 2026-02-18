@@ -21,9 +21,15 @@ func (api *RestAPI) tripHandler(w http.ResponseWriter, r *http.Request) {
 
 	agencyID, id, err := utils.ExtractAgencyIDAndCodeID(queryParamID)
 	if err != nil {
-		api.serverErrorResponse(w, r, err)
+		fieldErrors := map[string][]string{
+			"id": {err.Error()},
+		}
+		api.validationErrorResponse(w, r, fieldErrors)
 		return
 	}
+
+	api.GtfsManager.RLock()
+	defer api.GtfsManager.RUnlock()
 
 	ctx := r.Context()
 
@@ -50,13 +56,21 @@ func (api *RestAPI) tripHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var blockID, shapeID string
+	if trip.BlockID.Valid {
+		blockID = utils.FormCombinedID(agencyID, trip.BlockID.String)
+	}
+	if trip.ShapeID.Valid {
+		shapeID = utils.FormCombinedID(agencyID, trip.ShapeID.String)
+	}
+
 	tripModel := &models.Trip{
 		ID:             utils.FormCombinedID(agencyID, trip.ID),
 		RouteID:        utils.FormCombinedID(agencyID, trip.RouteID),
 		ServiceID:      utils.FormCombinedID(agencyID, trip.ServiceID),
 		DirectionID:    trip.DirectionID.Int64,
-		BlockID:        utils.FormCombinedID(agencyID, trip.BlockID.String),
-		ShapeID:        utils.FormCombinedID(agencyID, trip.ShapeID.String),
+		BlockID:        blockID,
+		ShapeID:        shapeID,
 		TripHeadsign:   trip.TripHeadsign.String,
 		TripShortName:  trip.TripShortName.String,
 		RouteShortName: route.ShortName.String,
@@ -95,5 +109,5 @@ func (api *RestAPI) tripHandler(w http.ResponseWriter, r *http.Request) {
 		false,
 	))
 
-	api.sendResponse(w, r, models.NewEntryResponse(tripResponse, references))
+	api.sendResponse(w, r, models.NewEntryResponse(tripResponse, references, api.Clock))
 }

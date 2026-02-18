@@ -18,20 +18,7 @@ import (
 )
 
 func TestArrivalAndDepartureForStopHandlerRequiresValidApiKey(t *testing.T) {
-	api := createTestApi(t)
-
-	agency := api.GtfsManager.GetAgencies()[0]
-	stops := api.GtfsManager.GetStops()
-	trips := api.GtfsManager.GetTrips()
-
-	stopID := utils.FormCombinedID(agency.Id, stops[0].Id)
-	tripID := utils.FormCombinedID(agency.Id, trips[0].ID)
-	serviceDate := time.Now().Unix() * 1000
-
-	_, resp, model := serveAndRetrieveEndpoint(t,
-		"/api/where/arrival-and-departure-for-stop/"+stopID+".json?key=invalid&tripId="+tripID+"&serviceDate="+
-			fmt.Sprintf("%d", serviceDate))
-
+	_, resp, model := serveAndRetrieveEndpoint(t, "/api/where/arrival-and-departure-for-stop/invalid.json?key=invalid")
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	assert.Equal(t, http.StatusUnauthorized, model.Code)
 	assert.Equal(t, "permission denied", model.Text)
@@ -39,6 +26,7 @@ func TestArrivalAndDepartureForStopHandlerRequiresValidApiKey(t *testing.T) {
 
 func TestArrivalAndDepartureForStopHandlerEndToEnd(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	agency := api.GtfsManager.GetAgencies()[0]
 	stops := api.GtfsManager.GetStops()
@@ -124,6 +112,7 @@ func TestArrivalAndDepartureForStopHandlerEndToEnd(t *testing.T) {
 
 func TestArrivalAndDepartureForStopHandlerWithInvalidStopID(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	agency := api.GtfsManager.GetAgencies()[0]
 	trips := api.GtfsManager.GetTrips()
@@ -143,6 +132,7 @@ func TestArrivalAndDepartureForStopHandlerWithInvalidStopID(t *testing.T) {
 
 func TestArrivalAndDepartureForStopHandlerWithTimeParameter(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	agency := api.GtfsManager.GetAgencies()[0]
 	stops := api.GtfsManager.GetStops()
@@ -190,6 +180,7 @@ func TestArrivalAndDepartureForStopHandlerWithTimeParameter(t *testing.T) {
 
 func TestArrivalAndDepartureForStopHandlerRequiresTripId(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	agency := api.GtfsManager.GetAgencies()[0]
 	stops := api.GtfsManager.GetStops()
@@ -210,18 +201,22 @@ func TestArrivalAndDepartureForStopHandlerRequiresTripId(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
 	var errorResponse struct {
-		FieldErrors map[string][]string `json:"fieldErrors"`
+		Code int `json:"code"`
+		Data struct {
+			FieldErrors map[string][]string `json:"fieldErrors"`
+		} `json:"data"`
 	}
 	err = json.NewDecoder(resp.Body).Decode(&errorResponse)
 	require.NoError(t, err)
 
-	assert.Contains(t, errorResponse.FieldErrors, "tripId")
-	assert.Len(t, errorResponse.FieldErrors["tripId"], 1)
-	assert.Equal(t, "missingRequiredField", errorResponse.FieldErrors["tripId"][0])
+	assert.Contains(t, errorResponse.Data.FieldErrors, "tripId")
+	assert.Len(t, errorResponse.Data.FieldErrors["tripId"], 1)
+	assert.Equal(t, "missingRequiredField", errorResponse.Data.FieldErrors["tripId"][0])
 }
 
 func TestArrivalAndDepartureForStopHandlerRequiresServiceDate(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	agency := api.GtfsManager.GetAgencies()[0]
 	stops := api.GtfsManager.GetStops()
@@ -243,18 +238,22 @@ func TestArrivalAndDepartureForStopHandlerRequiresServiceDate(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
 	var errorResponse struct {
-		FieldErrors map[string][]string `json:"fieldErrors"`
+		Code int `json:"code"`
+		Data struct {
+			FieldErrors map[string][]string `json:"fieldErrors"`
+		} `json:"data"`
 	}
 	err = json.NewDecoder(resp.Body).Decode(&errorResponse)
 	require.NoError(t, err)
 
-	assert.Contains(t, errorResponse.FieldErrors, "serviceDate")
-	assert.Len(t, errorResponse.FieldErrors["serviceDate"], 1)
-	assert.Equal(t, "missingRequiredField", errorResponse.FieldErrors["serviceDate"][0])
+	assert.Contains(t, errorResponse.Data.FieldErrors, "serviceDate")
+	assert.Len(t, errorResponse.Data.FieldErrors["serviceDate"], 1)
+	assert.Equal(t, "missingRequiredField", errorResponse.Data.FieldErrors["serviceDate"][0])
 }
 
 func TestArrivalAndDepartureForStopHandlerWithStopSequence(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	agency := api.GtfsManager.GetAgencies()[0]
 	stops := api.GtfsManager.GetStops()
@@ -293,6 +292,7 @@ func TestArrivalAndDepartureForStopHandlerWithStopSequence(t *testing.T) {
 
 func TestArrivalAndDepartureForStopHandlerWithMinutesParameters(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	agency := api.GtfsManager.GetAgencies()[0]
 	stops := api.GtfsManager.GetStops()
@@ -325,6 +325,7 @@ func TestArrivalAndDepartureForStopHandlerWithMinutesParameters(t *testing.T) {
 
 func TestArrivalAndDepartureForStopHandlerWithInvalidTripID(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	agency := api.GtfsManager.GetAgencies()[0]
 	stops := api.GtfsManager.GetStops()
@@ -344,6 +345,7 @@ func TestArrivalAndDepartureForStopHandlerWithInvalidTripID(t *testing.T) {
 
 func TestArrivalAndDepartureForStopHandlerWithMalformedTripID(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	agency := api.GtfsManager.GetAgencies()[0]
 	stops := api.GtfsManager.GetStops()
@@ -352,16 +354,16 @@ func TestArrivalAndDepartureForStopHandlerWithMalformedTripID(t *testing.T) {
 	tripID := "malformedid" // No underscore, will fail extraction
 	serviceDate := time.Now().Unix() * 1000
 
-	_, resp, model := serveAndRetrieveEndpoint(t,
+	_, resp, _ := serveAndRetrieveEndpoint(t,
 		"/api/where/arrival-and-departure-for-stop/"+stopID+".json?key=TEST&tripId="+tripID+
 			"&serviceDate="+fmt.Sprintf("%d", serviceDate))
 
-	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
-	assert.Equal(t, http.StatusInternalServerError, model.Code)
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "Status code should be 400 Bad Request")
 }
 
 func TestArrivalAndDepartureForStopHandlerWithMalformedStopID(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	agency := api.GtfsManager.GetAgencies()[0]
 	trips := api.GtfsManager.GetTrips()
@@ -370,16 +372,16 @@ func TestArrivalAndDepartureForStopHandlerWithMalformedStopID(t *testing.T) {
 	tripID := utils.FormCombinedID(agency.Id, trips[0].ID)
 	serviceDate := time.Now().Unix() * 1000
 
-	_, resp, model := serveAndRetrieveEndpoint(t,
+	_, resp, _ := serveAndRetrieveEndpoint(t,
 		"/api/where/arrival-and-departure-for-stop/"+stopID+".json?key=TEST&tripId="+tripID+
 			"&serviceDate="+fmt.Sprintf("%d", serviceDate))
 
-	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
-	assert.Equal(t, http.StatusInternalServerError, model.Code)
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "Status code should be 400 Bad Request")
 }
 
 func TestArrivalAndDepartureForStopHandlerWithValidTripStopCombination(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	agency := api.GtfsManager.GetAgencies()[0]
 	ctx := context.Background()
@@ -459,6 +461,7 @@ func TestArrivalAndDepartureForStopHandlerWithValidTripStopCombination(t *testin
 
 func TestArrivalAndDepartureForStopHandlerWithValidTripAndStopSequence(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	agency := api.GtfsManager.GetAgencies()[0]
 	ctx := context.Background()
@@ -519,6 +522,7 @@ func TestArrivalAndDepartureForStopHandlerWithValidTripAndStopSequence(t *testin
 
 func TestGetPredictedTimes_NoRealTimeData(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	scheduledArrival := time.Now()
 	scheduledDeparture := scheduledArrival.Add(2 * time.Minute)
@@ -532,6 +536,7 @@ func TestGetPredictedTimes_NoRealTimeData(t *testing.T) {
 
 func TestGetPredictedTimes_EqualArrivalDeparture(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	// Test the case where scheduled arrival == scheduled departure
 	scheduledTime := time.Now()
@@ -547,6 +552,7 @@ func TestGetPredictedTimes_EqualArrivalDeparture(t *testing.T) {
 
 func TestGetBlockDistanceToStop_NilVehicle(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 	ctx := context.Background()
 
 	result := api.getBlockDistanceToStop(ctx, "test_trip", "test_stop", nil, time.Now())
@@ -556,6 +562,7 @@ func TestGetBlockDistanceToStop_NilVehicle(t *testing.T) {
 
 func TestGetBlockDistanceToStop_NoPosition(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 	ctx := context.Background()
 
 	vehicle := &gtfs.Vehicle{
@@ -580,10 +587,13 @@ func TestGetNumberOfStopsAway_NilCurrentSequence(t *testing.T) {
 
 func TestParseArrivalAndDepartureParams_AllParameters(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	req := httptest.NewRequest("GET", "/test?minutesAfter=60&minutesBefore=15&time=1609459200000&tripId=trip_123&serviceDate=1609459200000&vehicleId=vehicle_456&stopSequence=3", nil)
 
-	params := api.parseArrivalAndDepartureParams(req)
+	params, errs := api.parseArrivalAndDepartureParams(req)
+
+	assert.Nil(t, errs)
 
 	assert.Equal(t, 60, params.MinutesAfter)
 	assert.Equal(t, 15, params.MinutesBefore)
@@ -597,10 +607,13 @@ func TestParseArrivalAndDepartureParams_AllParameters(t *testing.T) {
 
 func TestParseArrivalAndDepartureParams_DefaultValues(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	req := httptest.NewRequest("GET", "/test", nil)
 
-	params := api.parseArrivalAndDepartureParams(req)
+	params, errs := api.parseArrivalAndDepartureParams(req)
+
+	assert.Nil(t, errs)
 
 	assert.Equal(t, 30, params.MinutesAfter) // Default
 	assert.Equal(t, 5, params.MinutesBefore) // Default
@@ -613,15 +626,42 @@ func TestParseArrivalAndDepartureParams_DefaultValues(t *testing.T) {
 
 func TestParseArrivalAndDepartureParams_InvalidValues(t *testing.T) {
 	api := createTestApi(t)
+	defer api.Shutdown()
 
 	req := httptest.NewRequest("GET", "/test?minutesAfter=invalid&minutesBefore=invalid&time=invalid&serviceDate=invalid&stopSequence=invalid", nil)
 
-	params := api.parseArrivalAndDepartureParams(req)
+	_, errs := api.parseArrivalAndDepartureParams(req)
 
-	// Should use defaults when parsing fails
-	assert.Equal(t, 30, params.MinutesAfter)
-	assert.Equal(t, 5, params.MinutesBefore)
-	assert.Nil(t, params.Time)
-	assert.Nil(t, params.ServiceDate)
-	assert.Nil(t, params.StopSequence)
+	assert.NotNil(t, errs)
+	assert.Contains(t, errs, "minutesAfter")
+	assert.Contains(t, errs, "minutesBefore")
+	assert.Contains(t, errs, "time")
+	assert.Contains(t, errs, "serviceDate")
+	assert.Contains(t, errs, "stopSequence")
+
+	assert.Equal(t, "must be a valid integer", errs["minutesAfter"][0])
+	assert.Equal(t, "must be a valid Unix timestamp in milliseconds", errs["serviceDate"][0])
+}
+
+func TestArrivalAndDepartureForStopHandlerWithMalformedID(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+
+	malformedID := "1110"
+	endpoint := "/api/where/arrival-and-departure-for-stop/" + malformedID + ".json?key=TEST"
+
+	resp, _ := serveApiAndRetrieveEndpoint(t, api, endpoint)
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "Status code should be 400 Bad Request")
+}
+
+func TestArrivalsAndDeparturesForStopHandlerInvalidTime(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+
+	endpoint := "/api/where/arrival-and-departure-for-stop/1_75403.json?key=TEST&time=invalid_time"
+
+	resp, _ := serveApiAndRetrieveEndpoint(t, api, endpoint)
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }

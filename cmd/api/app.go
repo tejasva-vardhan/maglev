@@ -5,18 +5,23 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"maglev.onebusaway.org/internal/app"
-	"maglev.onebusaway.org/internal/appconf"
-	"maglev.onebusaway.org/internal/gtfs"
-	"maglev.onebusaway.org/internal/logging"
-	"maglev.onebusaway.org/internal/restapi"
-	"maglev.onebusaway.org/internal/webui"
 	"net/http"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	"maglev.onebusaway.org/internal/app"
+	"maglev.onebusaway.org/internal/appconf"
+	"maglev.onebusaway.org/internal/clock"
+	"maglev.onebusaway.org/internal/gtfs"
+	"maglev.onebusaway.org/internal/logging"
+	"maglev.onebusaway.org/internal/metrics"
+	"maglev.onebusaway.org/internal/restapi"
+	"maglev.onebusaway.org/internal/webui"
 )
 
 // ParseAPIKeys splits a comma-separated string of API keys and trims whitespace from each key.
@@ -44,10 +49,16 @@ func BuildApplication(cfg appconf.Config, gtfsCfg gtfs.Config) (*app.Application
 		return nil, fmt.Errorf("failed to initialize GTFS manager: %w", err)
 	}
 
-	var directionCalculator *gtfs.DirectionCalculator
+	var directionCalculator *gtfs.AdvancedDirectionCalculator
 	if gtfsManager != nil {
-		directionCalculator = gtfs.NewDirectionCalculator(gtfsManager.GtfsDB.Queries)
+		directionCalculator = gtfs.NewAdvancedDirectionCalculator(gtfsManager.GtfsDB.Queries)
 	}
+
+	// Select clock implementation based on environment
+	appClock := createClock(cfg.Env)
+
+	// Initialize metrics with logger for error reporting
+	appMetrics := metrics.NewWithLogger(logger)
 
 	coreApp := &app.Application{
 		Config:              cfg,
@@ -55,14 +66,33 @@ func BuildApplication(cfg appconf.Config, gtfsCfg gtfs.Config) (*app.Application
 		Logger:              logger,
 		GtfsManager:         gtfsManager,
 		DirectionCalculator: directionCalculator,
+		Clock:               appClock,
+		Metrics:             appMetrics,
+	}
+
+	// Start DB stats collector if database is available
+	if gtfsManager != nil && gtfsManager.GtfsDB != nil && gtfsManager.GtfsDB.DB != nil {
+		appMetrics.StartDBStatsCollector(gtfsManager.GtfsDB.DB, 15*time.Second)
 	}
 
 	return coreApp, nil
 }
 
+// createClock returns the appropriate Clock implementation based on environment.
+// - Production/Development: RealClock (uses actual system time)
+// - Test: EnvironmentClock (reads from FAKETIME env var or file, fallback to system time)
+func createClock(env appconf.Environment) clock.Clock {
+	switch env {
+	case appconf.Test:
+		return clock.NewEnvironmentClock("FAKETIME", "/etc/faketimerc", time.Local)
+	default:
+		return clock.RealClock{}
+	}
+}
+
 // CreateServer creates and configures the HTTP server with routes and middleware.
 // Sets up both REST API routes and WebUI routes, applies security headers, and adds request logging.
-func CreateServer(coreApp *app.Application, cfg appconf.Config) *http.Server {
+func CreateServer(coreApp *app.Application, cfg appconf.Config) (*http.Server, *restapi.RestAPI) {
 	api := restapi.NewRestAPI(coreApp)
 
 	webUI := &webui.WebUI{
@@ -74,13 +104,21 @@ func CreateServer(coreApp *app.Application, cfg appconf.Config) *http.Server {
 	api.SetRoutes(mux)
 	webUI.SetWebUIRoutes(mux)
 
+	// Add metrics endpoint (no auth required) - uses custom registry with structured error logging
+	mux.Handle("GET /metrics", promhttp.HandlerFor(coreApp.Metrics.Registry, promhttp.HandlerOpts{
+		ErrorLog: slog.NewLogLogger(coreApp.Logger.Handler(), slog.LevelError),
+	}))
+
 	// Wrap with security middleware
 	secureHandler := api.WithSecurityHeaders(mux)
+
+	// Add metrics middleware
+	metricsHandler := restapi.MetricsHandler(coreApp.Metrics)(secureHandler)
 
 	// Add request logging middleware (outermost)
 	requestLogger := logging.NewStructuredLogger(os.Stdout, slog.LevelInfo)
 	requestLogMiddleware := restapi.NewRequestLoggingMiddleware(requestLogger)
-	handler := requestLogMiddleware(secureHandler)
+	handler := requestLogMiddleware(metricsHandler)
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
@@ -91,18 +129,18 @@ func CreateServer(coreApp *app.Application, cfg appconf.Config) *http.Server {
 		ErrorLog:     slog.NewLogLogger(coreApp.Logger.Handler(), slog.LevelError),
 	}
 
-	return srv
+	return srv, api
 }
 
 // Run manages the server lifecycle with graceful shutdown.
-// Starts the server in a goroutine, waits for shutdown signals (SIGINT, SIGTERM),
+// Starts the server in a goroutine, waits for shutdown signals (SIGINT, SIGTERM) or context cancellation,
 // and performs graceful shutdown with a 30-second timeout.
 // Returns an error if the server fails to start or shutdown fails.
-func Run(srv *http.Server, gtfsManager *gtfs.Manager, logger *slog.Logger) error {
+func Run(ctx context.Context, srv *http.Server, coreApp *app.Application, api *restapi.RestAPI, logger *slog.Logger) error {
 	logger.Info("starting server", "addr", srv.Addr)
 
-	// Set up signal handling for graceful shutdown
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	// Set up signal handling for graceful shutdown, merging with provided context
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	// Channel to capture server errors
@@ -115,7 +153,7 @@ func Run(srv *http.Server, gtfsManager *gtfs.Manager, logger *slog.Logger) error
 		}
 	}()
 
-	// Wait for either shutdown signal or server error
+	// Wait for either shutdown signal/context cancellation or server error
 	select {
 	case err := <-serverErrors:
 		return fmt.Errorf("server failed to start: %w", err)
@@ -133,9 +171,19 @@ func Run(srv *http.Server, gtfsManager *gtfs.Manager, logger *slog.Logger) error
 		return fmt.Errorf("server forced to shutdown: %w", err)
 	}
 
-	// Shutdown GTFS manager
-	if gtfsManager != nil {
-		gtfsManager.Shutdown()
+	// Shutdown API rate limiter first (stops background goroutines for request handling)
+	if api != nil {
+		api.Shutdown()
+	}
+
+	// Shutdown metrics collector (blocks until goroutine exits)
+	if coreApp.Metrics != nil {
+		coreApp.Metrics.Shutdown()
+	}
+
+	// Then shutdown GTFS manager (stops data fetching - the lowest-level dependency)
+	if coreApp.GtfsManager != nil {
+		coreApp.GtfsManager.Shutdown()
 	}
 
 	logger.Info("server exited")

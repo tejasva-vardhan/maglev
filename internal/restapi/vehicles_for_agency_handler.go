@@ -11,14 +11,29 @@ import (
 func (api *RestAPI) vehiclesForAgencyHandler(w http.ResponseWriter, r *http.Request) {
 	id := utils.ExtractIDFromParams(r)
 
+	if err := utils.ValidateID(id); err != nil {
+		fieldErrors := map[string][]string{
+			"id": {err.Error()},
+		}
+		api.validationErrorResponse(w, r, fieldErrors)
+		return
+	}
+
+	api.GtfsManager.RLock()
+	defer api.GtfsManager.RUnlock()
+
 	agency := api.GtfsManager.FindAgency(id)
 	if agency == nil {
 		// return an empty list response.
-		api.sendResponse(w, r, models.NewListResponse([]interface{}{}, models.ReferencesModel{}))
+		api.sendResponse(w, r, models.NewListResponse([]interface{}{}, models.ReferencesModel{}, false, api.Clock))
 		return
 	}
 
 	vehiclesForAgency := api.GtfsManager.VehiclesForAgencyID(id)
+
+	// Apply pagination
+	offset, limit := utils.ParsePaginationParams(r)
+	vehiclesForAgency, limitExceeded := utils.PaginateSlice(vehiclesForAgency, offset, limit)
 	vehiclesList := make([]models.VehicleStatus, 0, len(vehiclesForAgency))
 
 	// Maps to build references
@@ -78,7 +93,7 @@ func (api *RestAPI) vehiclesForAgencyHandler(w http.ResponseWriter, r *http.Requ
 			}
 
 			// Set service date (use current date for now)
-			tripStatus.ServiceDate = time.Now().UnixNano() / int64(time.Millisecond)
+			tripStatus.ServiceDate = api.Clock.NowUnixMilli()
 
 			vehicleStatus.TripStatus = tripStatus
 
@@ -158,6 +173,6 @@ func (api *RestAPI) vehiclesForAgencyHandler(w http.ResponseWriter, r *http.Requ
 		Trips:      tripRefList,
 	}
 
-	response := models.NewListResponse(vehiclesList, references)
+	response := models.NewListResponse(vehiclesList, references, limitExceeded, api.Clock)
 	api.sendResponse(w, r, response)
 }
