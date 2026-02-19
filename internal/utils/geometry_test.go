@@ -428,3 +428,34 @@ func TestIsOutOfBounds(t *testing.T) {
 		})
 	}
 }
+
+func TestDistance_EquirectangularFastPath(t *testing.T) {
+	// Test coordinates that are less than 0.2 degrees apart
+	// to ensure the fast-path approximation triggers and is accurate
+	lat1, lon1 := 47.6062, -122.3321 // Seattle downtown
+	lat2, lon2 := 47.6101, -122.3421 // Pike Place Market
+
+	// The fast-path should calculate this correctly
+	distAB := Distance(lat1, lon1, lat2, lon2)
+
+	// Ensure it falls within the expected physical distance (~860 meters)
+	assert.InDelta(t, 860.0, distAB, 20.0, "Fast-path distance should be highly accurate")
+
+	// Ensure the fast-path is symmetric
+	distBA := Distance(lat2, lon2, lat1, lon1)
+	assert.InDelta(t, distAB, distBA, 0.0001, "Fast-path distance should be symmetric")
+}
+
+func BenchmarkDistance_ShortRange(b *testing.B) {
+	// Typical transit query: ~860m apart (fast-path)
+	for i := 0; i < b.N; i++ {
+		Distance(47.6062, -122.3321, 47.6101, -122.3421)
+	}
+}
+
+func BenchmarkDistance_LongRange(b *testing.B) {
+	// Cross-country: NYC to LA (Exact fallback)
+	for i := 0; i < b.N; i++ {
+		Distance(40.7128, -74.0060, 34.0522, -118.2437)
+	}
+}
