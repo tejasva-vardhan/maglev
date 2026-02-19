@@ -14,10 +14,15 @@ RUN go mod download
 COPY . .
 
 # Build the application with CGO enabled (required for SQLite)
-RUN CGO_ENABLED=1 GOOS=linux go build -tags sqlite_fts5 -o maglev ./cmd/api
+ARG TARGETARCH
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=${TARGETARCH} go build -tags sqlite_fts5 -o maglev ./cmd/api
 
 # Runtime stage
 FROM alpine:3.21
+
+LABEL org.opencontainers.image.source="https://github.com/OneBusAway/maglev"
+LABEL org.opencontainers.image.description="REST API server for OneBusAway transit data"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
 
 # Configuration for non-root user
 ARG USER_ID=1000
