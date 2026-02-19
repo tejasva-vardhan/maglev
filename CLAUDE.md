@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Native: Copy `config.example.json` to `config.json` and configure required values
 - Docker: Copy `config.docker.example.json` to `config.docker.json` and change `api-keys` to secure values
 
-**Verify installation**: `http://localhost:4000/api/where/current-time.json?key=test`
+**Verify installation**: `http://localhost:4000/healthz`
 
 ## Development Commands
 

@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: maglev:latest
+    image: onebusaway/maglev:latest
     container_name: maglev
     ports:
       - "4000:4000"

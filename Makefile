@@ -7,9 +7,11 @@ else
     SET_ENV := CGO_ENABLED=1 CGO_CFLAGS="-DSQLITE_ENABLE_FTS5"
 endif
 
+DOCKER_IMAGE := onebusaway/maglev
+
 .PHONY: build build-debug clean coverage test run lint watch fmt \
 	gtfstidy models check-golangci-lint \
-	docker-build docker-run docker-stop docker-compose-up docker-compose-down docker-compose-dev docker-clean docker-clean-all
+	docker-build docker-push docker-run docker-stop docker-compose-up docker-compose-down docker-compose-dev docker-clean docker-clean-all
 
 
 run: build
@@ -53,12 +55,15 @@ watch:
 
 # Docker targets
 docker-build:
-	docker build -t maglev .
+	docker build -t $(DOCKER_IMAGE) .
+
+docker-push: docker-build
+	docker push $(DOCKER_IMAGE):latest
 
 docker-run: docker-build
 	docker run --name maglev -p 4000:4000 \
 		-v $(PWD)/config.docker.json:/app/config.json:ro \
-		-v maglev-data:/app/data maglev
+		-v maglev-data:/app/data $(DOCKER_IMAGE)
 
 docker-stop:
 	docker stop maglev 2>/dev/null || true
@@ -80,14 +85,14 @@ docker-clean-all:
 	docker-compose down -v || echo "Note: docker-compose down -v failed (may not be running)"
 	docker-compose -f docker-compose.dev.yml down -v || echo "Note: docker-compose dev down -v failed (may not be running)"
 	@echo "Removing Docker images..."
-	@if docker image inspect maglev:latest >/dev/null 2>&1; then docker rmi maglev:latest && echo "Removed maglev:latest" || echo "Warning: Could not remove maglev:latest (may be in use)"; fi
-	@if docker image inspect maglev:dev >/dev/null 2>&1; then docker rmi maglev:dev && echo "Removed maglev:dev" || echo "Warning: Could not remove maglev:dev (may be in use)"; fi
+	@if docker image inspect $(DOCKER_IMAGE):latest >/dev/null 2>&1; then docker rmi $(DOCKER_IMAGE):latest && echo "Removed $(DOCKER_IMAGE):latest" || echo "Warning: Could not remove $(DOCKER_IMAGE):latest (may be in use)"; fi
+	@if docker image inspect $(DOCKER_IMAGE):dev >/dev/null 2>&1; then docker rmi $(DOCKER_IMAGE):dev && echo "Removed $(DOCKER_IMAGE):dev" || echo "Warning: Could not remove $(DOCKER_IMAGE):dev (may be in use)"; fi
 	@echo "Cleanup complete."
 
 docker-clean:
 	docker-compose down || echo "Note: docker-compose down failed (may not be running)"
 	docker-compose -f docker-compose.dev.yml down || echo "Note: docker-compose dev down failed (may not be running)"
 	@echo "Removing Docker images..."
-	@if docker image inspect maglev:latest >/dev/null 2>&1; then docker rmi maglev:latest && echo "Removed maglev:latest" || echo "Warning: Could not remove maglev:latest (may be in use)"; fi
-	@if docker image inspect maglev:dev >/dev/null 2>&1; then docker rmi maglev:dev && echo "Removed maglev:dev" || echo "Warning: Could not remove maglev:dev (may be in use)"; fi
+	@if docker image inspect $(DOCKER_IMAGE):latest >/dev/null 2>&1; then docker rmi $(DOCKER_IMAGE):latest && echo "Removed $(DOCKER_IMAGE):latest" || echo "Warning: Could not remove $(DOCKER_IMAGE):latest (may be in use)"; fi
+	@if docker image inspect $(DOCKER_IMAGE):dev >/dev/null 2>&1; then docker rmi $(DOCKER_IMAGE):dev && echo "Removed $(DOCKER_IMAGE):dev" || echo "Warning: Could not remove $(DOCKER_IMAGE):dev (may be in use)"; fi
 	@echo "Cleanup complete."
