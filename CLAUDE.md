@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Native: Copy `config.example.json` to `config.json` and configure required values
 - Docker: Copy `config.docker.example.json` to `config.docker.json` and change `api-keys` to secure values
 
-**Verify installation**: `http://localhost:4000/api/where/current-time.json?key=test`
+**Verify installation**: `http://localhost:4000/healthz`
 
 ## Development Commands
 
@@ -23,6 +23,7 @@ All commands are managed through the Makefile:
 - `make test` - Run all tests
 - `make lint` - Run golangci-lint (requires: `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest`)
 - `make coverage` - Generate test coverage report with HTML output
+- `make coverage-report` - Output per-package test coverage as JSON for CI parsing (requires jq)
 - `make models` - Regenerate sqlc models from SQL queries
 - `make watch` - Run with Air for live reloading during development
 - `make fmt` - Format all Go code with `go fmt`

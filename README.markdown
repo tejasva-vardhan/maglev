@@ -11,7 +11,7 @@ A complete rewrite of the OneBusAway (OBA) REST API server in Golang.
 1. Install Go 1.24.2 or later.
 2. Copy `config.example.json` to `config.json` and fill in the required values.
 3. Run `make run` to build and start the server.
-4. Open your browser and navigate to `http://localhost:4000/api/where/current-time.json?key=test` to verify the server works.
+4. Open your browser and navigate to `http://localhost:4000/healthz` to verify the server works.
 
 ### Option 2: Docker (Recommended)
 
@@ -37,7 +37,7 @@ docker run -p 4000:4000 -v $(pwd)/config.docker.json:/app/config.json:ro -v magl
 **Verify it works:**
 
 ```bash
-curl http://localhost:4000/api/where/current-time.json?key=test
+curl http://localhost:4000/healthz
 
 ```
 
@@ -406,10 +406,7 @@ ls -la config.docker.json
 
 ```bash
 # Test the endpoint manually
-curl http://localhost:4000/api/where/current-time.json?key=test
-
-# If you changed api-keys, make sure HEALTH_CHECK_KEY matches
-docker-compose exec maglev printenv HEALTH_CHECK_KEY
+curl http://localhost:4000/healthz
 
 ```
 
