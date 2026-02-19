@@ -90,5 +90,5 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            onebusaway/maglev:${{ env.IMAGE_TAG }}
-            onebusaway/maglev:latest
+            opentransitsoftwarefoundation/maglev:${{ env.IMAGE_TAG }}
+            opentransitsoftwarefoundation/maglev:latest

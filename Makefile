@@ -7,7 +7,7 @@ else
     SET_ENV := CGO_ENABLED=1 CGO_CFLAGS="-DSQLITE_ENABLE_FTS5"
 endif
 
-DOCKER_IMAGE := onebusaway/maglev
+DOCKER_IMAGE := opentransitsoftwarefoundation/maglev
 
 .PHONY: build build-debug clean coverage test run lint watch fmt \
 	gtfstidy models check-golangci-lint \
