@@ -191,7 +191,9 @@ func TestCreateServerHandlerResponds(t *testing.T) {
 	srv, api := CreateServer(coreApp, cfg)
 	defer api.Shutdown()
 
-	// Test that the handler responds to requests
+	// Test that the handler responds to requests. note: i am intentionally not testing
+	// the healthz endpoint here since I want to make sure that the main API handler is
+	// configured and responding. We test healthz separately.
 	req := httptest.NewRequest(http.MethodGet, "/api/where/current-time.json?key=test", nil)
 	w := httptest.NewRecorder()
 
