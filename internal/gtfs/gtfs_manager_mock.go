@@ -1,6 +1,8 @@
 package gtfs
 
 import (
+	"time"
+
 	"github.com/OneBusAway/go-gtfs"
 )
 
@@ -34,8 +36,10 @@ func (m *Manager) MockAddVehicle(vehicleID, tripID, routeID string) {
 			return
 		}
 	}
+	now := time.Now()
 	m.realTimeVehicles = append(m.realTimeVehicles, gtfs.Vehicle{
-		ID: &gtfs.VehicleID{ID: vehicleID},
+		ID:        &gtfs.VehicleID{ID: vehicleID},
+		Timestamp: &now,
 		Trip: &gtfs.Trip{
 			ID: gtfs.TripID{
 				ID:      tripID,
