@@ -38,15 +38,16 @@ func (api *RestAPI) BuildTripStatus(
 		api.BuildVehicleStatus(ctx, vehicle, tripID, agencyID, status)
 	}
 
-	scheduleDeviation := api.GetScheduleDeviation(tripID)
-	if scheduleDeviation != 0 {
-		status.ScheduleDeviation = scheduleDeviation
-		status.Predicted = true
-	}
-
 	_, activeTripRawID, err := utils.ExtractAgencyIDAndCodeID(status.ActiveTripID)
 	if err != nil {
 		return status, err
+	}
+
+	scheduleDeviation := api.GetScheduleDeviation(activeTripRawID)
+
+	if scheduleDeviation != 0 {
+		status.ScheduleDeviation = scheduleDeviation
+		status.Predicted = true
 	}
 
 	stopTimes, err := api.GtfsManager.GtfsDB.Queries.GetStopTimesForTrip(ctx, activeTripRawID)
