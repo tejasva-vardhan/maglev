@@ -9,6 +9,16 @@ import (
 	"maglev.onebusaway.org/internal/utils"
 )
 
+/*
+Note!!
+GetVehicleStatusAndPhase returns the OBA status and phase for a vehicle.
+Java reference: VehicleStatusServiceImpl.java (handleVehicleLocationRecord)
+onebusaway-transit-data-federation/src/main/java/org/onebusaway/transit_data_federation/impl/realtime/VehicleStatusServiceImpl.java
+The Java implementation does not map directly to GTFS-RT CurrentStatus values.
+Instead, it uses a simple rule: if a vehicle location record has been received,
+the trip is "in_progress"; otherwise it remains "scheduled". The phase is
+determined solely by the presence of the vehicle, not by its GTFS-RT stop status.
+*/
 func GetVehicleStatusAndPhase(vehicle *gtfs.Vehicle) (status string, phase string) {
 	if vehicle == nil {
 		return "SCHEDULED", "scheduled"
