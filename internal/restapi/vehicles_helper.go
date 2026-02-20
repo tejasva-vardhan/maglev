@@ -87,7 +87,9 @@ func GetVehicleStatusAndPhase(vehicle *gtfs.Vehicle) (status string, phase strin
 	}
 	status = scheduleRelationshipStatus(sr)
 
-	if vehicle.CurrentStatus != nil {
+	// Java sets phase to IN_PROGRESS whenever a vehicle location record is received,
+	// regardless of GTFS-RT CurrentStatus — unless the trip is canceled.
+	if sr != gtfsrt.TripDescriptor_CANCELED {
 		phase = "in_progress"
 	}
 
