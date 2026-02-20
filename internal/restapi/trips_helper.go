@@ -63,7 +63,13 @@ func (api *RestAPI) BuildTripStatus(
 			if vehicle.StopID != nil && *vehicle.StopID != "" {
 				closestStopID = *vehicle.StopID
 				closestOffset = api.calculateOffsetForStop(closestStopID, stopTimesPtrs, currentTime, serviceDate, scheduleDeviation)
-				nextStopID, nextOffset = api.findNextStopAfter(closestStopID, stopTimesPtrs, currentTime, serviceDate, scheduleDeviation)
+				isStoppedAt := vehicle.CurrentStatus != nil && *vehicle.CurrentStatus == gtfs.CurrentStatus(1)
+				if isStoppedAt {
+					nextStopID, nextOffset = api.findNextStopAfter(closestStopID, stopTimesPtrs, currentTime, serviceDate, scheduleDeviation)
+				} else {
+					nextStopID = closestStopID
+					nextOffset = closestOffset
+				}
 			} else if vehicle.CurrentStopSequence != nil {
 				closestStopID, closestOffset = api.findClosestStopBySequence(
 					stopTimesPtrs, *vehicle.CurrentStopSequence, currentTime, serviceDate, scheduleDeviation, vehicle,
@@ -1005,4 +1011,3 @@ func interpolateDistanceAtScheduledTime(
 
 	return cumulativeDistances[len(cumulativeDistances)-1]
 }
-
