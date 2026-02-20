@@ -23,6 +23,25 @@ import (
 	"maglev.onebusaway.org/internal/webui"
 )
 
+func gtfsConfigFromData(gtfsCfgData appconf.GtfsConfigData) gtfs.Config {
+	gtfsCfg := gtfs.Config{
+		GtfsURL:                 gtfsCfgData.GtfsURL,
+		StaticAuthHeaderKey:     gtfsCfgData.StaticAuthHeaderKey,
+		StaticAuthHeaderValue:   gtfsCfgData.StaticAuthHeaderValue,
+		TripUpdatesURL:          gtfsCfgData.TripUpdatesURL,
+		VehiclePositionsURL:     gtfsCfgData.VehiclePositionsURL,
+		ServiceAlertsURL:        gtfsCfgData.ServiceAlertsURL,
+		RealTimeAuthHeaderKey:   gtfsCfgData.RealTimeAuthHeaderKey,
+		RealTimeAuthHeaderValue: gtfsCfgData.RealTimeAuthHeaderValue,
+		GTFSDataPath:            gtfsCfgData.GTFSDataPath,
+		Env:                     gtfsCfgData.Env,
+		Verbose:                 gtfsCfgData.Verbose,
+		EnableGTFSTidy:          gtfsCfgData.EnableGTFSTidy,
+	}
+
+	return gtfsCfg
+}
+
 // ParseAPIKeys splits a comma-separated string of API keys and trims whitespace from each key.
 // Returns an empty slice if the input is empty.
 func ParseAPIKeys(apiKeysFlag string) []string {
