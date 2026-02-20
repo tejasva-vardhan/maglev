@@ -3,11 +3,66 @@ package restapi
 import (
 	"context"
 	"math"
+	"time"
 
 	"github.com/OneBusAway/go-gtfs"
+	gtfsrt "github.com/OneBusAway/go-gtfs/proto"
 	"maglev.onebusaway.org/internal/models"
 	"maglev.onebusaway.org/internal/utils"
 )
+
+// StaleDetector checks whether a vehicle's real-time data is too old to trust.
+//
+// Java reference: GtfsRealtimeSource.handleCombinedUpdates()
+// onebusaway-transit-data-federation/src/main/java/org/onebusaway/transit_data_federation/impl/realtime/gtfs_realtime/GtfsRealtimeSource.java
+//
+// The Java implementation removes vehicle records from the active map when their
+// last update time is more than 15 minutes in the past. We mirror that threshold
+// here so stale vehicles are treated as absent rather than as live vehicles.
+type StaleDetector struct {
+	threshold time.Duration
+}
+
+func NewStaleDetector() *StaleDetector {
+	return &StaleDetector{threshold: 15 * time.Minute}
+}
+
+func (d *StaleDetector) WithThreshold(threshold time.Duration) *StaleDetector {
+	d.threshold = threshold
+	return d
+}
+
+// Check returns true when the vehicle's timestamp is missing or older than the threshold.
+func (d *StaleDetector) Check(vehicle *gtfs.Vehicle, currentTime time.Time) bool {
+	if vehicle == nil || vehicle.Timestamp == nil {
+		return true
+	}
+	return currentTime.Sub(*vehicle.Timestamp) > d.threshold
+}
+
+var defaultStaleDetector = NewStaleDetector()
+
+// scheduleRelationshipStatus converts a GTFS-RT TripDescriptor_ScheduleRelationship to
+// the OBA status string.
+//
+// Java reference: GtfsRealtimeTripLibrary.java
+// onebusaway-transit-data-federation/src/main/java/org/onebusaway/transit_data_federation/impl/realtime/gtfs_realtime/GtfsRealtimeTripLibrary.java
+//
+// Java calls record.setStatus(blockDescriptor.getScheduleRelationship().toString()), which
+// produces the enum name as-is ("SCHEDULED", "CANCELED", "ADDED", "DUPLICATED"). The status
+// "default" is only used when no real-time data exists at all (TripStatusBeanServiceImpl line 253).
+func scheduleRelationshipStatus(sr gtfs.TripScheduleRelationship) string {
+	switch sr {
+	case gtfsrt.TripDescriptor_CANCELED:
+		return "CANCELED"
+	case gtfsrt.TripDescriptor_ADDED:
+		return "ADDED"
+	case gtfsrt.TripDescriptor_DUPLICATED:
+		return "DUPLICATED"
+	default:
+		return "SCHEDULED"
+	}
+}
 
 /*
 Note!!
@@ -18,17 +73,25 @@ The Java implementation does not map directly to GTFS-RT CurrentStatus values.
 Instead, it uses a simple rule: if a vehicle location record has been received,
 the trip is "in_progress"; otherwise it remains "scheduled". The phase is
 determined solely by the presence of the vehicle, not by its GTFS-RT stop status.
+Status comes from the trip's schedule relationship ("SCHEDULED", "CANCELED", "ADDED", "DUPLICATED").
+"default" is only returned when no real-time data exists at all.
 */
 func GetVehicleStatusAndPhase(vehicle *gtfs.Vehicle) (status string, phase string) {
 	if vehicle == nil {
-		return "SCHEDULED", "scheduled"
+		return "default", ""
 	}
+
+	sr := gtfsrt.TripDescriptor_SCHEDULED
+	if vehicle.Trip != nil {
+		sr = vehicle.Trip.ID.ScheduleRelationship
+	}
+	status = scheduleRelationshipStatus(sr)
 
 	if vehicle.CurrentStatus != nil {
-		return "SCHEDULED", "in_progress"
+		phase = "in_progress"
 	}
 
-	return "SCHEDULED", "scheduled"
+	return status, phase
 }
 
 func (api *RestAPI) BuildVehicleStatus(
@@ -38,7 +101,7 @@ func (api *RestAPI) BuildVehicleStatus(
 	agencyID string,
 	status *models.TripStatusForTripDetails,
 ) {
-	if vehicle == nil {
+	if vehicle == nil || defaultStaleDetector.Check(vehicle, time.Now()) {
 		status.Status, status.Phase = GetVehicleStatusAndPhase(nil)
 		return
 	}
