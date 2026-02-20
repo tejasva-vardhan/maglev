@@ -30,7 +30,7 @@ func (api *RestAPI) BuildTripStatus(
 
 	if vehicle != nil {
 		if vehicle.ID != nil {
-			status.VehicleID = utils.FormCombinedID(agencyID, vehicle.ID.ID)
+			status.VehicleID = vehicle.ID.ID
 		}
 		if vehicle.OccupancyStatus != nil {
 			status.OccupancyStatus = vehicle.OccupancyStatus.String()
@@ -119,7 +119,7 @@ func (api *RestAPI) BuildTripStatus(
 			actualDistance := api.getVehicleDistanceAlongShapeContextual(ctx, tripID, vehicle)
 			status.DistanceAlongTrip = actualDistance
 
-			if scheduleDeviation != 0 && err == nil {
+			if scheduleDeviation != 0 && len(stopTimes) > 0 {
 				scheduledDistance := api.calculateEffectiveDistanceAlongTrip(
 					ctx, actualDistance, scheduleDeviation, currentTime, serviceDate,
 					stopTimes, shapePoints, cumulativeDistances,
@@ -593,36 +593,6 @@ func (api *RestAPI) GetSituationIDsForTrip(ctx context.Context, tripID string) [
 	return situationIDs
 }
 
-type TripAgencyResolver struct {
-	RouteToAgency map[string]string
-	TripToRoute   map[string]string
-}
-
-// NewTripAgencyResolver creates a new TripAgencyResolver that maps trip IDs to their respective agency IDs.
-func NewTripAgencyResolver(allRoutes []gtfsdb.Route, allTrips []gtfsdb.Trip) *TripAgencyResolver {
-	routeToAgency := make(map[string]string, len(allRoutes))
-	for _, route := range allRoutes {
-		routeToAgency[route.ID] = route.AgencyID
-	}
-	tripToRoute := make(map[string]string, len(allTrips))
-	for _, trip := range allTrips {
-		tripToRoute[trip.ID] = trip.RouteID
-	}
-	return &TripAgencyResolver{
-		RouteToAgency: routeToAgency,
-		TripToRoute:   tripToRoute,
-	}
-}
-
-// GetAgencyNameByTripID retrieves the agency name for a given trip ID.
-func (r *TripAgencyResolver) GetAgencyNameByTripID(tripID string) string {
-	routeID := r.TripToRoute[tripID]
-
-	agency := r.RouteToAgency[routeID]
-
-	return agency
-}
-
 func (api *RestAPI) calculateOffsetForStop(
 	stopID string,
 	stopTimes []*gtfsdb.StopTime,
@@ -963,14 +933,28 @@ func (api *RestAPI) calculateEffectiveDistanceAlongTrip(
 		return actualDistance
 	}
 
+	stopIDs := make([]string, len(stopTimes))
+	for i, st := range stopTimes {
+		stopIDs[i] = st.StopID
+	}
+	stops, err := api.GtfsManager.GtfsDB.Queries.GetStopsByIDs(ctx, stopIDs)
+	if err != nil {
+		return actualDistance
+	}
+	stopByID := make(map[string]gtfsdb.Stop, len(stops))
+	for _, s := range stops {
+		stopByID[s.ID] = s
+	}
+
 	stopDistances := make([]float64, len(stopTimes))
 	for i, st := range stopTimes {
-		stop, err := api.GtfsManager.GtfsDB.Queries.GetStop(ctx, st.StopID)
-		if err == nil {
-			stopDistances[i] = api.calculatePreciseDistanceAlongTripWithCoords(
-				stop.Lat, stop.Lon, shapePoints, cumulativeDistances,
-			)
+		stop, ok := stopByID[st.StopID]
+		if !ok {
+			return actualDistance
 		}
+		stopDistances[i] = api.calculatePreciseDistanceAlongTripWithCoords(
+			stop.Lat, stop.Lon, shapePoints, cumulativeDistances,
+		)
 	}
 
 	currentTimeSeconds := utils.CalculateSecondsSinceServiceDate(currentTime, serviceDate)
@@ -984,7 +968,7 @@ func interpolateDistanceAtScheduledTime(
 	stopTimes []gtfsdb.StopTime,
 	cumulativeDistances []float64,
 ) float64 {
-	if len(stopTimes) == 0 {
+	if len(stopTimes) == 0 || len(cumulativeDistances) != len(stopTimes) {
 		return 0
 	}
 
@@ -1002,10 +986,7 @@ func interpolateDistanceAtScheduledTime(
 
 			timeRatio := float64(scheduledTime-fromTime) / float64(toTime-fromTime)
 
-			fromDistance := cumulativeDistances[i*len(cumulativeDistances)/len(stopTimes)]
-			toDistance := cumulativeDistances[(i+1)*len(cumulativeDistances)/len(stopTimes)]
-
-			return fromDistance + timeRatio*(toDistance-fromDistance)
+			return cumulativeDistances[i] + timeRatio*(cumulativeDistances[i+1]-cumulativeDistances[i])
 		}
 	}
 
