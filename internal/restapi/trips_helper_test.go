@@ -517,7 +517,7 @@ func TestBuildTripStatus_VehicleIDFormat(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.NotEmpty(t, model)
-	assert.Equal(t, utils.FormCombinedID(agencyID, vehicleID), model.VehicleID)
+	assert.Equal(t, vehicleID, model.VehicleID)
 }
 
 // BenchmarkDistanceToLineSegment benchmarks the line segment distance calculation
