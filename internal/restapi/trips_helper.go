@@ -30,7 +30,7 @@ func (api *RestAPI) BuildTripStatus(
 
 	if vehicle != nil {
 		if vehicle.ID != nil {
-			status.VehicleID = vehicle.ID.ID
+			status.VehicleID = utils.FormCombinedID(agencyID, vehicle.ID.ID)
 		}
 		if vehicle.OccupancyStatus != nil {
 			status.OccupancyStatus = vehicle.OccupancyStatus.String()
@@ -413,17 +413,20 @@ func getDistanceAlongShapeInRange(lat, lon float64, shape []gtfs.ShapePoint, min
 // for trips that are active on the given service date.
 // Uses GetTripsByBlockIDOrdered to perform a single SQL JOIN instead of N+1 queries.
 func (api *RestAPI) calculateBlockTripSequence(ctx context.Context, tripID string, serviceDate time.Time) int {
-	// Get the trip to find both block_id and service_id in one query
 	trip, err := api.GtfsManager.GtfsDB.Queries.GetTrip(ctx, tripID)
 	if err != nil {
 		return 0
 	}
 
-	// Use the optimized query that JOINs trips with stop_times in SQL,
-	// ordered by first departure time — replaces N+1 queries
+	formattedDate := serviceDate.Format("20060102")
+	activeServiceIDs, err := api.GtfsManager.GtfsDB.Queries.GetActiveServiceIDsForDate(ctx, formattedDate)
+	if err != nil || len(activeServiceIDs) == 0 {
+		return 0
+	}
+
 	orderedTrips, err := api.GtfsManager.GtfsDB.Queries.GetTripsByBlockIDOrdered(ctx, gtfsdb.GetTripsByBlockIDOrderedParams{
 		BlockID:    trip.BlockID,
-		ServiceIds: []string{trip.ServiceID},
+		ServiceIds: activeServiceIDs,
 	})
 	if err != nil {
 		return 0
