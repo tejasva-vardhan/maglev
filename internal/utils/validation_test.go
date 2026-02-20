@@ -64,6 +64,11 @@ func TestValidateID(t *testing.T) {
 			id:      "agency.123_stop.456",
 			wantErr: false,
 		},
+		{
+			name:    "valid ID with colon",
+			id:      "agency_shp_654:456",
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
