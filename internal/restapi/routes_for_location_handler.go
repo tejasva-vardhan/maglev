@@ -105,10 +105,19 @@ func (api *RestAPI) routesForLocationHandler(w http.ResponseWriter, r *http.Requ
 		if query != "" && strings.ToLower(routeRow.ShortName.String) != query {
 			continue
 		}
-		agencyIDs[routeRow.AgencyID] = true
-		if !routeIDs[routeRow.ID] {
+
+		combinedRouteID := utils.FormCombinedID(routeRow.AgencyID, routeRow.ID)
+		
+		if !routeIDs[combinedRouteID] {
+			agencyIDs[routeRow.AgencyID] = true
+			
+			shortName := routeRow.ShortName.String
+			if shortName == "" {
+				shortName = routeRow.LongName.String
+			}
+			
 			results = append(results, models.NewRoute(
-				utils.FormCombinedID(routeRow.AgencyID, routeRow.ID),
+				combinedRouteID,
 				routeRow.AgencyID,
 				routeRow.ShortName.String,
 				routeRow.LongName.String,
@@ -117,10 +126,10 @@ func (api *RestAPI) routesForLocationHandler(w http.ResponseWriter, r *http.Requ
 				routeRow.Url.String,
 				routeRow.Color.String,
 				routeRow.TextColor.String,
-				routeRow.ShortName.String,
+				shortName,
 			))
 		}
-		routeIDs[routeRow.ID] = true
+		routeIDs[combinedRouteID] = true
 		if len(results) >= maxCount {
 			isLimitExceeded = true
 			break

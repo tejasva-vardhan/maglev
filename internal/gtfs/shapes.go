@@ -3,37 +3,66 @@ package gtfs
 import "github.com/OneBusAway/go-gtfs"
 
 // ComputeRegionBounds calculates the geographic boundaries of the GTFS region
-// from all shape points. Returns nil if no shapes exist.
-func ComputeRegionBounds(shapes []gtfs.Shape) *RegionBounds {
-	if len(shapes) == 0 {
+// from all shape points, falling back to stops if no shapes exist.
+func ComputeRegionBounds(shapes []gtfs.Shape, stops []gtfs.Stop) *RegionBounds {
+	if len(shapes) == 0 && len(stops) == 0 {
 		return nil
 	}
 
 	var minLat, maxLat, minLon, maxLon float64
 	first := true
 
-	for _, shape := range shapes {
-		for _, point := range shape.Points {
+	if len(shapes) > 0 {
+		for _, shape := range shapes {
+			for _, point := range shape.Points {
+				if first {
+					minLat = point.Latitude
+					maxLat = point.Latitude
+					minLon = point.Longitude
+					maxLon = point.Longitude
+					first = false
+					continue
+				}
+
+				if point.Latitude < minLat {
+					minLat = point.Latitude
+				}
+				if point.Latitude > maxLat {
+					maxLat = point.Latitude
+				}
+				if point.Longitude < minLon {
+					minLon = point.Longitude
+				}
+				if point.Longitude > maxLon {
+					maxLon = point.Longitude
+				}
+			}
+		}
+	} else {
+		for _, stop := range stops {
+			if stop.Latitude == nil || stop.Longitude == nil {
+				continue
+			}
 			if first {
-				minLat = point.Latitude
-				maxLat = point.Latitude
-				minLon = point.Longitude
-				maxLon = point.Longitude
+				minLat = *stop.Latitude
+				maxLat = *stop.Latitude
+				minLon = *stop.Longitude
+				maxLon = *stop.Longitude
 				first = false
 				continue
 			}
 
-			if point.Latitude < minLat {
-				minLat = point.Latitude
+			if *stop.Latitude < minLat {
+				minLat = *stop.Latitude
 			}
-			if point.Latitude > maxLat {
-				maxLat = point.Latitude
+			if *stop.Latitude > maxLat {
+				maxLat = *stop.Latitude
 			}
-			if point.Longitude < minLon {
-				minLon = point.Longitude
+			if *stop.Longitude < minLon {
+				minLon = *stop.Longitude
 			}
-			if point.Longitude > maxLon {
-				maxLon = point.Longitude
+			if *stop.Longitude > maxLon {
+				maxLon = *stop.Longitude
 			}
 		}
 	}

@@ -106,7 +106,7 @@ func TestGetRegionBounds(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			bounds := ComputeRegionBounds(tc.shapes)
+			bounds := ComputeRegionBounds(tc.shapes, []gtfs.Stop{})
 
 			var lat, lon, latSpan, lonSpan float64
 			if bounds != nil {

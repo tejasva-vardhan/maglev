@@ -237,7 +237,7 @@ func (manager *Manager) ForceUpdate(ctx context.Context) error {
 		return err
 	}
 
-	newRegionBounds := ComputeRegionBounds(newStaticData.Shapes)
+	newRegionBounds := ComputeRegionBounds(newStaticData.Shapes, newStaticData.Stops)
 
 	if err := ctx.Err(); err != nil {
 		if closeErr := newGtfsDB.Close(); closeErr != nil {
@@ -332,7 +332,7 @@ func (manager *Manager) setStaticGTFS(staticData *gtfs.Static) {
 	manager.agenciesMap, manager.routesMap = buildLookupMaps(staticData)
 
 	manager.blockLayoverIndices = buildBlockLayoverIndices(staticData)
-	manager.regionBounds = ComputeRegionBounds(staticData.Shapes)
+	manager.regionBounds = ComputeRegionBounds(staticData.Shapes, staticData.Stops)
 
 	// Rebuild spatial index with updated data
 	ctx := context.Background()
