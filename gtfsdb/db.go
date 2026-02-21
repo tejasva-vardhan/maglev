@@ -36,6 +36,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.clearCalendarStmt, err = db.PrepareContext(ctx, clearCalendar); err != nil {
 		return nil, fmt.Errorf("error preparing query ClearCalendar: %w", err)
 	}
+	if q.clearCalendarDatesStmt, err = db.PrepareContext(ctx, clearCalendarDates); err != nil {
+		return nil, fmt.Errorf("error preparing query ClearCalendarDates: %w", err)
+	}
 	if q.clearRoutesStmt, err = db.PrepareContext(ctx, clearRoutes); err != nil {
 		return nil, fmt.Errorf("error preparing query ClearRoutes: %w", err)
 	}
@@ -317,6 +320,11 @@ func (q *Queries) Close() error {
 	if q.clearCalendarStmt != nil {
 		if cerr := q.clearCalendarStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing clearCalendarStmt: %w", cerr)
+		}
+	}
+	if q.clearCalendarDatesStmt != nil {
+		if cerr := q.clearCalendarDatesStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing clearCalendarDatesStmt: %w", cerr)
 		}
 	}
 	if q.clearRoutesStmt != nil {
@@ -792,6 +800,7 @@ type Queries struct {
 	clearBlockTripEntriesStmt                 *sql.Stmt
 	clearBlockTripIndicesStmt                 *sql.Stmt
 	clearCalendarStmt                         *sql.Stmt
+	clearCalendarDatesStmt                    *sql.Stmt
 	clearRoutesStmt                           *sql.Stmt
 	clearShapesStmt                           *sql.Stmt
 	clearStopTimesStmt                        *sql.Stmt
@@ -888,6 +897,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		clearBlockTripEntriesStmt:                 q.clearBlockTripEntriesStmt,
 		clearBlockTripIndicesStmt:                 q.clearBlockTripIndicesStmt,
 		clearCalendarStmt:                         q.clearCalendarStmt,
+		clearCalendarDatesStmt:                    q.clearCalendarDatesStmt,
 		clearRoutesStmt:                           q.clearRoutesStmt,
 		clearShapesStmt:                           q.clearShapesStmt,
 		clearStopTimesStmt:                        q.clearStopTimesStmt,

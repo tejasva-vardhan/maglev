@@ -412,6 +412,9 @@ func (c *Client) clearAllGTFSData(ctx context.Context) error {
 	if err := c.Queries.ClearTrips(ctx); err != nil {
 		return fmt.Errorf("error clearing trips: %w", err)
 	}
+	if err := c.Queries.ClearCalendarDates(ctx); err != nil {
+		return fmt.Errorf("error clearing calendar dates: %w", err)
+	}
 	if err := c.Queries.ClearCalendar(ctx); err != nil {
 		return fmt.Errorf("error clearing calendar: %w", err)
 	}
