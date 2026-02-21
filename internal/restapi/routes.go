@@ -39,6 +39,25 @@ func rateLimitAndValidateAPIKey(api *RestAPI, finalHandler handlerFunc) http.Han
 	})
 }
 
+// etagStatic applies ETag middleware at the innermost handler level.
+// By using an unnamed function type, Go allows this to be passed seamlessly into both
+// rateLimitAndValidateAPIKey (which expects handlerFunc) and withID (which expects http.HandlerFunc).
+func etagStatic(api *RestAPI, handler func(http.ResponseWriter, *http.Request)) func(http.ResponseWriter, *http.Request) {
+	getETagFunc := func() string {
+		if api.GtfsManager != nil {
+			return api.GtfsManager.GetSystemETag() // Safe, lock-protected read
+		}
+		return ""
+	}
+
+	wrapped := ETagMiddleware(getETagFunc)(http.HandlerFunc(handler))
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Call ServeHTTP cleanly on our pre-built handler
+		wrapped.ServeHTTP(w, r)
+	}
+}
+
 // withID applies "Simple ID" validation (just checks regex/length)
 func withID(api *RestAPI, handler http.HandlerFunc) http.Handler {
 	// Apply ID Middleware -> Then standard rate limits/auth
@@ -67,38 +86,44 @@ func (api *RestAPI) SetRoutes(mux *http.ServeMux) {
 	// Health check endpoint - no authentication required
 	mux.HandleFunc("GET /healthz", api.healthHandler)
 
-	// Routes without ID validation (no withID wrapper needed)
-	mux.Handle("GET /api/where/agencies-with-coverage.json", CacheControlMiddleware(models.CacheDurationLong, rateLimitAndValidateAPIKey(api, api.agenciesWithCoverageHandler)))
+	// --- Routes without ID validation ---
+	mux.Handle("GET /api/where/agencies-with-coverage.json", CacheControlMiddleware(models.CacheDurationLong, rateLimitAndValidateAPIKey(api, etagStatic(api, api.agenciesWithCoverageHandler))))
+	mux.Handle("GET /api/where/search/stop.json", CacheControlMiddleware(models.CacheDurationLong, rateLimitAndValidateAPIKey(api, etagStatic(api, api.searchStopsHandler))))
+	mux.Handle("GET /api/where/search/route.json", CacheControlMiddleware(models.CacheDurationLong, rateLimitAndValidateAPIKey(api, etagStatic(api, api.routeSearchHandler))))
+
+	// Non-static endpoints (no ETag)
 	mux.Handle("GET /api/where/current-time.json", CacheControlMiddleware(models.CacheDurationShort, rateLimitAndValidateAPIKey(api, api.currentTimeHandler)))
 	mux.Handle("GET /api/where/stops-for-location.json", CacheControlMiddleware(models.CacheDurationShort, rateLimitAndValidateAPIKey(api, api.stopsForLocationHandler)))
 	mux.Handle("GET /api/where/routes-for-location.json", CacheControlMiddleware(models.CacheDurationShort, rateLimitAndValidateAPIKey(api, api.routesForLocationHandler)))
 	mux.Handle("GET /api/where/trips-for-location.json", CacheControlMiddleware(models.CacheDurationShort, rateLimitAndValidateAPIKey(api, api.tripsForLocationHandler)))
-	mux.Handle("GET /api/where/search/stop.json", CacheControlMiddleware(models.CacheDurationLong, rateLimitAndValidateAPIKey(api, api.searchStopsHandler)))
-	mux.Handle("GET /api/where/search/route.json", CacheControlMiddleware(models.CacheDurationLong, rateLimitAndValidateAPIKey(api, api.routeSearchHandler)))
 	mux.Handle("GET /api/where/config.json", rateLimitAndValidateAPIKey(api, api.configHandler))
 
-	// Routes with simple ID validation (agency IDs)
-	mux.Handle("GET /api/where/agency/{id}", CacheControlMiddleware(models.CacheDurationLong, withID(api, api.agencyHandler)))
-	mux.Handle("GET /api/where/routes-for-agency/{id}", CacheControlMiddleware(models.CacheDurationLong, withID(api, api.routesForAgencyHandler)))
-	mux.Handle("GET /api/where/vehicles-for-agency/{id}", CacheControlMiddleware(models.CacheDurationShort, withID(api, api.vehiclesForAgencyHandler)))
-	mux.Handle("GET /api/where/stop-ids-for-agency/{id}", CacheControlMiddleware(models.CacheDurationLong, withID(api, api.stopIDsForAgencyHandler)))
-	mux.Handle("GET /api/where/stops-for-agency/{id}", CacheControlMiddleware(models.CacheDurationLong, withID(api, api.stopsForAgencyHandler)))
-	mux.Handle("GET /api/where/route-ids-for-agency/{id}", CacheControlMiddleware(models.CacheDurationLong, withID(api, api.routeIDsForAgencyHandler)))
+	// --- Routes with simple ID validation (agency IDs) ---
+	mux.Handle("GET /api/where/agency/{id}", CacheControlMiddleware(models.CacheDurationLong, withID(api, etagStatic(api, api.agencyHandler))))
+	mux.Handle("GET /api/where/routes-for-agency/{id}", CacheControlMiddleware(models.CacheDurationLong, withID(api, etagStatic(api, api.routesForAgencyHandler))))
+	mux.Handle("GET /api/where/stop-ids-for-agency/{id}", CacheControlMiddleware(models.CacheDurationLong, withID(api, etagStatic(api, api.stopIDsForAgencyHandler))))
+	mux.Handle("GET /api/where/stops-for-agency/{id}", CacheControlMiddleware(models.CacheDurationLong, withID(api, etagStatic(api, api.stopsForAgencyHandler))))
+	mux.Handle("GET /api/where/route-ids-for-agency/{id}", CacheControlMiddleware(models.CacheDurationLong, withID(api, etagStatic(api, api.routeIDsForAgencyHandler))))
 
-	// Routes with combined ID validation (agency_id_code format)
+	// Real-time simple ID endpoints (no ETag)
+	mux.Handle("GET /api/where/vehicles-for-agency/{id}", CacheControlMiddleware(models.CacheDurationShort, withID(api, api.vehiclesForAgencyHandler)))
+
+	// --- Routes with combined ID validation (agency_id_code format) ---
+	mux.Handle("GET /api/where/trip/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, etagStatic(api, api.tripHandler))))
+	mux.Handle("GET /api/where/route/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, etagStatic(api, api.routeHandler))))
+	mux.Handle("GET /api/where/stop/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, etagStatic(api, api.stopHandler))))
+	mux.Handle("GET /api/where/shape/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, etagStatic(api, api.shapesHandler))))
+	mux.Handle("GET /api/where/stops-for-route/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, etagStatic(api, api.stopsForRouteHandler))))
+	mux.Handle("GET /api/where/schedule-for-stop/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, etagStatic(api, api.scheduleForStopHandler))))
+	mux.Handle("GET /api/where/schedule-for-route/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, etagStatic(api, api.scheduleForRouteHandler))))
+	mux.Handle("GET /api/where/block/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, etagStatic(api, api.blockHandler))))
+
+	// Real-time or transactional combined ID endpoints (no ETag)
 	mux.Handle("GET /api/where/report-problem-with-trip/{id}", CacheControlMiddleware(models.CacheDurationNone, withCombinedID(api, api.reportProblemWithTripHandler)))
 	mux.Handle("GET /api/where/report-problem-with-stop/{id}", CacheControlMiddleware(models.CacheDurationNone, withCombinedID(api, api.reportProblemWithStopHandler)))
 	mux.Handle("GET /api/where/problem-reports-for-trip/{id}", CacheControlMiddleware(models.CacheDurationNone, withCombinedID(api, api.problemReportsForTripHandler)))
 	mux.Handle("GET /api/where/problem-reports-for-stop/{id}", CacheControlMiddleware(models.CacheDurationNone, withCombinedID(api, api.problemReportsForStopHandler)))
-	mux.Handle("GET /api/where/trip/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, api.tripHandler)))
-	mux.Handle("GET /api/where/route/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, api.routeHandler)))
-	mux.Handle("GET /api/where/stop/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, api.stopHandler)))
-	mux.Handle("GET /api/where/shape/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, api.shapesHandler)))
-	mux.Handle("GET /api/where/stops-for-route/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, api.stopsForRouteHandler)))
-	mux.Handle("GET /api/where/schedule-for-stop/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, api.scheduleForStopHandler)))
-	mux.Handle("GET /api/where/schedule-for-route/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, api.scheduleForRouteHandler)))
 	mux.Handle("GET /api/where/trip-details/{id}", CacheControlMiddleware(models.CacheDurationShort, withCombinedID(api, api.tripDetailsHandler)))
-	mux.Handle("GET /api/where/block/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, api.blockHandler)))
 	mux.Handle("GET /api/where/trip-for-vehicle/{id}", CacheControlMiddleware(models.CacheDurationShort, withCombinedID(api, api.tripForVehicleHandler)))
 	mux.Handle("GET /api/where/arrival-and-departure-for-stop/{id}", CacheControlMiddleware(models.CacheDurationShort, withCombinedID(api, api.arrivalAndDepartureForStopHandler)))
 	mux.Handle("GET /api/where/trips-for-route/{id}", CacheControlMiddleware(models.CacheDurationShort, withCombinedID(api, api.tripsForRouteHandler)))
