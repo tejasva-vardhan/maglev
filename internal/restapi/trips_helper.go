@@ -35,17 +35,20 @@ func (api *RestAPI) BuildTripStatus(
 		if vehicle.OccupancyStatus != nil {
 			status.OccupancyStatus = vehicle.OccupancyStatus.String()
 		}
-		api.BuildVehicleStatus(ctx, vehicle, tripID, agencyID, status)
+		if vehicle.OccupancyPercentage != nil {
+			status.OccupancyCapacity = int(*vehicle.OccupancyPercentage)
+		}
 	}
+	api.BuildVehicleStatus(ctx, vehicle, tripID, agencyID, status)
 
 	_, activeTripRawID, err := utils.ExtractAgencyIDAndCodeID(status.ActiveTripID)
 	if err != nil {
 		return status, err
 	}
 
-	scheduleDeviation := api.GetScheduleDeviation(activeTripRawID)
+	scheduleDeviation, hasRealtimeTripUpdate := api.GetScheduleDeviation(activeTripRawID)
 
-	if scheduleDeviation != 0 {
+	if hasRealtimeTripUpdate {
 		status.ScheduleDeviation = scheduleDeviation
 		status.Predicted = true
 	}
@@ -84,7 +87,7 @@ func (api *RestAPI) BuildTripStatus(
 				)
 			}
 		} else {
-			stopDelays := api.GetStopDelaysFromTripUpdates(tripID)
+			stopDelays := api.GetStopDelaysFromTripUpdates(activeTripRawID)
 			closestStopID, closestOffset = findClosestStopByTimeWithDelays(currentTime, serviceDate, stopTimesPtrs, stopDelays)
 			nextStopID, nextOffset = findNextStopByTimeWithDelays(currentTime, serviceDate, stopTimesPtrs, stopDelays)
 		}
@@ -105,13 +108,7 @@ func (api *RestAPI) BuildTripStatus(
 
 	shapeRows, shapeErr := api.GtfsManager.GtfsDB.Queries.GetShapePointsByTripID(ctx, tripID)
 	if shapeErr == nil && len(shapeRows) > 1 {
-		shapePoints := make([]gtfs.ShapePoint, len(shapeRows))
-		for i, sp := range shapeRows {
-			shapePoints[i] = gtfs.ShapePoint{
-				Latitude:  sp.Lat,
-				Longitude: sp.Lon,
-			}
-		}
+		shapePoints := shapeRowsToPoints(shapeRows)
 		cumulativeDistances := preCalculateCumulativeDistances(shapePoints)
 		status.TotalDistanceAlongTrip = cumulativeDistances[len(cumulativeDistances)-1]
 
@@ -147,13 +144,7 @@ func (api *RestAPI) BuildTripSchedule(ctx context.Context, agencyID string, serv
 	shapeRows, err := api.GtfsManager.GtfsDB.Queries.GetShapePointsByTripID(ctx, trip.ID)
 	var shapePoints []gtfs.ShapePoint
 	if err == nil && len(shapeRows) > 0 {
-		shapePoints = make([]gtfs.ShapePoint, len(shapeRows))
-		for i, sp := range shapeRows {
-			shapePoints[i] = gtfs.ShapePoint{
-				Latitude:  sp.Lat,
-				Longitude: sp.Lon,
-			}
-		}
+		shapePoints = shapeRowsToPoints(shapeRows)
 	}
 
 	var nextTripID, previousTripID string
@@ -243,20 +234,13 @@ func (api *RestAPI) fillStopsFromSchedule(ctx context.Context, status *models.Tr
 	currentSeconds := utils.CalculateSecondsSinceServiceDate(currentTime, serviceDate)
 
 	for i, st := range stopTimes {
-		arrivalTime := st.ArrivalTime / 1e9
-		if arrivalTime == 0 {
-			arrivalTime = st.DepartureTime / 1e9
-		}
-
+		arrivalTime := utils.EffectiveStopTimeSeconds(st.ArrivalTime, st.DepartureTime)
 		predictedArrival := arrivalTime + int64(status.ScheduleDeviation)
 
 		if predictedArrival > currentSeconds {
 			if i > 0 {
 				status.ClosestStop = utils.FormCombinedID(agencyID, stopTimes[i-1].StopID)
-				closestArrival := stopTimes[i-1].ArrivalTime / 1e9
-				if closestArrival == 0 {
-					closestArrival = stopTimes[i-1].DepartureTime / 1e9
-				}
+				closestArrival := utils.EffectiveStopTimeSeconds(stopTimes[i-1].ArrivalTime, stopTimes[i-1].DepartureTime)
 				status.ClosestStopTimeOffset = int(closestArrival + int64(status.ScheduleDeviation) - currentSeconds)
 			}
 			status.NextStop = utils.FormCombinedID(agencyID, st.StopID)
@@ -268,10 +252,7 @@ func (api *RestAPI) fillStopsFromSchedule(ctx context.Context, status *models.Tr
 	if len(stopTimes) > 0 {
 		lastStop := stopTimes[len(stopTimes)-1]
 		status.ClosestStop = utils.FormCombinedID(agencyID, lastStop.StopID)
-		arrivalTime := lastStop.ArrivalTime / 1e9
-		if arrivalTime == 0 {
-			arrivalTime = lastStop.DepartureTime / 1e9
-		}
+		arrivalTime := utils.EffectiveStopTimeSeconds(lastStop.ArrivalTime, lastStop.DepartureTime)
 		status.ClosestStopTimeOffset = int(arrivalTime + int64(status.ScheduleDeviation) - currentSeconds)
 	}
 }
@@ -284,9 +265,9 @@ func findClosestStopByTimeWithDelays(currentTime time.Time, serviceDate time.Tim
 	for _, st := range stopTimes {
 		var stopTimeSeconds int64
 		if st.DepartureTime > 0 {
-			stopTimeSeconds = st.DepartureTime / 1e9
+			stopTimeSeconds = utils.NanosToSeconds(st.DepartureTime)
 		} else if st.ArrivalTime > 0 {
-			stopTimeSeconds = st.ArrivalTime / 1e9
+			stopTimeSeconds = utils.NanosToSeconds(st.ArrivalTime)
 		} else {
 			continue
 		}
@@ -324,9 +305,9 @@ func findNextStopByTimeWithDelays(currentTime time.Time, serviceDate time.Time, 
 	for _, st := range stopTimes {
 		var stopTimeSeconds int64
 		if st.DepartureTime > 0 {
-			stopTimeSeconds = st.DepartureTime / 1e9
+			stopTimeSeconds = utils.NanosToSeconds(st.DepartureTime)
 		} else if st.ArrivalTime > 0 {
-			stopTimeSeconds = st.ArrivalTime / 1e9
+			stopTimeSeconds = utils.NanosToSeconds(st.ArrivalTime)
 		} else {
 			continue
 		}
@@ -533,14 +514,15 @@ func preCalculateCumulativeDistances(shapePoints []gtfs.ShapePoint) []float64 {
 	return cumulativeDistances
 }
 
-// Helper function to calculate distance from point to line segment
-func distanceToLineSegment(px, py, x1, y1, x2, y2 float64) (distance, ratio float64) {
+// projectOntoSegment is the shared implementation for projecting a point onto a line segment.
+// Returns the distance from point to the closest point on the segment, the projection ratio t ∈ [0,1],
+func projectOntoSegment(px, py, x1, y1, x2, y2 float64) (distance, ratio float64, projLat, projLon float64) {
 	dx := x2 - x1
 	dy := y2 - y1
 
 	if dx == 0 && dy == 0 {
 		// Line segment is a point
-		return utils.Distance(px, py, x1, y1), 0
+		return utils.Distance(px, py, x1, y1), 0, x1, y1
 	}
 
 	// Calculate the parameter t for the projection of point onto the line
@@ -557,7 +539,14 @@ func distanceToLineSegment(px, py, x1, y1, x2, y2 float64) (distance, ratio floa
 	closestX := x1 + t*dx
 	closestY := y1 + t*dy
 
-	return utils.Distance(px, py, closestX, closestY), t
+	return utils.Distance(px, py, closestX, closestY), t, closestX, closestY
+}
+
+// distanceToLineSegment returns the distance from a point to the closest point on a line segment
+// and the projection ratio t ∈ [0,1].
+func distanceToLineSegment(px, py, x1, y1, x2, y2 float64) (distance, ratio float64) {
+	d, r, _, _ := projectOntoSegment(px, py, x1, y1, x2, y2)
+	return d, r
 }
 
 // IMPORTANT: Caller must hold manager.RLock() before calling this method.
@@ -604,10 +593,7 @@ func (api *RestAPI) calculateOffsetForStop(
 
 	for _, st := range stopTimes {
 		if st.StopID == stopID {
-			stopTimeSeconds := st.ArrivalTime / 1e9
-			if stopTimeSeconds == 0 {
-				stopTimeSeconds = st.DepartureTime / 1e9
-			}
+			stopTimeSeconds := utils.EffectiveStopTimeSeconds(st.ArrivalTime, st.DepartureTime)
 			predictedArrival := stopTimeSeconds + int64(scheduleDeviation)
 			return int(predictedArrival - currentTimeSeconds)
 		}
@@ -633,10 +619,7 @@ func (api *RestAPI) findNextStopAfter(
 		if st.StopID == currentStopID {
 			if i+1 < len(stopTimes) {
 				nextSt := stopTimes[i+1]
-				stopTimeSeconds := nextSt.ArrivalTime / 1e9
-				if stopTimeSeconds == 0 {
-					stopTimeSeconds = nextSt.DepartureTime / 1e9
-				}
+				stopTimeSeconds := utils.EffectiveStopTimeSeconds(nextSt.ArrivalTime, nextSt.DepartureTime)
 				predictedArrival := stopTimeSeconds + int64(scheduleDeviation)
 				return nextSt.StopID, int(predictedArrival - currentTimeSeconds)
 			}
@@ -660,8 +643,8 @@ func (api *RestAPI) calculateBatchStopDistances(
 		for _, stopTime := range timeStops {
 			stopTimesList = append(stopTimesList, models.StopTime{
 				StopID:              utils.FormCombinedID(agencyID, stopTime.StopID),
-				ArrivalTime:         int(stopTime.ArrivalTime / 1e9),
-				DepartureTime:       int(stopTime.DepartureTime / 1e9),
+				ArrivalTime:         int(utils.NanosToSeconds(stopTime.ArrivalTime)),
+				DepartureTime:       int(utils.NanosToSeconds(stopTime.DepartureTime)),
 				StopHeadsign:        utils.NullStringOrEmpty(stopTime.StopHeadsign),
 				DistanceAlongTrip:   0.0,
 				HistoricalOccupancy: "",
@@ -676,8 +659,8 @@ func (api *RestAPI) calculateBatchStopDistances(
 		for _, stopTime := range timeStops {
 			stopTimesList = append(stopTimesList, models.StopTime{
 				StopID:              utils.FormCombinedID(agencyID, stopTime.StopID),
-				ArrivalTime:         int(stopTime.ArrivalTime / 1e9),
-				DepartureTime:       int(stopTime.DepartureTime / 1e9),
+				ArrivalTime:         int(utils.NanosToSeconds(stopTime.ArrivalTime)),
+				DepartureTime:       int(utils.NanosToSeconds(stopTime.DepartureTime)),
 				StopHeadsign:        utils.NullStringOrEmpty(stopTime.StopHeadsign),
 				DistanceAlongTrip:   0.0,
 				HistoricalOccupancy: "",
@@ -742,8 +725,8 @@ func (api *RestAPI) calculateBatchStopDistances(
 
 		stopTimesList = append(stopTimesList, models.StopTime{
 			StopID:              utils.FormCombinedID(agencyID, stopTime.StopID),
-			ArrivalTime:         int(stopTime.ArrivalTime / 1e9),
-			DepartureTime:       int(stopTime.DepartureTime / 1e9),
+			ArrivalTime:         int(utils.NanosToSeconds(stopTime.ArrivalTime)),
+			DepartureTime:       int(utils.NanosToSeconds(stopTime.DepartureTime)),
 			StopHeadsign:        utils.NullStringOrEmpty(stopTime.StopHeadsign),
 			DistanceAlongTrip:   distanceAlongTrip,
 			HistoricalOccupancy: "",
@@ -769,10 +752,7 @@ func (api *RestAPI) findStopsByScheduleDeviation(
 	var closestTimeDiff int64 = math.MaxInt64
 
 	for _, st := range stopTimes {
-		stopTime := st.ArrivalTime / 1e9
-		if stopTime == 0 {
-			stopTime = st.DepartureTime / 1e9
-		}
+		stopTime := utils.EffectiveStopTimeSeconds(st.ArrivalTime, st.DepartureTime)
 
 		timeDiff := stopTime - effectiveScheduleTime
 		if timeDiff < 0 {
@@ -791,10 +771,7 @@ func (api *RestAPI) findStopsByScheduleDeviation(
 
 	closestStopID = closestStop.StopID
 
-	closestStopTime := closestStop.ArrivalTime / 1e9
-	if closestStopTime == 0 {
-		closestStopTime = closestStop.DepartureTime / 1e9
-	}
+	closestStopTime := utils.EffectiveStopTimeSeconds(closestStop.ArrivalTime, closestStop.DepartureTime)
 	predictedClosestArrival := closestStopTime + int64(scheduleDeviation)
 	closestOffset = int(predictedClosestArrival - currentTimeSeconds)
 
@@ -804,10 +781,7 @@ func (api *RestAPI) findStopsByScheduleDeviation(
 				nextSt := stopTimes[i+1]
 				nextStopID = nextSt.StopID
 
-				nextStopTime := nextSt.ArrivalTime / 1e9
-				if nextStopTime == 0 {
-					nextStopTime = nextSt.DepartureTime / 1e9
-				}
+				nextStopTime := utils.EffectiveStopTimeSeconds(nextSt.ArrivalTime, nextSt.DepartureTime)
 				predictedNextArrival := nextStopTime + int64(scheduleDeviation)
 				nextOffset = int(predictedNextArrival - currentTimeSeconds)
 			}
@@ -830,10 +804,7 @@ func (api *RestAPI) findClosestStopBySequence(
 
 	for _, st := range stopTimes {
 		if uint32(st.StopSequence) == currentStopSequence {
-			stopTimeSeconds := st.ArrivalTime / 1e9
-			if stopTimeSeconds == 0 {
-				stopTimeSeconds = st.DepartureTime / 1e9
-			}
+			stopTimeSeconds := utils.EffectiveStopTimeSeconds(st.ArrivalTime, st.DepartureTime)
 			predictedArrival := stopTimeSeconds + int64(scheduleDeviation)
 			return st.StopID, int(predictedArrival - currentTimeSeconds)
 		}
@@ -873,10 +844,7 @@ func (api *RestAPI) findNextStopBySequence(
 			}
 
 			if nextStop != nil {
-				stopTimeSeconds := nextStop.ArrivalTime / 1e9
-				if stopTimeSeconds == 0 {
-					stopTimeSeconds = nextStop.DepartureTime / 1e9
-				}
+				stopTimeSeconds := utils.EffectiveStopTimeSeconds(nextStop.ArrivalTime, nextStop.DepartureTime)
 				predictedArrival := stopTimeSeconds + int64(scheduleDeviation)
 				return nextStop.StopID, int(predictedArrival - currentTimeSeconds)
 			}
@@ -976,8 +944,8 @@ func interpolateDistanceAtScheduledTime(
 		fromStop := stopTimes[i]
 		toStop := stopTimes[i+1]
 
-		fromTime := fromStop.DepartureTime / 1e9
-		toTime := toStop.ArrivalTime / 1e9
+		fromTime := utils.NanosToSeconds(fromStop.DepartureTime)
+		toTime := utils.NanosToSeconds(toStop.ArrivalTime)
 
 		if scheduledTime >= fromTime && scheduledTime <= toTime {
 			if toTime == fromTime {
@@ -990,7 +958,7 @@ func interpolateDistanceAtScheduledTime(
 		}
 	}
 
-	if scheduledTime < stopTimes[0].ArrivalTime/1e9 {
+	if scheduledTime < utils.NanosToSeconds(stopTimes[0].ArrivalTime) {
 		return 0
 	}
 
