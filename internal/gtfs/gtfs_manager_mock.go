@@ -62,3 +62,19 @@ func (m *Manager) MockAddTrip(tripID, agencyID, routeID string) {
 		Route: &gtfs.Route{Id: routeID},
 	})
 }
+
+func (m *Manager) MockAddTripUpdate(tripID string, delay *time.Duration, stopTimeUpdates []gtfs.StopTimeUpdate) {
+	m.realTimeMutex.Lock()
+	defer m.realTimeMutex.Unlock()
+
+	trip := gtfs.Trip{
+		ID:              gtfs.TripID{ID: tripID},
+		Delay:           delay,
+		StopTimeUpdates: stopTimeUpdates,
+	}
+	m.realTimeTrips = append(m.realTimeTrips, trip)
+	if m.realTimeTripLookup == nil {
+		m.realTimeTripLookup = make(map[string]int)
+	}
+	m.realTimeTripLookup[tripID] = len(m.realTimeTrips) - 1
+}
