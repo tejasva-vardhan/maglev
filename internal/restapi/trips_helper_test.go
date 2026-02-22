@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"maglev.onebusaway.org/gtfsdb"
+	"maglev.onebusaway.org/internal/models"
 	"maglev.onebusaway.org/internal/utils"
 )
 
@@ -518,6 +519,175 @@ func TestBuildTripStatus_VehicleIDFormat(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotEmpty(t, model)
 	assert.Equal(t, vehicleID, model.VehicleID)
+}
+
+func makeStopTimePtrs(stops []gtfsdb.StopTime) []*gtfsdb.StopTime {
+	ptrs := make([]*gtfsdb.StopTime, len(stops))
+	for i := range stops {
+		ptrs[i] = &stops[i]
+	}
+	return ptrs
+}
+
+func secondsToNanos(s int64) int64 { return s * int64(time.Second) }
+
+func TestFindClosestStopByTimeWithDelays_NoDelays(t *testing.T) {
+	// serviceDate at midnight UTC; currentTime = 08:00:00 UTC
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC)
+
+	stops := []gtfsdb.StopTime{
+		{StopID: "s1", ArrivalTime: secondsToNanos(7 * 3600)}, // 07:00
+		{StopID: "s2", ArrivalTime: secondsToNanos(8 * 3600)}, // 08:00 — exact match
+		{StopID: "s3", ArrivalTime: secondsToNanos(9 * 3600)}, // 09:00
+	}
+
+	stopID, _ := findClosestStopByTimeWithDelays(currentTime, serviceDate, makeStopTimePtrs(stops), nil)
+	assert.Equal(t, "s2", stopID)
+}
+
+func TestFindClosestStopByTimeWithDelays_WithDelay(t *testing.T) {
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC)
+
+	stops := []gtfsdb.StopTime{
+		{StopID: "s1", DepartureTime: secondsToNanos(7 * 3600)}, // scheduled 07:00
+		{StopID: "s2", DepartureTime: secondsToNanos(9 * 3600)}, // scheduled 09:00
+	}
+	// delay of +60 minutes pushes s1 to 08:00 — closest to currentTime
+	delays := map[string]StopDelayInfo{
+		"s1": {DepartureDelay: 3600},
+	}
+
+	stopID, _ := findClosestStopByTimeWithDelays(currentTime, serviceDate, makeStopTimePtrs(stops), delays)
+	assert.Equal(t, "s1", stopID)
+}
+
+func TestFindClosestStopByTimeWithDelays_EmptyStops(t *testing.T) {
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC)
+
+	stopID, offset := findClosestStopByTimeWithDelays(currentTime, serviceDate, nil, nil)
+	assert.Equal(t, "", stopID)
+	assert.Equal(t, 0, offset)
+}
+
+func TestFindNextStopByTimeWithDelays_NoDelays(t *testing.T) {
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC)
+
+	stops := []gtfsdb.StopTime{
+		{StopID: "s1", DepartureTime: secondsToNanos(7 * 3600)},  // past
+		{StopID: "s2", DepartureTime: secondsToNanos(9 * 3600)},  // first future stop
+		{StopID: "s3", DepartureTime: secondsToNanos(10 * 3600)}, // later future
+	}
+
+	stopID, offset := findNextStopByTimeWithDelays(currentTime, serviceDate, makeStopTimePtrs(stops), nil)
+	assert.Equal(t, "s2", stopID)
+	assert.Equal(t, 3600, offset, "offset should be 3600 seconds (1 hour)")
+}
+
+func TestFindNextStopByTimeWithDelays_AllStopsPast(t *testing.T) {
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := time.Date(2024, 1, 1, 23, 0, 0, 0, time.UTC)
+
+	stops := []gtfsdb.StopTime{
+		{StopID: "s1", DepartureTime: secondsToNanos(7 * 3600)},
+		{StopID: "s2", DepartureTime: secondsToNanos(9 * 3600)},
+	}
+
+	stopID, _ := findNextStopByTimeWithDelays(currentTime, serviceDate, makeStopTimePtrs(stops), nil)
+	assert.Equal(t, "", stopID, "no next stop when all are in the past")
+}
+
+func TestFindNextStopByTimeWithDelays_WithDelay(t *testing.T) {
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := time.Date(2024, 1, 1, 8, 30, 0, 0, time.UTC)
+
+	stops := []gtfsdb.StopTime{
+		{StopID: "s1", DepartureTime: secondsToNanos(8 * 3600)}, // scheduled 08:00
+	}
+	// +90 minute delay pushes it to 09:30, making it the next stop
+	delays := map[string]StopDelayInfo{
+		"s1": {DepartureDelay: 90 * 60},
+	}
+
+	stopID, offset := findNextStopByTimeWithDelays(currentTime, serviceDate, makeStopTimePtrs(stops), delays)
+	assert.Equal(t, "s1", stopID)
+	// predicted arrival = 09:30 - current 08:30 = 3600s
+	assert.Equal(t, 3600, offset)
+}
+
+func TestFillStopsFromSchedule_BeforeAllStops(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+	ctx := context.Background()
+
+	trips := api.GtfsManager.GetTrips()
+	require.NotEmpty(t, trips)
+	agencies := api.GtfsManager.GetAgencies()
+	require.NotEmpty(t, agencies)
+
+	agencyID := agencies[0].Id
+	tripID := trips[0].ID
+
+	stopTimes, err := api.GtfsManager.GtfsDB.Queries.GetStopTimesForTrip(ctx, tripID)
+	require.NoError(t, err)
+	require.NotEmpty(t, stopTimes)
+
+	// Set currentTime well before the first stop
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := serviceDate.Add(time.Second) // 00:00:01 — before any stop
+
+	status := &models.TripStatusForTripDetails{}
+	api.fillStopsFromSchedule(ctx, status, tripID, currentTime, serviceDate, agencyID)
+
+	// When before all stops, NextStop should be the first stop
+	assert.NotEmpty(t, status.NextStop, "NextStop should be set when currentTime is before all stops")
+}
+
+func TestFillStopsFromSchedule_AfterAllStops(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+	ctx := context.Background()
+
+	trips := api.GtfsManager.GetTrips()
+	require.NotEmpty(t, trips)
+	agencies := api.GtfsManager.GetAgencies()
+	require.NotEmpty(t, agencies)
+
+	agencyID := agencies[0].Id
+	tripID := trips[0].ID
+
+	stopTimes, err := api.GtfsManager.GtfsDB.Queries.GetStopTimesForTrip(ctx, tripID)
+	require.NoError(t, err)
+	require.NotEmpty(t, stopTimes)
+
+	// Set currentTime well past the last stop (next day)
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := serviceDate.Add(30 * time.Hour)
+
+	status := &models.TripStatusForTripDetails{}
+	api.fillStopsFromSchedule(ctx, status, tripID, currentTime, serviceDate, agencyID)
+
+	// When past all stops, ClosestStop should be the last stop
+	assert.NotEmpty(t, status.ClosestStop, "ClosestStop should be set to last stop when past all stops")
+	assert.Empty(t, status.NextStop, "NextStop should be empty when past all stops")
+}
+
+func TestFillStopsFromSchedule_InvalidTripID(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+	ctx := context.Background()
+
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	status := &models.TripStatusForTripDetails{}
+
+	// Should not panic or set any stops for an invalid trip
+	api.fillStopsFromSchedule(ctx, status, "non-existent-trip", serviceDate, serviceDate, "any-agency")
+
+	assert.Empty(t, status.ClosestStop)
+	assert.Empty(t, status.NextStop)
 }
 
 // BenchmarkDistanceToLineSegment benchmarks the line segment distance calculation
