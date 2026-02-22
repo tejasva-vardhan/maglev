@@ -137,8 +137,8 @@ func transformBlockToEntry(block []gtfsdb.GetBlockDetailsRow, blockID, agencyID 
 					BlockSequence:      int(stop.StopSequence - 1),
 					DistanceAlongBlock: blockDistance,
 					StopTime: models.StopTime{
-						ArrivalTime:   int(stop.ArrivalTime / 1e9),
-						DepartureTime: int(stop.DepartureTime / 1e9),
+						ArrivalTime:   int(utils.NanosToSeconds(stop.ArrivalTime)),
+						DepartureTime: int(utils.NanosToSeconds(stop.DepartureTime)),
 						DropOffType:   int(stop.DropOffType.Int64),
 						PickupType:    int(stop.PickupType.Int64),
 						StopID:        utils.FormCombinedID(agencyID, stop.StopID),
