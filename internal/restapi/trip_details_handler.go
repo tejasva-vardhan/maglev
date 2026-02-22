@@ -12,7 +12,9 @@ import (
 	"maglev.onebusaway.org/internal/utils"
 )
 
-type TripDetailsParams struct {
+// TripParams holds the common query parameters for trip-related endpoints
+// (trip-details, trip-for-vehicle, etc.).
+type TripParams struct {
 	ServiceDate     *time.Time
 	IncludeTrip     bool
 	IncludeSchedule bool
@@ -20,11 +22,13 @@ type TripDetailsParams struct {
 	Time            *time.Time
 }
 
-// parseTripIdDetailsParams parses and validates parameters.
-func (api *RestAPI) parseTripIdDetailsParams(r *http.Request) (TripDetailsParams, map[string][]string) {
-	params := TripDetailsParams{
+// parseTripParams parses and validates the common trip query parameters.
+// includeScheduleDefault controls the default value of IncludeSchedule when the
+// parameter is not present in the request (true for trip-details, false for trip-for-vehicle).
+func (api *RestAPI) parseTripParams(r *http.Request, includeScheduleDefault bool) (TripParams, map[string][]string) {
+	params := TripParams{
 		IncludeTrip:     true,
-		IncludeSchedule: true,
+		IncludeSchedule: includeScheduleDefault,
 		IncludeStatus:   true,
 	}
 
@@ -107,7 +111,7 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 	defer api.GtfsManager.RUnlock()
 
 	// Capture parsing errors
-	params, fieldErrors := api.parseTripIdDetailsParams(r)
+	params, fieldErrors := api.parseTripParams(r, true)
 	if len(fieldErrors) > 0 {
 		api.validationErrorResponse(w, r, fieldErrors)
 		return
@@ -157,7 +161,13 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	situationsIDs := api.GetSituationIDsForTrip(r.Context(), tripID)
+	var situationsIDs []string
+	if status != nil && len(status.SituationIDs) > 0 {
+		situationsIDs = status.SituationIDs
+	} else {
+		situationsIDs = api.GetSituationIDsForTrip(r.Context(), tripID)
+	}
+
 	tripDetails := &models.TripDetails{
 		TripID:       utils.FormCombinedID(agencyID, trip.ID),
 		ServiceDate:  serviceDateMillis,
@@ -166,7 +176,7 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 		SituationIDs: situationsIDs,
 	}
 
-	if status != nil && status.VehicleID != "" {
+	if status != nil {
 		tripDetails.Status = status
 	}
 
