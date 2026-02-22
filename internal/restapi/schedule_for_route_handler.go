@@ -158,8 +158,8 @@ func (api *RestAPI) scheduleForRouteHandler(w http.ResponseWriter, r *http.Reque
 			}
 			stopTimesList := make([]models.RouteStopTime, 0, len(stopTimes))
 			for _, st := range stopTimes {
-				arrivalSec := int(st.ArrivalTime / 1e9)
-				departureSec := int(st.DepartureTime / 1e9)
+				arrivalSec := int(utils.NanosToSeconds(st.ArrivalTime))
+				departureSec := int(utils.NanosToSeconds(st.DepartureTime))
 				stopTimesList = append(stopTimesList, models.RouteStopTime{
 					ArrivalEnabled:   true,
 					ArrivalTime:      arrivalSec,
