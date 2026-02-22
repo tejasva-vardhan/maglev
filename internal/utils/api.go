@@ -33,6 +33,22 @@ func CalculateSecondsSinceServiceDate(currentTime time.Time, serviceDate time.Ti
 	return int64(duration.Seconds())
 }
 
+// NanosToSeconds converts a GTFS stop-time value (stored as nanoseconds since midnight)
+// to seconds since midnight.
+func NanosToSeconds(nanos int64) int64 {
+	return nanos / 1e9
+}
+
+// EffectiveStopTimeSeconds returns the effective stop time in seconds since midnight,
+// using arrivalTimeNanos with a fallback to departureTimeNanos when arrival is zero.
+// Both inputs are nanoseconds since midnight (the GTFS database storage format).
+func EffectiveStopTimeSeconds(arrivalTimeNanos, departureTimeNanos int64) int64 {
+	if arrivalTimeNanos > 0 {
+		return arrivalTimeNanos / 1e9
+	}
+	return departureTimeNanos / 1e9
+}
+
 // ExtractCodeID extracts the `code_id` from a string in the format `{agency_id}_{code_id}`.
 func ExtractCodeID(combinedID string) (string, error) {
 	parts := strings.SplitN(combinedID, "_", 2)
