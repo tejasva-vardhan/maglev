@@ -273,6 +273,12 @@ func TestClearAllGTFSData(t *testing.T) {
 	require.NoError(t, err, "Should be able to retrieve agencies")
 	assert.Greater(t, len(agencies), 0, "Should have agencies before clear")
 
+	// Verify calendar_dates exist before clear
+	var countBefore int
+	err = client.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM calendar_dates").Scan(&countBefore)
+	require.NoError(t, err, "Should be able to count calendar_dates before clear")
+	assert.Greater(t, countBefore, 0, "Should have calendar_dates before clear")
+
 	// Clear all data
 	err = client.clearAllGTFSData(ctx)
 	require.NoError(t, err, "Should be able to clear all GTFS data")
@@ -285,6 +291,12 @@ func TestClearAllGTFSData(t *testing.T) {
 	routesAfter, err := client.Queries.ListRoutes(ctx)
 	require.NoError(t, err, "Should be able to query routes after clear")
 	assert.Equal(t, 0, len(routesAfter), "Should have no routes after clear")
+
+	// Verify calendar_dates are cleared
+	var countAfter int
+	err = client.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM calendar_dates").Scan(&countAfter)
+	require.NoError(t, err, "Should be able to count calendar_dates after clear")
+	assert.Equal(t, 0, countAfter, "Should have no calendar_dates after clear")
 
 	// Note: Import metadata should NOT be cleared by clearAllGTFSData
 	metadata, err := client.Queries.GetImportMetadata(ctx)

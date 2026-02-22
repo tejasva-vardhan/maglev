@@ -485,6 +485,9 @@ DELETE FROM trips;
 -- name: ClearCalendar :exec
 DELETE FROM calendar;
 
+-- name: ClearCalendarDates :exec
+DELETE FROM calendar_dates;
+
 -- name: ClearStops :exec
 DELETE FROM stops;
 

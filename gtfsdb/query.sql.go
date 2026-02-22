@@ -47,6 +47,15 @@ func (q *Queries) ClearCalendar(ctx context.Context) error {
 	return err
 }
 
+const clearCalendarDates = `-- name: ClearCalendarDates :exec
+DELETE FROM calendar_dates
+`
+
+func (q *Queries) ClearCalendarDates(ctx context.Context) error {
+	_, err := q.exec(ctx, q.clearCalendarDatesStmt, clearCalendarDates)
+	return err
+}
+
 const clearRoutes = `-- name: ClearRoutes :exec
 DELETE FROM routes
 `
