@@ -38,8 +38,7 @@ func (api *RestAPI) reportProblemWithTripHandler(w http.ResponseWriter, r *http.
 	userVehicleNumber := query.Get("userVehicleNumber")
 	userLatStr := utils.ValidateNumericParam(query.Get("userLat"))
 	userLonStr := utils.ValidateNumericParam(query.Get("userLon"))
-
-	userLocationAccuracy := query.Get("userLocationAccuracy")
+	userLocationAccuracy := utils.ValidateNumericParam(query.Get("userLocationAccuracy"))
 
 	// Log the problem report for observability
 	logger = logging.FromContext(r.Context()).With(slog.String("component", "problem_reporting"))

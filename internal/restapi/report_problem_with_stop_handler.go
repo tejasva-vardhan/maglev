@@ -32,7 +32,7 @@ func (api *RestAPI) reportProblemWithStopHandler(w http.ResponseWriter, r *http.
 	userComment := utils.TruncateComment(query.Get("userComment"))
 	userLatStr := utils.ValidateNumericParam(query.Get("userLat"))
 	userLonStr := utils.ValidateNumericParam(query.Get("userLon"))
-	userLocationAccuracy := query.Get("userLocationAccuracy")
+	userLocationAccuracy := utils.ValidateNumericParam(query.Get("userLocationAccuracy"))
 
 	// Log the problem report for observability
 	logger = logging.FromContext(r.Context()).With(slog.String("component", "problem_reporting"))
