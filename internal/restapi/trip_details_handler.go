@@ -22,7 +22,7 @@ type TripParams struct {
 	Time            *time.Time
 }
 
-// parseTripParams parses and validates the common trip query parameters.
+// parseTripParams parses and validates the common trip query params
 // includeScheduleDefault controls the default value of IncludeSchedule when the
 // parameter is not present in the request (true for trip-details, false for trip-for-vehicle).
 func (api *RestAPI) parseTripParams(r *http.Request, includeScheduleDefault bool) (TripParams, map[string][]string) {
