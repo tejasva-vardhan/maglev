@@ -131,12 +131,22 @@ func (api *RestAPI) arrivalsAndDeparturesForStopHandler(w http.ResponseWriter, r
 	var allActiveStopTimes []activeStopTime
 
 	for dayOffset := -1; dayOffset <= 1; dayOffset++ {
+		if ctx.Err() != nil {
+			return
+		}
+
 		targetDate := params.Time.AddDate(0, 0, dayOffset)
 		serviceMidnight := time.Date(targetDate.Year(), targetDate.Month(), targetDate.Day(), 0, 0, 0, 0, loc)
 		serviceDateStr := targetDate.Format("20060102")
 
 		activeServiceIDs, err := api.GtfsManager.GtfsDB.Queries.GetActiveServiceIDsForDate(ctx, serviceDateStr)
-		if err != nil || len(activeServiceIDs) == 0 {
+		if err != nil {
+			api.Logger.Warn("failed to query active service IDs",
+				slog.String("date", serviceDateStr),
+				slog.Any("error", err))
+			continue
+		}
+		if len(activeServiceIDs) == 0 {
 			continue
 		}
 
@@ -158,6 +168,9 @@ func (api *RestAPI) arrivalsAndDeparturesForStopHandler(w http.ResponseWriter, r
 			WindowEndNanos:   endNanos,
 		})
 		if err != nil {
+			api.Logger.Warn("failed to query stop times in window",
+				slog.String("stopID", stopCode),
+				slog.Any("error", err))
 			continue
 		}
 
