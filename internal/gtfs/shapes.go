@@ -12,30 +12,33 @@ func ComputeRegionBounds(shapes []gtfs.Shape, stops []gtfs.Stop) *RegionBounds {
 	var minLat, maxLat, minLon, maxLon float64
 	first := true
 
+	updateBounds := func(lat, lon float64) {
+		if first {
+			minLat = lat
+			maxLat = lat
+			minLon = lon
+			maxLon = lon
+			first = false
+			return
+		}
+		if lat < minLat {
+			minLat = lat
+		}
+		if lat > maxLat {
+			maxLat = lat
+		}
+		if lon < minLon {
+			minLon = lon
+		}
+		if lon > maxLon {
+			maxLon = lon
+		}
+	}
+
 	if len(shapes) > 0 {
 		for _, shape := range shapes {
 			for _, point := range shape.Points {
-				if first {
-					minLat = point.Latitude
-					maxLat = point.Latitude
-					minLon = point.Longitude
-					maxLon = point.Longitude
-					first = false
-					continue
-				}
-
-				if point.Latitude < minLat {
-					minLat = point.Latitude
-				}
-				if point.Latitude > maxLat {
-					maxLat = point.Latitude
-				}
-				if point.Longitude < minLon {
-					minLon = point.Longitude
-				}
-				if point.Longitude > maxLon {
-					maxLon = point.Longitude
-				}
+				updateBounds(point.Latitude, point.Longitude)
 			}
 		}
 	} else {
@@ -43,27 +46,7 @@ func ComputeRegionBounds(shapes []gtfs.Shape, stops []gtfs.Stop) *RegionBounds {
 			if stop.Latitude == nil || stop.Longitude == nil {
 				continue
 			}
-			if first {
-				minLat = *stop.Latitude
-				maxLat = *stop.Latitude
-				minLon = *stop.Longitude
-				maxLon = *stop.Longitude
-				first = false
-				continue
-			}
-
-			if *stop.Latitude < minLat {
-				minLat = *stop.Latitude
-			}
-			if *stop.Latitude > maxLat {
-				maxLat = *stop.Latitude
-			}
-			if *stop.Longitude < minLon {
-				minLon = *stop.Longitude
-			}
-			if *stop.Longitude > maxLon {
-				maxLon = *stop.Longitude
-			}
+			updateBounds(*stop.Latitude, *stop.Longitude)
 		}
 	}
 
