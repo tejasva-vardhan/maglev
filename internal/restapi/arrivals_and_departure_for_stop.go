@@ -116,16 +116,6 @@ func (api *RestAPI) arrivalsAndDeparturesForStopHandler(w http.ResponseWriter, r
 	windowStart := params.Time.Add(-time.Duration(params.MinutesBefore) * time.Minute)
 	windowEnd := params.Time.Add(time.Duration(params.MinutesAfter) * time.Minute)
 
-	windowStartNanos := convertToNanosSinceMidnight(windowStart)
-	windowEndNanos := convertToNanosSinceMidnight(windowEnd)
-
-	serviceDate := params.Time.Format("20060102")
-	activeServiceIDs, err := api.GtfsManager.GtfsDB.Queries.GetActiveServiceIDsForDate(ctx, serviceDate)
-	if err != nil {
-		api.serverErrorResponse(w, r, err)
-		return
-	}
-
 	arrivals := make([]models.ArrivalAndDeparture, 0)
 	references := models.NewEmptyReferences()
 
@@ -134,35 +124,70 @@ func (api *RestAPI) arrivalsAndDeparturesForStopHandler(w http.ResponseWriter, r
 		agency.Phone.String, agency.Email.String, agency.FareUrl.String, "", false,
 	))
 
-	if len(activeServiceIDs) == 0 {
+	type activeStopTime struct {
+		gtfsdb.GetStopTimesForStopInWindowRow
+		ServiceDate time.Time
+	}
+	var allActiveStopTimes []activeStopTime
+
+	for dayOffset := -1; dayOffset <= 1; dayOffset++ {
+		if ctx.Err() != nil {
+			return
+		}
+
+		targetDate := params.Time.AddDate(0, 0, dayOffset)
+		serviceMidnight := time.Date(targetDate.Year(), targetDate.Month(), targetDate.Day(), 0, 0, 0, 0, loc)
+		serviceDateStr := targetDate.Format("20060102")
+
+		activeServiceIDs, err := api.GtfsManager.GtfsDB.Queries.GetActiveServiceIDsForDate(ctx, serviceDateStr)
+		if err != nil {
+			api.Logger.Warn("failed to query active service IDs",
+				slog.String("date", serviceDateStr),
+				slog.Any("error", err))
+			continue
+		}
+		if len(activeServiceIDs) == 0 {
+			continue
+		}
+
+		activeServiceIDSet := make(map[string]bool, len(activeServiceIDs))
+		for _, sid := range activeServiceIDs {
+			activeServiceIDSet[sid] = true
+		}
+
+		startNanos := windowStart.Sub(serviceMidnight).Nanoseconds()
+		endNanos := windowEnd.Sub(serviceMidnight).Nanoseconds()
+
+		if endNanos < 0 {
+			continue
+		}
+
+		stopTimes, err := api.GtfsManager.GtfsDB.Queries.GetStopTimesForStopInWindow(ctx, gtfsdb.GetStopTimesForStopInWindowParams{
+			StopID:           stopCode,
+			WindowStartNanos: startNanos,
+			WindowEndNanos:   endNanos,
+		})
+		if err != nil {
+			api.Logger.Warn("failed to query stop times in window",
+				slog.String("stopID", stopCode),
+				slog.Any("error", err))
+			continue
+		}
+
+		for _, st := range stopTimes {
+			if activeServiceIDSet[st.ServiceID] {
+				allActiveStopTimes = append(allActiveStopTimes, activeStopTime{
+					GetStopTimesForStopInWindowRow: st,
+					ServiceDate:                    serviceMidnight,
+				})
+			}
+		}
+	}
+
+	if len(allActiveStopTimes) == 0 {
 		response := models.NewArrivalsAndDepartureResponse(arrivals, references, []string{}, []string{}, stopID, api.Clock)
 		api.sendResponse(w, r, response)
 		return
-	}
-
-	// Get trips that serve this stop and are active today
-	activeServiceIDSet := make(map[string]bool, len(activeServiceIDs))
-	for _, sid := range activeServiceIDs {
-		activeServiceIDSet[sid] = true
-	}
-
-	// Get all stop times for this stop within the time window
-	allStopTimes, err := api.GtfsManager.GtfsDB.Queries.GetStopTimesForStopInWindow(ctx, gtfsdb.GetStopTimesForStopInWindowParams{
-		StopID:           stopCode,
-		WindowStartNanos: windowStartNanos,
-		WindowEndNanos:   windowEndNanos,
-	})
-	if err != nil {
-		api.serverErrorResponse(w, r, err)
-		return
-	}
-
-	// Filter stop times to only include active trips
-	var stopTimes []gtfsdb.GetStopTimesForStopInWindowRow
-	for _, st := range allStopTimes {
-		if activeServiceIDSet[st.ServiceID] {
-			stopTimes = append(stopTimes, st)
-		}
 	}
 
 	// Maps for Caching and References
@@ -173,19 +198,11 @@ func (api *RestAPI) arrivalsAndDeparturesForStopHandler(w http.ResponseWriter, r
 	// Add the current stop
 	stopIDSet[stop.ID] = true
 
-	serviceMidnight := time.Date(
-		params.Time.Year(),
-		params.Time.Month(),
-		params.Time.Day(),
-		0, 0, 0, 0,
-		loc,
-	)
-	serviceDateMillis := serviceMidnight.UnixMilli()
-
 	batchRouteIDs := make(map[string]bool)
 	batchTripIDs := make(map[string]bool)
 
-	for _, st := range stopTimes {
+	for _, ast := range allActiveStopTimes {
+		st := ast.GetStopTimesForStopInWindowRow
 		if st.RouteID != "" {
 			batchRouteIDs[st.RouteID] = true
 		}
@@ -226,7 +243,11 @@ func (api *RestAPI) arrivalsAndDeparturesForStopHandler(w http.ResponseWriter, r
 		tripsLookup[trip.ID] = trip
 	}
 
-	for _, st := range stopTimes {
+	for _, ast := range allActiveStopTimes {
+		st := ast.GetStopTimesForStopInWindowRow
+
+		serviceMidnight := ast.ServiceDate
+		serviceDateMillis := serviceMidnight.UnixMilli()
 		if ctx.Err() != nil {
 			return
 		}
@@ -308,7 +329,7 @@ func (api *RestAPI) arrivalsAndDeparturesForStopHandler(w http.ResponseWriter, r
 		}
 
 		if vehicle != nil {
-			status, _ := api.BuildTripStatus(ctx, agencyID, st.TripID, params.Time, params.Time)
+			status, _ := api.BuildTripStatus(ctx, agencyID, st.TripID, serviceMidnight, params.Time)
 			if status != nil {
 				tripStatus = status
 
@@ -373,7 +394,7 @@ func (api *RestAPI) arrivalsAndDeparturesForStopHandler(w http.ResponseWriter, r
 			totalStopsInTrip = len(tripStopTimes)
 		}
 
-		blockTripSequence := api.calculateBlockTripSequence(ctx, st.TripID, params.Time)
+		blockTripSequence := api.calculateBlockTripSequence(ctx, st.TripID, serviceMidnight)
 
 		arrival := models.NewArrivalAndDeparture(
 			utils.FormCombinedID(agencyID, route.ID),  // routeID
@@ -496,12 +517,6 @@ func (api *RestAPI) arrivalsAndDeparturesForStopHandler(w http.ResponseWriter, r
 	nearbyStopIDs := getNearbyStopIDs(api, ctx, stop.Lat, stop.Lon, stopCode, agencyID)
 	response := models.NewArrivalsAndDepartureResponse(arrivals, references, nearbyStopIDs, []string{}, stopID, api.Clock)
 	api.sendResponse(w, r, response)
-}
-
-func convertToNanosSinceMidnight(t time.Time) int64 {
-	midnight := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
-	duration := t.Sub(midnight)
-	return duration.Nanoseconds()
 }
 
 func getNearbyStopIDs(api *RestAPI, ctx context.Context, lat, lon float64, stopID, agencyID string) []string {

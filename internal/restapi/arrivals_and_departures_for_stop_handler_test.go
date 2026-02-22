@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"maglev.onebusaway.org/internal/clock"
 	"maglev.onebusaway.org/internal/utils"
 )
 
@@ -445,4 +446,39 @@ func TestArrivalsAndDeparturesForStopHandlerWithInvalidParams(t *testing.T) {
 	endpoint = "/api/where/arrivals-and-departures-for-stop/" + stopID + ".json?key=TEST&minutesAfter=invalid"
 	resp, _ = serveApiAndRetrieveEndpoint(t, api, endpoint)
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestArrivalsAndDeparturesReturnsResultsNearMidnight(t *testing.T) {
+	mockClock := clock.NewMockClock(time.Date(2025, 6, 13, 11, 0, 0, 0, time.UTC))
+
+	api := createTestApiWithClock(t, mockClock)
+	defer api.Shutdown()
+
+	agency := api.GtfsManager.GetAgencies()[0]
+	stops := api.GtfsManager.GetStops()
+	if len(stops) == 0 {
+		t.Skip("No stops available for testing")
+	}
+
+	var foundResults bool
+
+	for _, stop := range stops {
+		stopID := utils.FormCombinedID(agency.Id, stop.Id)
+		url := "/api/where/arrivals-and-departures-for-stop/" + stopID + ".json?key=TEST&minutesBefore=15&minutesAfter=240"
+
+		resp, model := serveApiAndRetrieveEndpoint(t, api, url)
+
+		if resp.StatusCode == http.StatusOK {
+			if data, ok := model.Data.(map[string]interface{}); ok {
+				if entry, ok := data["entry"].(map[string]interface{}); ok {
+					if arrivals, ok := entry["arrivalsAndDepartures"].([]interface{}); ok && len(arrivals) > 0 {
+						foundResults = true
+						break
+					}
+				}
+			}
+		}
+	}
+
+	assert.True(t, foundResults, "Should find at least one stop with early morning arrivals near midnight boundary")
 }
