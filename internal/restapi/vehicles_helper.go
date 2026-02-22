@@ -78,7 +78,10 @@ Status comes from the trip's schedule relationship ("SCHEDULED", "CANCELED", "AD
 */
 func GetVehicleStatusAndPhase(vehicle *gtfs.Vehicle) (status string, phase string) {
 	if vehicle == nil {
-		return "default", ""
+		// "default" matches the Java OBA behavior. In TripStatusBeanServiceImpl.getBlockLocationAsStatusBean()
+		// (line 252-253), status is unconditionally set to "default" first. When no real-time data exists,
+		// Java file: onebusaway-transit-data-federation/src/main/java/org/onebusaway/transit_data_federation/impl/beans/TripStatusBeanServiceImpl.java
+		return "default", "scheduled"
 	}
 
 	sr := gtfsrt.TripDescriptor_SCHEDULED
@@ -103,7 +106,7 @@ func (api *RestAPI) BuildVehicleStatus(
 	agencyID string,
 	status *models.TripStatusForTripDetails,
 ) {
-	if vehicle == nil || defaultStaleDetector.Check(vehicle, time.Now()) {
+	if vehicle == nil || defaultStaleDetector.Check(vehicle, api.Clock.Now()) {
 		status.Status, status.Phase = GetVehicleStatusAndPhase(nil)
 		return
 	}
@@ -167,13 +170,7 @@ func (api *RestAPI) projectPositionOntoRoute(ctx context.Context, tripID string,
 		return nil
 	}
 
-	shapePoints := make([]gtfs.ShapePoint, len(shapeRows))
-	for i, sp := range shapeRows {
-		shapePoints[i] = gtfs.ShapePoint{
-			Latitude:  sp.Lat,
-			Longitude: sp.Lon,
-		}
-	}
+	shapePoints := shapeRowsToPoints(shapeRows)
 
 	minDistance := math.MaxFloat64
 	var closestPoint models.Location
@@ -199,29 +196,7 @@ func (api *RestAPI) projectPositionOntoRoute(ctx context.Context, tripID string,
 }
 
 func projectPointToSegment(px, py, x1, y1, x2, y2 float64) (float64, models.Location) {
-	dx := x2 - x1
-	dy := y2 - y1
-
-	if dx == 0 && dy == 0 {
-		dist := utils.Distance(px, py, x1, y1)
-		return dist, models.Location{Lat: x1, Lon: y1}
-	}
-
-	t := ((px-x1)*dx + (py-y1)*dy) / (dx*dx + dy*dy)
-
-	if t < 0 {
-		dist := utils.Distance(px, py, x1, y1)
-		return dist, models.Location{Lat: x1, Lon: y1}
-	}
-	if t > 1 {
-		dist := utils.Distance(px, py, x2, y2)
-		return dist, models.Location{Lat: x2, Lon: y2}
-	}
-
-	projLat := x1 + t*dx
-	projLon := y1 + t*dy
-
-	dist := utils.Distance(px, py, projLat, projLon)
+	dist, _, projLat, projLon := projectOntoSegment(px, py, x1, y1, x2, y2)
 	return dist, models.Location{Lat: projLat, Lon: projLon}
 }
 
