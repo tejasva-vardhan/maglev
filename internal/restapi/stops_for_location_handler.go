@@ -183,7 +183,7 @@ func (api *RestAPI) stopsForLocationHandler(w http.ResponseWriter, r *http.Reque
 	// Build results using the pre-fetched data
 	for _, stopID := range stopIDs {
 		if ctx.Err() != nil {
-			return 
+			return
 		}
 
 		stop := stopMap[stopID]
@@ -219,7 +219,7 @@ func (api *RestAPI) stopsForLocationHandler(w http.ResponseWriter, r *http.Reque
 	}
 
 	if ctx.Err() != nil {
-		return 
+		return
 	}
 
 	agencies := utils.FilterAgencies(api.GtfsManager.GetAgencies(), agencyIDs)

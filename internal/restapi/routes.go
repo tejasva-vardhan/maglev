@@ -87,6 +87,8 @@ func (api *RestAPI) SetRoutes(mux *http.ServeMux) {
 	// Routes with combined ID validation (agency_id_code format)
 	mux.Handle("GET /api/where/report-problem-with-trip/{id}", CacheControlMiddleware(models.CacheDurationNone, withCombinedID(api, api.reportProblemWithTripHandler)))
 	mux.Handle("GET /api/where/report-problem-with-stop/{id}", CacheControlMiddleware(models.CacheDurationNone, withCombinedID(api, api.reportProblemWithStopHandler)))
+	mux.Handle("GET /api/where/problem-reports-for-trip/{id}", CacheControlMiddleware(models.CacheDurationNone, withCombinedID(api, api.problemReportsForTripHandler)))
+	mux.Handle("GET /api/where/problem-reports-for-stop/{id}", CacheControlMiddleware(models.CacheDurationNone, withCombinedID(api, api.problemReportsForStopHandler)))
 	mux.Handle("GET /api/where/trip/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, api.tripHandler)))
 	mux.Handle("GET /api/where/route/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, api.routeHandler)))
 	mux.Handle("GET /api/where/stop/{id}", CacheControlMiddleware(models.CacheDurationLong, withCombinedID(api, api.stopHandler)))
