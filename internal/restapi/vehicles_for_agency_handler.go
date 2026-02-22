@@ -11,6 +11,8 @@ import (
 func (api *RestAPI) vehiclesForAgencyHandler(w http.ResponseWriter, r *http.Request) {
 	id, _ := utils.GetIDFromContext(r.Context())
 
+	ctx := r.Context()
+
 	api.GtfsManager.RLock()
 	defer api.GtfsManager.RUnlock()
 
@@ -34,6 +36,10 @@ func (api *RestAPI) vehiclesForAgencyHandler(w http.ResponseWriter, r *http.Requ
 	tripRefs := make(map[string]interface{})
 
 	for _, vehicle := range vehiclesForAgency {
+		if ctx.Err() != nil {
+			return
+		}
+
 		vehicleStatus := models.VehicleStatus{
 			VehicleID: vehicle.ID.ID,
 		}
@@ -96,7 +102,7 @@ func (api *RestAPI) vehiclesForAgencyHandler(w http.ResponseWriter, r *http.Requ
 			}
 
 			// Find and add route to references
-			if route, err := api.GtfsManager.GtfsDB.Queries.GetRoute(r.Context(), vehicle.Trip.ID.RouteID); err == nil {
+			if route, err := api.GtfsManager.GtfsDB.Queries.GetRoute(ctx, vehicle.Trip.ID.RouteID); err == nil {
 				shortName := ""
 				if route.ShortName.Valid {
 					shortName = route.ShortName.String
