@@ -89,8 +89,8 @@ docker-build:
 		--build-arg BUILD_TIME=$(BUILD_TIME) \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg GIT_DIRTY=$(GIT_DIRTY) \
-		--build-arg GIT_EMAIL=$(GIT_EMAIL) \
-		--build-arg GIT_NAME=$(GIT_NAME) \
+		--build-arg 'GIT_NAME=$(GIT_NAME)' \
+	    --build-arg 'GIT_EMAIL=$(GIT_EMAIL)' \
 		--build-arg GIT_REMOTE=$(GIT_REMOTE) \
 		--build-arg GIT_MSG='$(GIT_MSG)' \
 		--build-arg BUILD_HOST=$(BUILD_HOST) \
