@@ -33,7 +33,7 @@ func CalculateSecondsSinceServiceDate(currentTime time.Time, serviceDate time.Ti
 	return int64(duration.Seconds())
 }
 
-// NanosToSeconds converts a GTFS stop-time value (stored as nanoseconds since midnight)
+// Converts a GTFS stop-time value (stored as nanoseconds in db since midnight)
 // to seconds since midnight.
 func NanosToSeconds(nanos int64) int64 {
 	return nanos / 1e9
