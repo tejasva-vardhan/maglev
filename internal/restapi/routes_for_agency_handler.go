@@ -10,6 +10,9 @@ import (
 func (api *RestAPI) routesForAgencyHandler(w http.ResponseWriter, r *http.Request) {
 	id, _ := utils.GetIDFromContext(r.Context())
 
+	api.GtfsManager.RLock()
+	defer api.GtfsManager.RUnlock()
+
 	agency := api.GtfsManager.FindAgency(id)
 
 	if agency == nil {
