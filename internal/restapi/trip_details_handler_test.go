@@ -380,7 +380,7 @@ func TestParseTripIdDetailsParams_Unit(t *testing.T) {
 	defer api.Shutdown()
 
 	req := httptest.NewRequest("GET", "/?includeTrip=false&includeSchedule=false&serviceDate=1609459200000", nil)
-	params, errs := api.parseTripIdDetailsParams(req)
+	params, errs := api.parseTripParams(req, true)
 
 	assert.Nil(t, errs)
 	assert.False(t, params.IncludeTrip)
@@ -388,7 +388,7 @@ func TestParseTripIdDetailsParams_Unit(t *testing.T) {
 	assert.NotNil(t, params.ServiceDate)
 
 	reqDefault := httptest.NewRequest("GET", "/", nil)
-	paramsDefault, errsDefault := api.parseTripIdDetailsParams(reqDefault)
+	paramsDefault, errsDefault := api.parseTripParams(reqDefault, true)
 
 	assert.Nil(t, errsDefault)
 	assert.True(t, paramsDefault.IncludeTrip)
@@ -396,7 +396,7 @@ func TestParseTripIdDetailsParams_Unit(t *testing.T) {
 	assert.True(t, paramsDefault.IncludeSchedule)
 
 	reqInvalid := httptest.NewRequest("GET", "/?time=invalid&serviceDate=invalid", nil)
-	_, errsInvalid := api.parseTripIdDetailsParams(reqInvalid)
+	_, errsInvalid := api.parseTripParams(reqInvalid, true)
 
 	assert.NotNil(t, errsInvalid)
 	assert.Contains(t, errsInvalid, "time")
