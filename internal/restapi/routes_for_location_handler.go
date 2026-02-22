@@ -105,10 +105,14 @@ func (api *RestAPI) routesForLocationHandler(w http.ResponseWriter, r *http.Requ
 		if query != "" && strings.ToLower(routeRow.ShortName.String) != query {
 			continue
 		}
-		agencyIDs[routeRow.AgencyID] = true
-		if !routeIDs[routeRow.ID] {
+
+		combinedRouteID := utils.FormCombinedID(routeRow.AgencyID, routeRow.ID)
+
+		if !routeIDs[combinedRouteID] {
+			agencyIDs[routeRow.AgencyID] = true
+
 			results = append(results, models.NewRoute(
-				utils.FormCombinedID(routeRow.AgencyID, routeRow.ID),
+				combinedRouteID,
 				routeRow.AgencyID,
 				routeRow.ShortName.String,
 				routeRow.LongName.String,
@@ -120,7 +124,7 @@ func (api *RestAPI) routesForLocationHandler(w http.ResponseWriter, r *http.Requ
 				routeRow.ShortName.String,
 			))
 		}
-		routeIDs[routeRow.ID] = true
+		routeIDs[combinedRouteID] = true
 		if len(results) >= maxCount {
 			isLimitExceeded = true
 			break
@@ -152,8 +156,7 @@ func (api *RestAPI) routesForLocationHandler(w http.ResponseWriter, r *http.Requ
 func checkIfOutOfBounds(api *RestAPI, lat float64, lon float64, latSpan float64, lonSpan float64, radius float64) bool {
 	regionLat, regionLon, regionLatSpan, regionLonSpan := api.GtfsManager.GetRegionBounds()
 
-	// TODO: use stop locations data as a fallback if no shapes exists
-	// returns false if there is no shapes or there exists only one point
+	// returns false if there exists only one point
 	if regionLatSpan == 0 && regionLonSpan == 0 {
 		return false
 	}

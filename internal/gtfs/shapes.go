@@ -3,38 +3,50 @@ package gtfs
 import "github.com/OneBusAway/go-gtfs"
 
 // ComputeRegionBounds calculates the geographic boundaries of the GTFS region
-// from all shape points. Returns nil if no shapes exist.
-func ComputeRegionBounds(shapes []gtfs.Shape) *RegionBounds {
-	if len(shapes) == 0 {
+// from all shape points, falling back to stops if no shapes exist.
+func ComputeRegionBounds(shapes []gtfs.Shape, stops []gtfs.Stop) *RegionBounds {
+	if len(shapes) == 0 && len(stops) == 0 {
 		return nil
 	}
 
 	var minLat, maxLat, minLon, maxLon float64
 	first := true
 
-	for _, shape := range shapes {
-		for _, point := range shape.Points {
-			if first {
-				minLat = point.Latitude
-				maxLat = point.Latitude
-				minLon = point.Longitude
-				maxLon = point.Longitude
-				first = false
+	updateBounds := func(lat, lon float64) {
+		if first {
+			minLat = lat
+			maxLat = lat
+			minLon = lon
+			maxLon = lon
+			first = false
+			return
+		}
+		if lat < minLat {
+			minLat = lat
+		}
+		if lat > maxLat {
+			maxLat = lat
+		}
+		if lon < minLon {
+			minLon = lon
+		}
+		if lon > maxLon {
+			maxLon = lon
+		}
+	}
+
+	if len(shapes) > 0 {
+		for _, shape := range shapes {
+			for _, point := range shape.Points {
+				updateBounds(point.Latitude, point.Longitude)
+			}
+		}
+	} else {
+		for _, stop := range stops {
+			if stop.Latitude == nil || stop.Longitude == nil {
 				continue
 			}
-
-			if point.Latitude < minLat {
-				minLat = point.Latitude
-			}
-			if point.Latitude > maxLat {
-				maxLat = point.Latitude
-			}
-			if point.Longitude < minLon {
-				minLon = point.Longitude
-			}
-			if point.Longitude > maxLon {
-				maxLon = point.Longitude
-			}
+			updateBounds(*stop.Latitude, *stop.Longitude)
 		}
 	}
 

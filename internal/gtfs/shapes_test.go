@@ -7,10 +7,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func fptr(v float64) *float64 { return &v }
+
 func TestGetRegionBounds(t *testing.T) {
 	tests := []struct {
 		name            string
 		shapes          []gtfs.Shape
+		stops           []gtfs.Stop
 		expectedLat     float64
 		expectedLon     float64
 		expectedLatSpan float64
@@ -77,6 +80,18 @@ func TestGetRegionBounds(t *testing.T) {
 			expectedLonSpan: 0.0,
 		},
 		{
+			name: "Fallback to Stops",
+			shapes: []gtfs.Shape{},
+			stops: []gtfs.Stop{
+				{Latitude: fptr(47.0), Longitude: fptr(-122.0)},
+				{Latitude: fptr(48.0), Longitude: fptr(-121.0)},
+			},
+			expectedLat:     47.5,
+			expectedLon:     -121.5,
+			expectedLatSpan: 1.0,
+			expectedLonSpan: 1.0,
+		},
+		{
 			name: "Real Example",
 			shapes: []gtfs.Shape{
 				{
@@ -106,7 +121,7 @@ func TestGetRegionBounds(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			bounds := ComputeRegionBounds(tc.shapes)
+			bounds := ComputeRegionBounds(tc.shapes, tc.stops)
 
 			var lat, lon, latSpan, lonSpan float64
 			if bounds != nil {
