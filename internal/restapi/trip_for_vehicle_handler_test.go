@@ -674,14 +674,14 @@ func TestParseTripForVehicleParams_Unit(t *testing.T) {
 	defer api.Shutdown()
 
 	req := httptest.NewRequest("GET", "/?includeStatus=false&time=1609459200000", nil)
-	params, errs := api.parseTripForVehicleParams(req)
+	params, errs := api.parseTripParams(req, false)
 
 	assert.Nil(t, errs)
 	assert.False(t, params.IncludeStatus)
 	assert.NotNil(t, params.Time)
 
 	reqDefault := httptest.NewRequest("GET", "/", nil)
-	paramsDefault, errsDefault := api.parseTripForVehicleParams(reqDefault)
+	paramsDefault, errsDefault := api.parseTripParams(reqDefault, false)
 
 	assert.Nil(t, errsDefault)
 	assert.True(t, paramsDefault.IncludeTrip)
@@ -689,7 +689,7 @@ func TestParseTripForVehicleParams_Unit(t *testing.T) {
 	assert.True(t, paramsDefault.IncludeStatus)
 
 	reqInvalid := httptest.NewRequest("GET", "/?serviceDate=invalid&time=invalid", nil)
-	_, errsInvalid := api.parseTripForVehicleParams(reqInvalid)
+	_, errsInvalid := api.parseTripParams(reqInvalid, false)
 
 	assert.NotNil(t, errsInvalid)
 	assert.Contains(t, errsInvalid, "serviceDate")
