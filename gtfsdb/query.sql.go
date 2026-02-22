@@ -47,6 +47,15 @@ func (q *Queries) ClearCalendar(ctx context.Context) error {
 	return err
 }
 
+const clearCalendarDates = `-- name: ClearCalendarDates :exec
+DELETE FROM calendar_dates
+`
+
+func (q *Queries) ClearCalendarDates(ctx context.Context) error {
+	_, err := q.exec(ctx, q.clearCalendarDatesStmt, clearCalendarDates)
+	return err
+}
+
 const clearRoutes = `-- name: ClearRoutes :exec
 DELETE FROM routes
 `
@@ -673,6 +682,70 @@ func (q *Queries) CreateTrip(ctx context.Context, arg CreateTripParams) (Trip, e
 	return i, err
 }
 
+const getActiveRouteIDsForStopsOnDate = `-- name: GetActiveRouteIDsForStopsOnDate :many
+SELECT DISTINCT
+    routes.agency_id || '_' || routes.id AS route_id,
+    stop_times.stop_id
+FROM
+    stop_times
+    JOIN trips ON stop_times.trip_id = trips.id
+    JOIN routes ON trips.route_id = routes.id
+WHERE
+    stop_times.stop_id IN (/*SLICE:stop_ids*/?)
+    AND trips.service_id IN (/*SLICE:service_ids*/?)
+`
+
+type GetActiveRouteIDsForStopsOnDateParams struct {
+	StopIds    []string
+	ServiceIds []string
+}
+
+type GetActiveRouteIDsForStopsOnDateRow struct {
+	RouteID interface{}
+	StopID  string
+}
+
+func (q *Queries) GetActiveRouteIDsForStopsOnDate(ctx context.Context, arg GetActiveRouteIDsForStopsOnDateParams) ([]GetActiveRouteIDsForStopsOnDateRow, error) {
+	query := getActiveRouteIDsForStopsOnDate
+	var queryParams []interface{}
+	if len(arg.StopIds) > 0 {
+		for _, v := range arg.StopIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:stop_ids*/?", strings.Repeat(",?", len(arg.StopIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:stop_ids*/?", "NULL", 1)
+	}
+	if len(arg.ServiceIds) > 0 {
+		for _, v := range arg.ServiceIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:service_ids*/?", strings.Repeat(",?", len(arg.ServiceIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:service_ids*/?", "NULL", 1)
+	}
+	rows, err := q.query(ctx, nil, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetActiveRouteIDsForStopsOnDateRow
+	for rows.Next() {
+		var i GetActiveRouteIDsForStopsOnDateRow
+		if err := rows.Scan(&i.RouteID, &i.StopID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getActiveServiceIDsForDate = `-- name: GetActiveServiceIDsForDate :many
 WITH formatted_date AS (
     SELECT STRFTIME('%w', SUBSTR(?1, 1, 4) || '-' || SUBSTR(?1, 5, 2) || '-' || SUBSTR(?1, 7, 2)) AS weekday
@@ -784,18 +857,14 @@ SELECT
     t.direction_id, t.block_id, t.shape_id, t.wheelchair_accessible, t.bikes_allowed
 FROM trips t
 JOIN block_trip_entry bte ON t.id = bte.trip_id
-JOIN stop_times st_first ON t.id = st_first.trip_id AND st_first.stop_sequence = (
-    SELECT MIN(stop_sequence) FROM stop_times WHERE trip_id = t.id
-)
-JOIN stop_times st_last ON t.id = st_last.trip_id AND st_last.stop_sequence = (
-    SELECT MAX(stop_sequence) FROM stop_times WHERE trip_id = t.id
-)
+JOIN stop_times st ON t.id = st.trip_id
 WHERE bte.block_trip_index_id IN (/*SLICE:index_ids*/?)
   AND t.route_id = ?2
   AND bte.service_id IN (/*SLICE:service_ids*/?)
-  AND st_first.departure_time <= ?4
-  AND st_last.arrival_time >= ?5
-ORDER BY st_first.departure_time DESC
+GROUP BY t.id
+HAVING MIN(st.departure_time) <= ?4
+   AND MAX(st.arrival_time) >= ?5
+ORDER BY MIN(st.departure_time) DESC
 LIMIT 1
 `
 
@@ -851,17 +920,13 @@ func (q *Queries) GetActiveTripForRouteAtTime(ctx context.Context, arg GetActive
 const getActiveTripInBlockAtTime = `-- name: GetActiveTripInBlockAtTime :one
 SELECT t.id
 FROM trips t
-JOIN stop_times st_first ON t.id = st_first.trip_id AND st_first.stop_sequence = (
-        SELECT MIN(stop_sequence) FROM stop_times WHERE trip_id = t.id
-)
-JOIN stop_times st_last ON t.id = st_last.trip_id AND st_last.stop_sequence = (
-        SELECT MAX(stop_sequence) FROM stop_times WHERE trip_id = t.id
-)
+JOIN stop_times st ON t.id = st.trip_id
 WHERE t.block_id = ?1
-    AND t.service_id IN (/*SLICE:service_ids*/?)
-    AND st_first.departure_time <= ?3
-    AND st_last.arrival_time >= ?3
-ORDER BY st_first.departure_time ASC
+  AND t.service_id IN (/*SLICE:service_ids*/?)
+GROUP BY t.id
+HAVING MIN(st.departure_time) <= ?3
+   AND MAX(st.arrival_time) >= ?3
+ORDER BY MIN(st.departure_time) ASC
 LIMIT 1
 `
 

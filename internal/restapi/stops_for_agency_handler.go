@@ -20,15 +20,7 @@ func (api *RestAPI) stopsForAgencyHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	id := utils.ExtractIDFromParams(r)
-
-	if err := utils.ValidateID(id); err != nil {
-		fieldErrors := map[string][]string{
-			"id": {err.Error()},
-		}
-		api.validationErrorResponse(w, r, fieldErrors)
-		return
-	}
+	id, _ := utils.GetIDFromContext(r.Context())
 
 	// Validate agency exists
 	agency := api.GtfsManager.FindAgency(id)
@@ -116,6 +108,10 @@ func (api *RestAPI) buildStopsListForAgency(ctx context.Context, agencyID string
 	// Construct the stops list
 	stopsList := make([]models.Stop, 0, len(stops))
 	for _, stop := range stops {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
 		routeIdsString := routesByStop[stop.ID]
 		if routeIdsString == nil {
 			routeIdsString = []string{}

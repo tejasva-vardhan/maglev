@@ -1,7 +1,9 @@
 package restapi
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -100,7 +102,11 @@ func TestStopsForLocationHandlerEndToEnd(t *testing.T) {
 }
 
 func TestStopsForLocationQuery(t *testing.T) {
-	_, resp, model := serveAndRetrieveEndpoint(t, "/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.426966&query=2042")
+	// Stop 2042 only has trips on service c_2713_b_80332_d_56 (Thu/Fri/Sat, May 22 - Sep 6, 2025).
+	// Use a Friday within that range to ensure active service.
+	clock := clock.NewMockClock(time.Date(2025, 6, 13, 14, 0, 0, 0, time.UTC))
+	api := createTestApiWithClock(t, clock)
+	resp, model := serveApiAndRetrieveEndpoint(t, api, "/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.426966&query=2042")
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -118,7 +124,9 @@ func TestStopsForLocationQuery(t *testing.T) {
 }
 
 func TestStopsForLocationLatSpanAndLonSpan(t *testing.T) {
-	_, resp, model := serveAndRetrieveEndpoint(t, "/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.426966&latSpan=0.045&lonSpan=0.059")
+	clock := clock.NewMockClock(time.Date(2025, 12, 26, 14, 0, 0, 0, time.UTC))
+	api := createTestApiWithClock(t, clock)
+	resp, model := serveApiAndRetrieveEndpoint(t, api, "/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.426966&latSpan=0.045&lonSpan=0.059")
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	data, ok := model.Data.(map[string]interface{})
 	require.True(t, ok)
@@ -128,11 +136,12 @@ func TestStopsForLocationLatSpanAndLonSpan(t *testing.T) {
 	stop, ok := list[0].(map[string]interface{})
 	require.True(t, ok)
 	assert.NotEmpty(t, stop)
-
 }
 
 func TestStopsForLocationRadius(t *testing.T) {
-	_, resp, model := serveAndRetrieveEndpoint(t, "/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.426966&radius=5000")
+	clock := clock.NewMockClock(time.Date(2025, 12, 26, 14, 0, 0, 0, time.UTC))
+	api := createTestApiWithClock(t, clock)
+	resp, model := serveApiAndRetrieveEndpoint(t, api, "/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.426966&radius=5000")
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	data, ok := model.Data.(map[string]interface{})
 	require.True(t, ok)
@@ -142,7 +151,9 @@ func TestStopsForLocationRadius(t *testing.T) {
 }
 
 func TestStopsForLocationLatAndLan(t *testing.T) {
-	_, resp, model := serveAndRetrieveEndpoint(t, "/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.362535&radius=1000")
+	clock := clock.NewMockClock(time.Date(2025, 12, 26, 14, 0, 0, 0, time.UTC))
+	api := createTestApiWithClock(t, clock)
+	resp, model := serveApiAndRetrieveEndpoint(t, api, "/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.362535&radius=1000")
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	data, ok := model.Data.(map[string]interface{})
 	require.True(t, ok)
@@ -152,7 +163,9 @@ func TestStopsForLocationLatAndLan(t *testing.T) {
 }
 
 func TestStopsForLocationIsLimitExceeded(t *testing.T) {
-	_, resp, model := serveAndRetrieveEndpoint(t, "/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.362535&radius=1000&maxCount=1")
+	clock := clock.NewMockClock(time.Date(2025, 12, 26, 14, 0, 0, 0, time.UTC))
+	api := createTestApiWithClock(t, clock)
+	resp, model := serveApiAndRetrieveEndpoint(t, api, "/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.362535&radius=1000&maxCount=1")
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	data, ok := model.Data.(map[string]interface{})
 	require.True(t, ok)
@@ -164,18 +177,39 @@ func TestStopsForLocationIsLimitExceeded(t *testing.T) {
 	assert.True(t, isLimitExceeded)
 }
 
+func TestStopsForLocationActiveRoutesOnly(t *testing.T) {
+	futureClock := clock.NewMockClock(time.Date(2028, 1, 1, 12, 0, 0, 0, time.UTC))
+	api := createTestApiWithClock(t, futureClock)
+
+	resp, model := serveApiAndRetrieveEndpoint(t, api, "/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.426966&radius=5000")
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	data, ok := model.Data.(map[string]interface{})
+	require.True(t, ok, "Expected data to be a map")
+
+	var list []interface{}
+	if data["list"] != nil {
+		list, ok = data["list"].([]interface{})
+		require.True(t, ok, "Expected list to be an array")
+	}
+	assert.Empty(t, list, "Should return empty stops when no routes are active")
+}
+
 func TestStopsForLocationHandlerValidatesParameters(t *testing.T) {
 	_, resp, _ := serveAndRetrieveEndpoint(t, "/api/where/stops-for-location.json?key=TEST&lat=invalid&lon=-121.74")
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
+
 func TestStopsForLocationHandlerValidatesLatLon(t *testing.T) {
 	_, resp, _ := serveAndRetrieveEndpoint(t, "/api/where/stops-for-location.json?key=TEST&lat=invalid&lon=invalid")
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
+
 func TestStopsForLocationHandlerValidatesLatLonSpan(t *testing.T) {
 	_, resp, _ := serveAndRetrieveEndpoint(t, "/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.426966&latSpan=invalid&lonSpan=invalid")
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
+
 func TestStopsForLocationHandlerValidatesRadius(t *testing.T) {
 	_, resp, _ := serveAndRetrieveEndpoint(t, "/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.426966&radius=invalid")
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
@@ -184,4 +218,117 @@ func TestStopsForLocationHandlerValidatesRadius(t *testing.T) {
 func TestStopsForLocationHandlerValidatesMaxCount(t *testing.T) {
 	_, resp, _ := serveAndRetrieveEndpoint(t, "/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.426966&maxCount=invalid")
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestStopsForLocationHandlerRouteTypeErrorLimit(t *testing.T) {
+	invalidTypes := strings.Repeat("bad,", 14) + "bad"
+
+	url := "/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.426966&routeType=" + invalidTypes
+	_, resp, model := serveAndRetrieveEndpoint(t, url)
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+	data, ok := model.Data.(map[string]interface{})
+	require.True(t, ok, "response data should be a map")
+
+	fieldErrors, ok := data["fieldErrors"].(map[string]interface{})
+	require.True(t, ok, "data should contain fieldErrors map")
+
+	routeTypeErrors, ok := fieldErrors["routeType"].([]interface{})
+	require.True(t, ok, "fieldErrors should contain routeType errors list")
+
+	assert.Len(t, routeTypeErrors, 1, "Should return a single error for invalid routeType")
+
+	for _, err := range routeTypeErrors {
+		errStr, ok := err.(string)
+		require.True(t, ok)
+		assert.Contains(t, errStr, "Invalid field value for field", "Error should use standard generic message")
+	}
+}
+
+func TestStopsForLocationHandlerRouteTypeTooManyTokens(t *testing.T) {
+	tokens := make([]string, 150)
+	for i := range tokens {
+		tokens[i] = fmt.Sprintf("%d", i)
+	}
+	manyTokens := strings.Join(tokens, ",")
+
+	url := "/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.426966&routeType=" + manyTokens
+	_, resp, model := serveAndRetrieveEndpoint(t, url)
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+	data, ok := model.Data.(map[string]interface{})
+	require.True(t, ok, "response data should be a map")
+
+	fieldErrors, ok := data["fieldErrors"].(map[string]interface{})
+	require.True(t, ok, "data should contain fieldErrors map")
+
+	routeTypeErrors, ok := fieldErrors["routeType"].([]interface{})
+	require.True(t, ok, "fieldErrors should contain routeType errors list")
+
+	assert.Len(t, routeTypeErrors, 1, "Should return single error for too many tokens")
+
+	firstError, ok := routeTypeErrors[0].(string)
+	require.True(t, ok)
+	assert.Contains(t, firstError, "too many route types", "Error should mention the token limit")
+}
+
+func TestStopsForLocationHandlerRouteTypeAtLimit(t *testing.T) {
+	tokens := make([]string, 100)
+	for i := range tokens {
+		tokens[i] = fmt.Sprintf("%d", i)
+	}
+	validTypes := strings.Join(tokens, ",")
+
+	url := "/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.426966&routeType=" + validTypes
+	_, resp, _ := serveAndRetrieveEndpoint(t, url)
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "100 tokens should be accepted (at the limit)")
+}
+
+func TestStopsForLocationHandlerRouteTypeMixedValidInvalid(t *testing.T) {
+	_, resp, model := serveAndRetrieveEndpoint(t,
+		"/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.426966&routeType=1,bad,2,invalid,3")
+
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+	data, ok := model.Data.(map[string]interface{})
+	require.True(t, ok, "response data should be a map")
+
+	fieldErrors, ok := data["fieldErrors"].(map[string]interface{})
+	require.True(t, ok, "data should contain fieldErrors map")
+
+	routeTypeErrors, ok := fieldErrors["routeType"].([]interface{})
+	require.True(t, ok, "fieldErrors should contain routeType errors list")
+
+	assert.Len(t, routeTypeErrors, 1, "Should return a single error for invalid routeType")
+
+	for _, err := range routeTypeErrors {
+		errStr, ok := err.(string)
+		require.True(t, ok)
+		assert.Contains(t, errStr, "Invalid field value for field", "Error should use standard generic message")
+	}
+}
+
+func TestStopsForLocationHandlerRouteTypeValidMultiple(t *testing.T) {
+	mockClock := clock.NewMockClock(time.Date(2025, 12, 26, 14, 0, 0, 0, time.UTC))
+	api := createTestApiWithClock(t, mockClock)
+
+	resp, model := serveApiAndRetrieveEndpoint(t, api,
+		"/api/where/stops-for-location.json?key=TEST&lat=40.583321&lon=-122.426966&radius=2500&routeType=1,2,3")
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "Valid route types should be accepted")
+
+	data, ok := model.Data.(map[string]interface{})
+	require.True(t, ok)
+
+	list, ok := data["list"].([]interface{})
+	require.True(t, ok)
+	assert.NotNil(t, list)
+
+	refs, ok := data["references"].(map[string]interface{})
+	require.True(t, ok)
+	assert.NotNil(t, refs["agencies"])
+	assert.NotNil(t, refs["routes"])
 }

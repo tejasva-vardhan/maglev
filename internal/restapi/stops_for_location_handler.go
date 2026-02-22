@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"maglev.onebusaway.org/gtfsdb"
+	"maglev.onebusaway.org/internal/gtfs"
 	"maglev.onebusaway.org/internal/models"
 	"maglev.onebusaway.org/internal/utils"
 )
@@ -26,17 +27,33 @@ func (api *RestAPI) stopsForLocationHandler(w http.ResponseWriter, r *http.Reque
 	var routeTypes []int
 	if routeTypeStr := queryParams.Get("routeType"); routeTypeStr != "" {
 		routeTypeStrs := strings.Split(routeTypeStr, ",")
-		for _, rtStr := range routeTypeStrs {
-			rtStr = strings.TrimSpace(rtStr)
-			if rtStr != "" {
-				var rt int
-				if _, err := fmt.Sscanf(rtStr, "%d", &rt); err != nil {
-					if fieldErrors == nil {
-						fieldErrors = make(map[string][]string)
+
+		const maxRouteTypeTokens = 100
+
+		if len(routeTypeStrs) > maxRouteTypeTokens {
+			if fieldErrors == nil {
+				fieldErrors = make(map[string][]string)
+			}
+			fieldErrors["routeType"] = []string{
+				fmt.Sprintf("too many route types (maximum %d allowed)", maxRouteTypeTokens),
+			}
+		} else {
+			for _, rtStr := range routeTypeStrs {
+				rtStr = strings.TrimSpace(rtStr)
+				if rtStr != "" {
+					var rt int
+					if _, err := fmt.Sscanf(rtStr, "%d", &rt); err != nil {
+						if fieldErrors == nil {
+							fieldErrors = make(map[string][]string)
+						}
+						if _, exists := fieldErrors["routeType"]; !exists {
+							fieldErrors["routeType"] = []string{
+								`Invalid field value for field "routeType".`,
+							}
+						}
+					} else {
+						routeTypes = append(routeTypes, rt)
 					}
-					fieldErrors["routeType"] = append(fieldErrors["routeType"], fmt.Sprintf("invalid route type: %s", rtStr))
-				} else {
-					routeTypes = append(routeTypes, rt)
 				}
 			}
 		}
@@ -121,11 +138,25 @@ func (api *RestAPI) stopsForLocationHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Batch query to get route IDs for all stops
-	routeIDsForStops, err := api.GtfsManager.GtfsDB.Queries.GetRouteIDsForStops(ctx, stopIDs)
+	// Get active service IDs for the requested queryTime
+	currentDate := queryTime.Format("20060102")
+	activeServiceIDs, err := api.GtfsManager.GtfsDB.Queries.GetActiveServiceIDsForDate(ctx, currentDate)
 	if err != nil {
 		api.serverErrorResponse(w, r, err)
 		return
+	}
+
+	// Batch query to get route IDs for all stops, strictly filtered by active service IDs
+	var routeIDsForStops []gtfsdb.GetActiveRouteIDsForStopsOnDateRow
+	if len(activeServiceIDs) > 0 {
+		routeIDsForStops, err = api.GtfsManager.GtfsDB.Queries.GetActiveRouteIDsForStopsOnDate(ctx, gtfsdb.GetActiveRouteIDsForStopsOnDateParams{
+			StopIds:    stopIDs,
+			ServiceIds: activeServiceIDs,
+		})
+		if err != nil {
+			api.serverErrorResponse(w, r, err)
+			return
+		}
 	}
 
 	// Batch query to get agencies for all stops
@@ -143,6 +174,10 @@ func (api *RestAPI) stopsForLocationHandler(w http.ResponseWriter, r *http.Reque
 		stopID := routeIDRow.StopID
 		routeIDStr, ok := routeIDRow.RouteID.(string)
 		if !ok {
+			api.Logger.Warn("unexpected RouteID type",
+				"stopID", stopID,
+				"routeID", routeIDRow.RouteID,
+			)
 			continue
 		}
 
@@ -164,8 +199,15 @@ func (api *RestAPI) stopsForLocationHandler(w http.ResponseWriter, r *http.Reque
 	}
 
 	isLimitExceeded := false
+
+	calc := gtfs.NewAdvancedDirectionCalculator(api.GtfsManager.GtfsDB.Queries)
+
 	// Build results using the pre-fetched data
 	for _, stopID := range stopIDs {
+		if ctx.Err() != nil {
+			return
+		}
+
 		stop := stopMap[stopID]
 		rids := stopRouteIDs[stopID]
 		agency := stopAgency[stopID]
@@ -174,10 +216,7 @@ func (api *RestAPI) stopsForLocationHandler(w http.ResponseWriter, r *http.Reque
 			continue
 		}
 
-		direction := models.UnknownValue
-		if stop.Direction.Valid && stop.Direction.String != "" {
-			direction = stop.Direction.String
-		}
+		direction := calc.CalculateStopDirection(ctx, stop.ID, stop.Direction)
 
 		results = append(results, models.NewStop(
 			utils.NullStringOrEmpty(stop.Code),
@@ -196,6 +235,10 @@ func (api *RestAPI) stopsForLocationHandler(w http.ResponseWriter, r *http.Reque
 			isLimitExceeded = true
 			break
 		}
+	}
+
+	if ctx.Err() != nil {
+		return
 	}
 
 	agencies := utils.FilterAgencies(api.GtfsManager.GetAgencies(), agencyIDs)

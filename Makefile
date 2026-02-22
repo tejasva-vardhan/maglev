@@ -9,10 +9,9 @@ endif
 
 DOCKER_IMAGE := opentransitsoftwarefoundation/maglev
 
-.PHONY: build build-debug clean coverage test run lint watch fmt \
+.PHONY: build build-debug clean coverage-report check-jq coverage test run lint watch fmt \
 	gtfstidy models check-golangci-lint \
 	docker-build docker-push docker-run docker-stop docker-compose-up docker-compose-down docker-compose-dev docker-clean docker-clean-all
-
 
 run: build
 	bin/maglev -f config.json
@@ -30,6 +29,13 @@ clean:
 	go clean
 	rm -f maglev
 	rm -f coverage.out
+
+check-jq:
+	@which jq > /dev/null 2>&1 || (echo "Error: jq is not installed. Install with: apt install jq, or brew install jq" && exit 1)
+
+coverage-report: check-jq
+	$(SET_ENV) go test -tags "sqlite_fts5" ./... -cover > /tmp/go-coverage.txt 2>&1 || (cat /tmp/go-coverage.txt && exit 1)
+	grep '^ok' /tmp/go-coverage.txt | awk '{print $$2, $$5}' | jq -R 'split(" ") | {pkg: .[0], coverage: .[1]}'
 
 coverage:
 	$(SET_ENV) go test -tags "sqlite_fts5" -coverprofile=coverage.out ./...

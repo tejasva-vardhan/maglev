@@ -19,24 +19,9 @@ func (api *RestAPI) tripsForRouteHandler(w http.ResponseWriter, r *http.Request)
 	api.GtfsManager.RLock()
 	defer api.GtfsManager.RUnlock()
 
-	id := utils.ExtractIDFromParams(r)
-
-	if err := utils.ValidateID(id); err != nil {
-		fieldErrors := map[string][]string{
-			"id": {err.Error()},
-		}
-		api.validationErrorResponse(w, r, fieldErrors)
-		return
-	}
-
-	agencyID, routeID, err := utils.ExtractAgencyIDAndCodeID(id)
-	if err != nil {
-		fieldErrors := map[string][]string{
-			"id": {err.Error()},
-		}
-		api.validationErrorResponse(w, r, fieldErrors)
-		return
-	}
+	parsed, _ := utils.GetParsedIDFromContext(r.Context())
+	agencyID := parsed.AgencyID
+	routeID := parsed.CodeID
 
 	includeSchedule := r.URL.Query().Get("includeSchedule") != "false"
 	includeStatus := r.URL.Query().Get("includeStatus") != "false"
@@ -138,6 +123,10 @@ func (api *RestAPI) tripsForRouteHandler(w http.ResponseWriter, r *http.Request)
 	var activeTrips []ActiveTripEntry
 
 	for blockID := range allLinkedBlocks {
+		if ctx.Err() != nil {
+			return
+		}
+
 		blockIDNullStr := sql.NullString{String: blockID, Valid: true}
 
 		tripsInBlock, err := api.GtfsManager.GtfsDB.Queries.GetTripsInBlock(ctx, gtfsdb.GetTripsInBlockParams{
@@ -235,6 +224,10 @@ func (api *RestAPI) tripsForRouteHandler(w http.ResponseWriter, r *http.Request)
 
 	var result []models.TripsForRouteListEntry
 	for _, activeEntry := range activeTrips {
+		if ctx.Err() != nil {
+			return
+		}
+
 		tripID := activeEntry.TripID
 
 		agencyID, ok := tripAgencyMap[tripID]

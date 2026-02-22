@@ -23,6 +23,7 @@ All commands are managed through the Makefile:
 - `make test` - Run all tests
 - `make lint` - Run golangci-lint (requires: `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest`)
 - `make coverage` - Generate test coverage report with HTML output
+- `make coverage-report` - Output per-package test coverage as JSON for CI parsing (requires jq)
 - `make models` - Regenerate sqlc models from SQL queries
 - `make watch` - Run with Air for live reloading during development
 - `make fmt` - Format all Go code with `go fmt`

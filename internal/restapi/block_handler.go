@@ -19,21 +19,13 @@ func (api *RestAPI) blockHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id := utils.ExtractIDFromParams(r)
-
-	if err := utils.ValidateID(id); err != nil {
-		fieldErrors := map[string][]string{
-			"id": {err.Error()},
-		}
-		api.validationErrorResponse(w, r, fieldErrors)
-		return
-	}
-
-	agencyID, blockID, err := utils.ExtractAgencyIDAndCodeID(id)
+	parsed, _ := utils.GetParsedIDFromContext(r.Context())
+	agencyID := parsed.AgencyID
+	blockID := parsed.CodeID
 
 	//  Return JSON 400 response for invalid block IDs
 	// We use an explicit struct here to ensure the text is exactly "invalid block id"
-	if err != nil || blockID == "" {
+	if blockID == "" {
 		api.sendError(w, r, http.StatusBadRequest, "invalid block id")
 		return
 	}
@@ -221,6 +213,10 @@ func (api *RestAPI) getReferences(ctx context.Context, agencyID string, calc *GT
 
 	var stops []models.Stop
 	for stopID := range stopIDs {
+		if ctx.Err() != nil {
+			return models.ReferencesModel{}, ctx.Err()
+		}
+
 		stop, err := api.GtfsManager.GtfsDB.Queries.GetStop(ctx, stopID)
 		if err != nil {
 			return models.ReferencesModel{}, err
@@ -237,6 +233,10 @@ func (api *RestAPI) getReferences(ctx context.Context, agencyID string, calc *GT
 
 	var trips []interface{}
 	for tripID := range tripIDs {
+		if ctx.Err() != nil {
+			return models.ReferencesModel{}, ctx.Err()
+		}
+
 		trip, err := api.GtfsManager.GtfsDB.Queries.GetTrip(ctx, tripID)
 		if err != nil {
 			return models.ReferencesModel{}, err

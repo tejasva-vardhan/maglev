@@ -11,22 +11,10 @@ import (
 )
 
 func (api *RestAPI) scheduleForRouteHandler(w http.ResponseWriter, r *http.Request) {
-	queryParamID := utils.ExtractIDFromParams(r)
-	if err := utils.ValidateID(queryParamID); err != nil {
-		fieldErrors := map[string][]string{
-			"id": {err.Error()},
-		}
-		api.validationErrorResponse(w, r, fieldErrors)
-		return
-	}
-	agencyID, routeID, err := utils.ExtractAgencyIDAndCodeID(queryParamID)
-	if err != nil {
-		fieldErrors := map[string][]string{
-			"id": {err.Error()},
-		}
-		api.validationErrorResponse(w, r, fieldErrors)
-		return
-	}
+	parsed, _ := utils.GetParsedIDFromContext(r.Context())
+	agencyID := parsed.AgencyID
+	routeID := parsed.CodeID
+
 	dateParam := r.URL.Query().Get("date")
 	if err := utils.ValidateDate(dateParam); err != nil {
 		fieldErrors := map[string][]string{
@@ -138,6 +126,10 @@ func (api *RestAPI) scheduleForRouteHandler(w http.ResponseWriter, r *http.Reque
 	globalStopIDSet := make(map[string]struct{})
 	var stopTimesRefs []interface{}
 	for key, groupedTrips := range groupings {
+		if ctx.Err() != nil {
+			return
+		}
+
 		stopIDSet := make(map[string]struct{})
 		tripIDs := make([]string, 0, len(groupedTrips))
 		tripsWithStopTimes := make([]models.TripStopTimes, 0, len(groupedTrips))
