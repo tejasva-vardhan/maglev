@@ -468,9 +468,8 @@ func (api *RestAPI) arrivalAndDepartureForStopHandler(w http.ResponseWriter, r *
 			models.RouteType(route.Type),
 			route.Url.String,
 			route.Color.String,
-			route.TextColor.String,
-			route.ShortName.String,
-		)
+			route.TextColor.String)
+
 		references.Routes = append(references.Routes, routeRef)
 	}
 

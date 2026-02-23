@@ -602,9 +602,8 @@ func (rb *referenceBuilder) createRoute(route gtfsdb.Route) models.Route {
 		models.RouteType(route.Type),
 		route.Url.String,
 		route.Color.String,
-		route.TextColor.String,
-		route.ShortName.String,
-	)
+		route.TextColor.String)
+
 }
 
 func (rb *referenceBuilder) addAgency(agencyID string) error {

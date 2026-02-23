@@ -32,8 +32,7 @@ func (api *RestAPI) routesForAgencyHandler(w http.ResponseWriter, r *http.Reques
 		routesList = append(routesList, models.NewRoute(
 			utils.FormCombinedID(route.Agency.Id, route.Id), route.Agency.Id, route.ShortName, route.LongName,
 			route.Description, models.RouteType(route.Type),
-			route.Url, route.Color, route.TextColor, route.ShortName,
-		))
+			route.Url, route.Color, route.TextColor))
 	}
 
 	references := models.ReferencesModel{

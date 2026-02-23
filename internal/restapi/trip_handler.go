@@ -76,9 +76,7 @@ func (api *RestAPI) tripHandler(w http.ResponseWriter, r *http.Request) {
 		models.RouteType(route.Type),
 		route.Url.String,
 		route.Color.String,
-		route.TextColor.String,
-		route.ShortName.String,
-	))
+		route.TextColor.String))
 
 	references.Agencies = append(references.Agencies, models.NewAgencyReference(
 		agency.ID,

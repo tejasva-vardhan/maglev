@@ -108,9 +108,7 @@ func (api *RestAPI) routeSearchHandler(w http.ResponseWriter, r *http.Request) {
 			models.RouteType(routeRow.Type),
 			url,
 			color,
-			textColor,
-			shortName,
-		))
+			textColor))
 	}
 
 	agencies := utils.FilterAgencies(api.GtfsManager.GetAgencies(), agencyIDs)
