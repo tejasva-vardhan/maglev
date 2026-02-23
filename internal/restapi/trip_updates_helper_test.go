@@ -20,6 +20,7 @@ func TestGetScheduleDeviation_NoUpdates(t *testing.T) {
 func TestGetScheduleDeviation_TripLevelDelay(t *testing.T) {
 	api := createTestApi(t)
 	defer api.Shutdown()
+	t.Cleanup(api.GtfsManager.MockResetRealTimeData)
 
 	delay := 90 * time.Second
 	api.GtfsManager.MockAddTripUpdate("trip-delay-test", &delay, nil)
@@ -32,6 +33,7 @@ func TestGetScheduleDeviation_TripLevelDelay(t *testing.T) {
 func TestGetScheduleDeviation_StopLevelArrivalDelay(t *testing.T) {
 	api := createTestApi(t)
 	defer api.Shutdown()
+	t.Cleanup(api.GtfsManager.MockResetRealTimeData)
 
 	stopID := "stop-1"
 	arrivalDelay := 60 * time.Second
@@ -51,6 +53,7 @@ func TestGetScheduleDeviation_StopLevelArrivalDelay(t *testing.T) {
 func TestGetScheduleDeviation_StopLevelDepartureDelay(t *testing.T) {
 	api := createTestApi(t)
 	defer api.Shutdown()
+	t.Cleanup(api.GtfsManager.MockResetRealTimeData)
 
 	stopID := "stop-1"
 	departureDelay := 120 * time.Second
@@ -70,6 +73,7 @@ func TestGetScheduleDeviation_StopLevelDepartureDelay(t *testing.T) {
 func TestGetScheduleDeviation_TripLevelDelayTakesPrecedence(t *testing.T) {
 	api := createTestApi(t)
 	defer api.Shutdown()
+	t.Cleanup(api.GtfsManager.MockResetRealTimeData)
 
 	tripDelay := 30 * time.Second
 	stopID := "stop-1"
@@ -90,6 +94,7 @@ func TestGetScheduleDeviation_TripLevelDelayTakesPrecedence(t *testing.T) {
 func TestGetScheduleDeviation_StopUpdateWithNoDelay(t *testing.T) {
 	api := createTestApi(t)
 	defer api.Shutdown()
+	t.Cleanup(api.GtfsManager.MockResetRealTimeData)
 
 	stopID := "stop-1"
 	updates := []gtfs.StopTimeUpdate{
@@ -108,6 +113,7 @@ func TestGetScheduleDeviation_StopUpdateWithNoDelay(t *testing.T) {
 func TestGetScheduleDeviation_ZeroDeviationIsDistinguishedFromNoData(t *testing.T) {
 	api := createTestApi(t)
 	defer api.Shutdown()
+	t.Cleanup(api.GtfsManager.MockResetRealTimeData)
 
 	// Trip with explicit zero-second delay — should return (0, true)
 	zeroDelay := time.Duration(0)
@@ -134,6 +140,7 @@ func TestGetStopDelaysFromTripUpdates_NoUpdates(t *testing.T) {
 func TestGetStopDelaysFromTripUpdates_WithArrivalDelay(t *testing.T) {
 	api := createTestApi(t)
 	defer api.Shutdown()
+	t.Cleanup(api.GtfsManager.MockResetRealTimeData)
 
 	stopID := "stop-A"
 	arrivalDelay := 45 * time.Second
@@ -154,6 +161,7 @@ func TestGetStopDelaysFromTripUpdates_WithArrivalDelay(t *testing.T) {
 func TestGetStopDelaysFromTripUpdates_WithDepartureDelay(t *testing.T) {
 	api := createTestApi(t)
 	defer api.Shutdown()
+	t.Cleanup(api.GtfsManager.MockResetRealTimeData)
 
 	stopID := "stop-B"
 	departureDelay := 75 * time.Second
@@ -174,6 +182,7 @@ func TestGetStopDelaysFromTripUpdates_WithDepartureDelay(t *testing.T) {
 func TestGetStopDelaysFromTripUpdates_SkipsStopWithNoStopID(t *testing.T) {
 	api := createTestApi(t)
 	defer api.Shutdown()
+	t.Cleanup(api.GtfsManager.MockResetRealTimeData)
 
 	arrivalDelay := 30 * time.Second
 	updates := []gtfs.StopTimeUpdate{
@@ -191,6 +200,7 @@ func TestGetStopDelaysFromTripUpdates_SkipsStopWithNoStopID(t *testing.T) {
 func TestGetStopDelaysFromTripUpdates_IncludesStopWithZeroDelays(t *testing.T) {
 	api := createTestApi(t)
 	defer api.Shutdown()
+	t.Cleanup(api.GtfsManager.MockResetRealTimeData)
 
 	stopID := "stop-C"
 	zeroDelay := time.Duration(0)
@@ -211,6 +221,7 @@ func TestGetStopDelaysFromTripUpdates_IncludesStopWithZeroDelays(t *testing.T) {
 func TestGetStopDelaysFromTripUpdates_MultipleStops(t *testing.T) {
 	api := createTestApi(t)
 	defer api.Shutdown()
+	t.Cleanup(api.GtfsManager.MockResetRealTimeData)
 
 	stopA := "stop-A"
 	stopB := "stop-B"
