@@ -119,3 +119,16 @@ func (m *Manager) MockAddTripUpdate(tripID string, delay *time.Duration, stopTim
 	}
 	m.realTimeTripLookup[tripID] = len(m.realTimeTrips) - 1
 }
+
+// MockResetRealTimeData clears all mock real-time vehicles and trip updates.
+// Call this in t.Cleanup() to prevent test interference when using a shared Manager.
+func (m *Manager) MockResetRealTimeData() {
+	m.realTimeMutex.Lock()
+	defer m.realTimeMutex.Unlock()
+
+	m.realTimeVehicles = nil
+	m.realTimeVehicleLookupByVehicle = make(map[string]int)
+	m.realTimeVehicleLookupByTrip = make(map[string]int)
+	m.realTimeTrips = nil
+	m.realTimeTripLookup = make(map[string]int)
+}
