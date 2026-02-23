@@ -80,7 +80,7 @@ func TestGetRegionBounds(t *testing.T) {
 			expectedLonSpan: 0.0,
 		},
 		{
-			name: "Fallback to Stops",
+			name:   "Fallback to Stops",
 			shapes: []gtfs.Shape{},
 			stops: []gtfs.Stop{
 				{Latitude: fptr(47.0), Longitude: fptr(-122.0)},

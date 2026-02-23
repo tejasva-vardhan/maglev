@@ -198,9 +198,8 @@ func (api *RestAPI) searchStopsHandler(w http.ResponseWriter, r *http.Request) {
 				models.RouteType(row.Type),
 				url,
 				color,
-				textColor,
-				shortName,
-			)
+				textColor)
+
 		}
 	}
 

@@ -131,8 +131,8 @@ func (api *RestAPI) vehiclesForAgencyHandler(w http.ResponseWriter, r *http.Requ
 				routeRefs[route.ID] = models.NewRoute(
 					route.ID, route.AgencyID, shortName, longName,
 					desc, models.RouteType(route.Type),
-					url, color, textColor, shortName,
-				)
+					url, color, textColor)
+
 			}
 		}
 

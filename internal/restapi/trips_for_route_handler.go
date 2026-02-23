@@ -393,9 +393,8 @@ func buildTripReferences[T interface{ GetTripId() string }](
 				models.RouteType(route.Type),
 				route.Url.String,
 				route.Color.String,
-				route.TextColor.String,
-				route.ShortName.String,
-			)
+				route.TextColor.String)
+
 			// Identify Agency IDs needed
 			if _, exists := presentAgencies[route.AgencyID]; !exists {
 				currentAgency, err := api.GtfsManager.GtfsDB.Queries.GetAgency(ctx, route.AgencyID)

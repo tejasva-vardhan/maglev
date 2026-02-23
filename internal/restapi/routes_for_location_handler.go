@@ -120,9 +120,7 @@ func (api *RestAPI) routesForLocationHandler(w http.ResponseWriter, r *http.Requ
 				models.RouteType(routeRow.Type),
 				routeRow.Url.String,
 				routeRow.Color.String,
-				routeRow.TextColor.String,
-				routeRow.ShortName.String,
-			))
+				routeRow.TextColor.String))
 		}
 		routeIDs[combinedRouteID] = true
 		if len(results) >= maxCount {
