@@ -50,8 +50,11 @@ func (api *RestAPI) BuildTripStatus(
 
 	if hasRealtimeTripUpdate {
 		status.ScheduleDeviation = scheduleDeviation
-		status.Predicted = true
 	}
+
+	hasVehicleRealtimeData := vehicle != nil && !defaultStaleDetector.Check(vehicle, currentTime)
+	status.Predicted = hasVehicleRealtimeData || hasRealtimeTripUpdate
+	status.Scheduled = !status.Predicted
 
 	stopTimes, err := api.GtfsManager.GtfsDB.Queries.GetStopTimesForTrip(ctx, activeTripRawID)
 	if err == nil && len(stopTimes) > 0 {

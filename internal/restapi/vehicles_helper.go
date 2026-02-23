@@ -150,10 +150,6 @@ func (api *RestAPI) BuildVehicleStatus(
 	} else {
 		status.ActiveTripID = utils.FormCombinedID(agencyID, tripID)
 	}
-
-	hasRealtimeData := vehicle.Position != nil || vehicle.Timestamp != nil
-	status.Predicted = hasRealtimeData
-	status.Scheduled = !hasRealtimeData
 }
 
 func GetVehicleActiveTripID(vehicle *gtfs.Vehicle) string {
