@@ -98,7 +98,7 @@ func (api *RestAPI) tripForVehicleHandler(w http.ResponseWriter, r *http.Request
 	var schedule *models.Schedule
 	if params.IncludeSchedule {
 		var scheduleErr error
-		schedule, scheduleErr = api.BuildTripSchedule(ctx, agencyID, serviceDate, &trip, time.Local)
+		schedule, scheduleErr = api.BuildTripSchedule(ctx, agencyID, serviceDate, &trip, loc)
 		if scheduleErr != nil {
 			api.Logger.Warn("failed to build trip schedule",
 				"tripID", tripID,
@@ -107,15 +107,11 @@ func (api *RestAPI) tripForVehicleHandler(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	situationIDs := []string{}
-
-	if status != nil {
-		alerts := api.GtfsManager.GetAlertsForTrip(r.Context(), vehicle.Trip.ID.ID)
-		for _, alert := range alerts {
-			if alert.ID != "" {
-				situationIDs = append(situationIDs, alert.ID)
-			}
-		}
+	var situationIDs []string
+	if status != nil && len(status.SituationIDs) > 0 {
+		situationIDs = status.SituationIDs
+	} else {
+		situationIDs = api.GetSituationIDsForTrip(r.Context(), tripID)
 	}
 
 	entry := &models.TripDetails{
