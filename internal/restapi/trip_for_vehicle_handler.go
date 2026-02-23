@@ -119,7 +119,7 @@ func (api *RestAPI) tripForVehicleHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	entry := &models.TripDetails{
-		TripID:       tripID,
+		TripID:       utils.FormCombinedID(agencyID, tripID),
 		ServiceDate:  serviceDateMillis,
 		Frequency:    nil,
 		Status:       status,
