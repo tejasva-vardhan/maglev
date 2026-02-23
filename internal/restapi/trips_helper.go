@@ -450,6 +450,10 @@ func (api *RestAPI) calculateBlockTripSequence(ctx context.Context, tripID strin
 		return 0
 	}
 
+	if !trip.BlockID.Valid {
+		return 0
+	}
+
 	formattedDate := serviceDate.Format("20060102")
 	activeServiceIDs, err := api.GtfsManager.GtfsDB.Queries.GetActiveServiceIDsForDate(ctx, formattedDate)
 	if err != nil || len(activeServiceIDs) == 0 {
