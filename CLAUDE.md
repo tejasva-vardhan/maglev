@@ -220,9 +220,10 @@ dateStr, parsedTime, fieldErrors, ok := utils.ParseTimeParameter(timeParam, loca
 ### Vehicle Status (`internal/restapi/vehicles_helper.go`)
 
 ```go
-// Convert GTFS-RT status to OneBusAway format
+// Convert GTFS-RT schedule relationship to OneBusAway status and phase
 status, phase := GetVehicleStatusAndPhase(vehicle)
-// Returns: ("IN_TRANSIT_TO", "in_progress"), ("STOPPED_AT", "stopped"), etc.
+// Returns: ("SCHEDULED", "in_progress"), ("CANCELED", ""), ("ADDED", "in_progress"), ("DUPLICATED", "in_progress")
+// For nil vehicle: ("default", "scheduled")
 ```
 
 ## Database Management
