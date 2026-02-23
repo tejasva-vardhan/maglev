@@ -41,7 +41,7 @@ func (api *RestAPI) BuildTripStatus(
 		// We intentionally leave OccupancyCapacity at its default (-1) here.
 		// See: TripStatusBeanServiceImpl.java in onebusaway-transit-data-federation.
 	}
-	api.BuildVehicleStatus(ctx, vehicle, tripID, agencyID, status)
+	api.BuildVehicleStatus(ctx, vehicle, tripID, agencyID, status, currentTime)
 
 	_, activeTripRawID, err := utils.ExtractAgencyIDAndCodeID(status.ActiveTripID)
 	if err != nil {

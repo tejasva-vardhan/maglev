@@ -140,8 +140,9 @@ func TestBuildVehicleStatus_NilVehicleSetsDefaultStatus(t *testing.T) {
 	defer api.Shutdown()
 	ctx := context.Background()
 
+	now := time.Now()
 	status := &models.TripStatusForTripDetails{}
-	api.BuildVehicleStatus(ctx, nil, "any-trip", "any-agency", status)
+	api.BuildVehicleStatus(ctx, nil, "any-trip", "any-agency", status, now)
 
 	assert.Equal(t, "default", status.Status)
 	assert.Equal(t, "scheduled", status.Phase)
@@ -153,14 +154,15 @@ func TestBuildVehicleStatus_StaleVehicleSetsDefaultStatus(t *testing.T) {
 	defer api.Shutdown()
 	ctx := context.Background()
 
-	old := time.Now().Add(-20 * time.Minute)
+	now := time.Now()
+	old := now.Add(-20 * time.Minute)
 	vehicle := &gtfs.Vehicle{
 		ID:        &gtfs.VehicleID{ID: "v1"},
 		Timestamp: &old,
 	}
 
 	status := &models.TripStatusForTripDetails{}
-	api.BuildVehicleStatus(ctx, vehicle, "any-trip", "any-agency", status)
+	api.BuildVehicleStatus(ctx, vehicle, "any-trip", "any-agency", status, now)
 
 	assert.Equal(t, "default", status.Status)
 	assert.Equal(t, "scheduled", status.Phase)
@@ -184,7 +186,7 @@ func TestBuildVehicleStatus_FreshVehicleWithPosition_SetsLocationAndPhase(t *tes
 	}
 
 	status := &models.TripStatusForTripDetails{}
-	api.BuildVehicleStatus(ctx, vehicle, "any-trip", "any-agency", status)
+	api.BuildVehicleStatus(ctx, vehicle, "any-trip", "any-agency", status, now)
 
 	assert.False(t, status.Predicted, "BuildVehicleStatus must not set Predicted")
 	assert.Equal(t, "SCHEDULED", status.Status)
@@ -204,7 +206,7 @@ func TestBuildVehicleStatus_FreshVehicleNoPosition_DoesNotSetPredicted(t *testin
 	}
 
 	status := &models.TripStatusForTripDetails{}
-	api.BuildVehicleStatus(ctx, vehicle, "any-trip", "any-agency", status)
+	api.BuildVehicleStatus(ctx, vehicle, "any-trip", "any-agency", status, now)
 
 	assert.False(t, status.Predicted, "BuildVehicleStatus must not set Predicted")
 }

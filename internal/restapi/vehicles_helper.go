@@ -106,8 +106,9 @@ func (api *RestAPI) BuildVehicleStatus(
 	tripID string,
 	agencyID string,
 	status *models.TripStatusForTripDetails,
+	currentTime time.Time,
 ) {
-	if vehicle == nil || defaultStaleDetector.Check(vehicle, api.Clock.Now()) {
+	if vehicle == nil || defaultStaleDetector.Check(vehicle, currentTime) {
 		status.Status, status.Phase = GetVehicleStatusAndPhase(nil)
 		return
 	}
