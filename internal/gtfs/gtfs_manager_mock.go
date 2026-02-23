@@ -48,7 +48,48 @@ func (m *Manager) MockAddVehicle(vehicleID, tripID, routeID string) {
 		},
 	})
 
-	m.realTimeVehicleLookupByVehicle[vehicleID] = len(m.realTimeVehicles) - 1
+	idx := len(m.realTimeVehicles) - 1
+	m.realTimeVehicleLookupByVehicle[vehicleID] = idx
+	if tripID != "" {
+		m.realTimeVehicleLookupByTrip[tripID] = idx
+	}
+}
+
+type MockVehicleOptions struct {
+	Position            *gtfs.Position
+	CurrentStopSequence *uint32
+	StopID              *string
+	CurrentStatus       *gtfs.CurrentStatus
+}
+
+func (m *Manager) MockAddVehicleWithOptions(vehicleID, tripID, routeID string, opts MockVehicleOptions) {
+	for _, v := range m.realTimeVehicles {
+		if v.ID.ID == vehicleID {
+			return
+		}
+	}
+	now := time.Now()
+	v := gtfs.Vehicle{
+		ID:        &gtfs.VehicleID{ID: vehicleID},
+		Timestamp: &now,
+		Trip: &gtfs.Trip{
+			ID: gtfs.TripID{
+				ID:      tripID,
+				RouteID: routeID,
+			},
+		},
+		Position:            opts.Position,
+		CurrentStopSequence: opts.CurrentStopSequence,
+		StopID:              opts.StopID,
+		CurrentStatus:       opts.CurrentStatus,
+	}
+	m.realTimeVehicles = append(m.realTimeVehicles, v)
+
+	idx := len(m.realTimeVehicles) - 1
+	m.realTimeVehicleLookupByVehicle[vehicleID] = idx
+	if tripID != "" {
+		m.realTimeVehicleLookupByTrip[tripID] = idx
+	}
 }
 
 func (m *Manager) MockAddTrip(tripID, agencyID, routeID string) {
