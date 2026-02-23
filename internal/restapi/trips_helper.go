@@ -798,8 +798,9 @@ func (api *RestAPI) findStopsByScheduleDeviation(
 
 	var closestStop *gtfsdb.StopTime
 	var closestTimeDiff int64 = math.MaxInt64
+	var closestIndex int
 
-	for _, st := range stopTimes {
+	for i, st := range stopTimes {
 		stopTime := utils.EffectiveStopTimeSeconds(st.ArrivalTime, st.DepartureTime)
 
 		timeDiff := stopTime - effectiveScheduleTime
@@ -810,6 +811,7 @@ func (api *RestAPI) findStopsByScheduleDeviation(
 		if timeDiff < closestTimeDiff {
 			closestTimeDiff = timeDiff
 			closestStop = st
+			closestIndex = i
 		}
 	}
 
@@ -823,18 +825,13 @@ func (api *RestAPI) findStopsByScheduleDeviation(
 	predictedClosestArrival := closestStopTime + int64(scheduleDeviation)
 	closestOffset = int(predictedClosestArrival - currentTimeSeconds)
 
-	for i, st := range stopTimes {
-		if st.StopID == closestStopID {
-			if i+1 < len(stopTimes) {
-				nextSt := stopTimes[i+1]
-				nextStopID = nextSt.StopID
+	if closestIndex+1 < len(stopTimes) {
+		nextSt := stopTimes[closestIndex+1]
+		nextStopID = nextSt.StopID
 
-				nextStopTime := utils.EffectiveStopTimeSeconds(nextSt.ArrivalTime, nextSt.DepartureTime)
-				predictedNextArrival := nextStopTime + int64(scheduleDeviation)
-				nextOffset = int(predictedNextArrival - currentTimeSeconds)
-			}
-			break
-		}
+		nextStopTime := utils.EffectiveStopTimeSeconds(nextSt.ArrivalTime, nextSt.DepartureTime)
+		predictedNextArrival := nextStopTime + int64(scheduleDeviation)
+		nextOffset = int(predictedNextArrival - currentTimeSeconds)
 	}
 
 	return closestStopID, closestOffset, nextStopID, nextOffset
