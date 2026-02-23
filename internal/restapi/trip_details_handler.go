@@ -142,6 +142,7 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 			slog.Warn("BuildTripStatus failed",
 				slog.String("trip_id", trip.ID),
 				slog.String("error", statusErr.Error()))
+			status = nil
 		}
 	}
 

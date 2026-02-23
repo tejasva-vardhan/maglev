@@ -74,7 +74,7 @@ func (api *RestAPI) tripForVehicleHandler(w http.ResponseWriter, r *http.Request
 				"tripID", tripID,
 				"agencyID", agencyID,
 				"error", statusErr)
-			// Proceeding with nil status, as it's an optional field
+			status = nil
 		}
 	}
 
