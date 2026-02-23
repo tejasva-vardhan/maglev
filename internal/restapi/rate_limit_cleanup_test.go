@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/time/rate"
 	"maglev.onebusaway.org/internal/clock"
 )
 
@@ -49,17 +51,7 @@ func TestRateLimitMiddleware_CleanupKeepsActiveClients(t *testing.T) {
 	mockClock.Advance(6 * time.Minute)
 
 	// Trigger cleanup manually
-	middleware.mu.Lock()
-	now := mockClock.Now()
-	threshold := 10 * time.Minute
-	for key, client := range middleware.limiters {
-		if !middleware.exemptKeys[key] {
-			if now.Sub(client.lastSeen) > threshold {
-				delete(middleware.limiters, key)
-			}
-		}
-	}
-	middleware.mu.Unlock()
+	middleware.cleanupOnce()
 
 	// Verify limiter still exists (last seen was only 6 minutes ago)
 	middleware.mu.RLock()
@@ -95,17 +87,7 @@ func TestRateLimitMiddleware_CleanupRemovesInactiveClients(t *testing.T) {
 	mockClock.Advance(11 * time.Minute)
 
 	// Trigger cleanup manually
-	middleware.mu.Lock()
-	now := mockClock.Now()
-	threshold := 10 * time.Minute
-	for key, client := range middleware.limiters {
-		if !middleware.exemptKeys[key] {
-			if now.Sub(client.lastSeen) > threshold {
-				delete(middleware.limiters, key)
-			}
-		}
-	}
-	middleware.mu.Unlock()
+	middleware.cleanupOnce()
 
 	// Verify limiter was deleted
 	middleware.mu.RLock()
@@ -150,17 +132,7 @@ func TestRateLimitMiddleware_CleanupHandlesExhaustedLimiters(t *testing.T) {
 	mockClock.Advance(11 * time.Minute)
 
 	// Trigger cleanup manually
-	middleware.mu.Lock()
-	now := mockClock.Now()
-	threshold := 10 * time.Minute
-	for key, client := range middleware.limiters {
-		if !middleware.exemptKeys[key] {
-			if now.Sub(client.lastSeen) > threshold {
-				delete(middleware.limiters, key)
-			}
-		}
-	}
-	middleware.mu.Unlock()
+	middleware.cleanupOnce()
 
 	// Verify limiter was deleted despite being exhausted
 	middleware.mu.RLock()
@@ -204,17 +176,7 @@ func TestRateLimitMiddleware_CleanupMemoryLeakPrevention(t *testing.T) {
 	mockClock.Advance(11 * time.Minute)
 
 	// Trigger cleanup manually
-	middleware.mu.Lock()
-	now := mockClock.Now()
-	threshold := 10 * time.Minute
-	for key, client := range middleware.limiters {
-		if !middleware.exemptKeys[key] {
-			if now.Sub(client.lastSeen) > threshold {
-				delete(middleware.limiters, key)
-			}
-		}
-	}
-	middleware.mu.Unlock()
+	middleware.cleanupOnce()
 
 	// Verify all attack limiters were cleaned up
 	middleware.mu.RLock()
@@ -231,27 +193,16 @@ func TestRateLimitMiddleware_CleanupPreservesExemptedKeys(t *testing.T) {
 
 	// Manually add an exempted key to the limiters map
 	middleware.mu.Lock()
-	middleware.limiters["org.onebusaway.iphone"] = &rateLimitClient{
-		limiter:  nil,                                    // Not needed for this test
-		lastSeen: mockClock.Now().Add(-20 * time.Minute), // Very old
-	}
+	exemptClient := &rateLimitClient{limiter: nil}
+	exemptClient.lastSeen.Store(mockClock.Now().Add(-20 * time.Minute).UnixNano())
+	middleware.limiters["org.onebusaway.iphone"] = exemptClient
 	middleware.mu.Unlock()
 
 	// Advance time
 	mockClock.Advance(1 * time.Minute)
 
 	// Trigger cleanup manually
-	middleware.mu.Lock()
-	now := mockClock.Now()
-	threshold := 10 * time.Minute
-	for key, client := range middleware.limiters {
-		if !middleware.exemptKeys[key] {
-			if now.Sub(client.lastSeen) > threshold {
-				delete(middleware.limiters, key)
-			}
-		}
-	}
-	middleware.mu.Unlock()
+	middleware.cleanupOnce()
 
 	// Verify exempted key still exists despite being very old
 	middleware.mu.RLock()
@@ -277,7 +228,8 @@ func TestRateLimitMiddleware_LastSeenUpdateOnEveryRequest(t *testing.T) {
 	limitedHandler.ServeHTTP(w, req)
 
 	middleware.mu.RLock()
-	firstSeen := middleware.limiters["timestamp-test"].lastSeen
+	firstSeenNano := middleware.limiters["timestamp-test"].lastSeen.Load()
+	firstSeen := time.Unix(0, firstSeenNano)
 	middleware.mu.RUnlock()
 
 	// Advance time by 2 minutes
@@ -289,10 +241,41 @@ func TestRateLimitMiddleware_LastSeenUpdateOnEveryRequest(t *testing.T) {
 	limitedHandler.ServeHTTP(w, req)
 
 	middleware.mu.RLock()
-	secondSeen := middleware.limiters["timestamp-test"].lastSeen
+	secondSeenNano := middleware.limiters["timestamp-test"].lastSeen.Load()
+	secondSeen := time.Unix(0, secondSeenNano)
 	middleware.mu.RUnlock()
 
 	// Verify lastSeen was updated
 	assert.True(t, secondSeen.After(firstSeen), "lastSeen should be updated on subsequent requests")
 	assert.Equal(t, 2*time.Minute, secondSeen.Sub(firstSeen), "lastSeen should reflect the 2 minute advancement")
+}
+
+func TestRateLimitMiddleware_DoubleCheckedLockingCreatesOneLimiter(t *testing.T) {
+	mockClock := clock.NewMockClock(time.Now())
+	middleware := NewRateLimitMiddleware(100, time.Second, nil, mockClock)
+	defer middleware.Stop()
+
+	const goroutines = 50
+	var wg sync.WaitGroup
+	limiters := make([]*rate.Limiter, goroutines)
+
+	wg.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			limiters[idx] = middleware.getLimiter("new-key")
+		}(i)
+	}
+	wg.Wait()
+
+	// All goroutines should get the exact same limiter instance
+	for i := 1; i < goroutines; i++ {
+		assert.Same(t, limiters[0], limiters[i],
+			"All goroutines should get the same limiter instance")
+	}
+
+	middleware.mu.RLock()
+	count := len(middleware.limiters)
+	middleware.mu.RUnlock()
+	assert.Equal(t, 1, count, "Exactly one limiter should be created")
 }

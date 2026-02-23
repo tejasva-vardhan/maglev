@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -17,7 +18,7 @@ import (
 // This allows us to remove inactive users without disrupting active ones.
 type rateLimitClient struct {
 	limiter  *rate.Limiter
-	lastSeen time.Time
+	lastSeen atomic.Int64 // Unix nanoseconds (time.Time.UnixNano())
 }
 
 // RateLimitMiddleware provides per-API-key rate limiting
@@ -80,21 +81,32 @@ func (rl *RateLimitMiddleware) Handler() func(http.Handler) http.Handler {
 // getLimiter gets or creates a rate limiter for the given API key
 // and updates the last usage timestamp.
 func (rl *RateLimitMiddleware) getLimiter(apiKey string) *rate.Limiter {
+	// If the client exists, update lastSeen and return using only a Read Lock.
+	rl.mu.RLock()
+	if client, exists := rl.limiters[apiKey]; exists {
+		client.lastSeen.Store(rl.clock.Now().UnixNano())
+		rl.mu.RUnlock()
+		return client.limiter
+	}
+	rl.mu.RUnlock()
+
+	// Client does not exist, acquire a full Write Lock to create it.
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
-	// If the client exists, update the lastSeen time and return the limiter
+	// Another goroutine might have created it while we were waiting for the lock.
 	if client, exists := rl.limiters[apiKey]; exists {
-		client.lastSeen = rl.clock.Now()
+		client.lastSeen.Store(rl.clock.Now().UnixNano())
 		return client.limiter
 	}
 
 	// Create new limiter and wrap it in our client struct
 	limiter := rate.NewLimiter(rl.rateLimit, rl.burstSize)
-	rl.limiters[apiKey] = &rateLimitClient{
-		limiter:  limiter,
-		lastSeen: rl.clock.Now(),
+	newClient := &rateLimitClient{
+		limiter: limiter,
 	}
+	newClient.lastSeen.Store(rl.clock.Now().UnixNano())
+	rl.limiters[apiKey] = newClient
 
 	return limiter
 }
@@ -173,29 +185,40 @@ func (rl *RateLimitMiddleware) sendRateLimitExceeded(w http.ResponseWriter, r *h
 	}
 }
 
-// cleanup periodically removes old, unused limiters to prevent memory leaks
-func (rl *RateLimitMiddleware) cleanup() {
+// cleanupOnce performs a single iteration of removing old, unused limiters.
+// It is separated from the background loop so tests can trigger it synchronously.
+func (rl *RateLimitMiddleware) cleanupOnce() {
 	// Define how long a client must be idle before eviction
 	threshold := 10 * time.Minute
 
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := rl.clock.Now()
+
+	for key, client := range rl.limiters {
+		// Skip exempted keys
+		if !rl.exemptKeys[key] {
+			// using Time-Based Eviction (LRU)
+			// only delete if the client hasn't been seen in 10 minutes.
+			lastSeenNano := client.lastSeen.Load()
+			if lastSeenNano == 0 {
+				continue // Client just created, not yet initialized
+			}
+			lastSeenTime := time.Unix(0, lastSeenNano)
+			if now.Sub(lastSeenTime) > threshold {
+				delete(rl.limiters, key)
+			}
+		}
+	}
+}
+
+// cleanup periodically removes old, unused limiters to prevent memory leaks
+func (rl *RateLimitMiddleware) cleanup() {
 	for {
 		select {
 		case <-rl.cleanupTick.C:
-			rl.mu.Lock()
-			now := rl.clock.Now()
-
-			for key, client := range rl.limiters {
-				// Skip exempted keys
-				if !rl.exemptKeys[key] {
-					// using Time-Based Eviction (LRU)
-					// only delete if the client hasn't been seen in 10 minutes.
-					if now.Sub(client.lastSeen) > threshold {
-						delete(rl.limiters, key)
-					}
-				}
-			}
-
-			rl.mu.Unlock()
+			rl.cleanupOnce()
 		case <-rl.stopChan:
 			return
 		}
