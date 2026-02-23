@@ -35,9 +35,11 @@ func (api *RestAPI) BuildTripStatus(
 		if vehicle.OccupancyStatus != nil {
 			status.OccupancyStatus = vehicle.OccupancyStatus.String()
 		}
-		if vehicle.OccupancyPercentage != nil {
-			status.OccupancyCapacity = int(*vehicle.OccupancyPercentage)
-		}
+		// NOTE: GTFS-RT OccupancyPercentage (0-100%) has no direct equivalent in the
+		// OBA TripStatus schema. The Java OBA server populates occupancyCapacity from
+		// agency-provided vehicle capacity data, not from GTFS-RT percentages.
+		// We intentionally leave OccupancyCapacity at its default (-1) here.
+		// See: TripStatusBeanServiceImpl.java in onebusaway-transit-data-federation.
 	}
 	api.BuildVehicleStatus(ctx, vehicle, tripID, agencyID, status)
 
@@ -116,6 +118,13 @@ func (api *RestAPI) BuildTripStatus(
 		status.TotalDistanceAlongTrip = cumulativeDistances[len(cumulativeDistances)-1]
 
 		if vehicle != nil && vehicle.Position != nil && vehicle.Position.Latitude != nil && vehicle.Position.Longitude != nil {
+			// Refine the raw GPS position (set by BuildVehicleStatus) by projecting
+			// it onto the route shape. Reuses the already-fetched shapePoints.
+			actualPosition := status.LastKnownLocation
+			if projected := projectPositionWithShapePoints(shapePoints, actualPosition); projected != nil {
+				status.Position = *projected
+			}
+
 			actualDistance := api.getVehicleDistanceAlongShapeContextual(ctx, tripID, vehicle)
 			status.DistanceAlongTrip = actualDistance
 
