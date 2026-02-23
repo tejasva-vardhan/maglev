@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"maglev.onebusaway.org/gtfsdb"
+	internalgtfs "maglev.onebusaway.org/internal/gtfs"
 	"maglev.onebusaway.org/internal/models"
 	"maglev.onebusaway.org/internal/utils"
 )
@@ -495,9 +496,201 @@ func TestBuildStopTimesList_ErrorHandling(t *testing.T) {
 	})
 }
 
+func TestBuildTripStatus_VehicleWithPosition_FindsStops(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+	t.Cleanup(api.GtfsManager.MockResetRealTimeData)
+	ctx := context.Background()
+
+	agencies := api.GtfsManager.GetAgencies()
+	require.NotEmpty(t, agencies)
+	agencyID := agencies[0].Id
+
+	trips := api.GtfsManager.GetTrips()
+	require.NotEmpty(t, trips)
+
+	// Find a trip with stop times so we can exercise the stop-finding branch
+	var tripID string
+	var stopTimes []gtfsdb.StopTime
+	for _, trip := range trips {
+		st, err := api.GtfsManager.GtfsDB.Queries.GetStopTimesForTrip(ctx, trip.ID)
+		if err == nil && len(st) >= 2 {
+			tripID = trip.ID
+			stopTimes = st
+			break
+		}
+	}
+	require.NotEmpty(t, tripID, "Need a trip with at least 2 stop times")
+
+	// Look up coordinates for the first stop so the vehicle is nearby
+	firstStopID := stopTimes[0].StopID
+	stops, err := api.GtfsManager.GtfsDB.Queries.GetStopsByIDs(ctx, []string{firstStopID})
+	require.NoError(t, err)
+	require.NotEmpty(t, stops)
+
+	lat := float32(stops[0].Lat)
+	lon := float32(stops[0].Lon)
+
+	routeID := trips[0].Route.Id
+	vehicleID := "VEHICLE_POS_TEST"
+
+	api.GtfsManager.MockAddVehicleWithOptions(vehicleID, tripID, routeID, internalgtfs.MockVehicleOptions{
+		Position: &gtfs.Position{
+			Latitude:  &lat,
+			Longitude: &lon,
+		},
+	})
+
+	// Set currentTime during the trip using the first stop's arrival time
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	arrivalSeconds := utils.EffectiveStopTimeSeconds(stopTimes[0].ArrivalTime, stopTimes[0].DepartureTime)
+	currentTime := serviceDate.Add(time.Duration(arrivalSeconds) * time.Second)
+
+	status, err := api.BuildTripStatus(ctx, agencyID, tripID, serviceDate, currentTime)
+	require.NoError(t, err)
+	require.NotNil(t, status)
+
+	// Vehicle has position, so the stop-finding code should have run and found stops
+	assert.NotEmpty(t, status.ClosestStop, "ClosestStop should be populated when vehicle has position")
+	assert.NotEmpty(t, status.NextStop, "NextStop should be populated when vehicle has position and is not at last stop")
+
+	// Vehicle is fresh, so status should reflect real-time data
+	assert.Equal(t, "SCHEDULED", status.Status)
+	assert.Equal(t, "in_progress", status.Phase)
+	assert.NotZero(t, status.LastKnownLocation.Lat, "LastKnownLocation should be set from vehicle position")
+}
+
+func TestBuildTripStatus_ScheduleDeviation_SetsPredicted(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+	t.Cleanup(api.GtfsManager.MockResetRealTimeData)
+	ctx := context.Background()
+
+	agencies := api.GtfsManager.GetAgencies()
+	require.NotEmpty(t, agencies)
+	agencyID := agencies[0].Id
+
+	trips := api.GtfsManager.GetTrips()
+	require.NotEmpty(t, trips)
+	tripID := trips[0].ID
+	routeID := trips[0].Route.Id
+
+	// Add a trip update with a 120-second delay (no vehicle, just trip update)
+	delay := 120 * time.Second
+	api.GtfsManager.MockAddTripUpdate(tripID, &delay, nil)
+
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := serviceDate.Add(8 * time.Hour)
+
+	api.GtfsManager.MockAddAgency(agencyID, agencies[0].Name)
+	api.GtfsManager.MockAddRoute(routeID, agencyID, routeID)
+	api.GtfsManager.MockAddTrip(tripID, agencyID, routeID)
+
+	status, err := api.BuildTripStatus(ctx, agencyID, tripID, serviceDate, currentTime)
+	require.NoError(t, err)
+	require.NotNil(t, status)
+
+	assert.Equal(t, 120, status.ScheduleDeviation, "ScheduleDeviation should reflect the trip update delay")
+	assert.True(t, status.Predicted, "Predicted should be true when trip update exists")
+	assert.False(t, status.Scheduled, "Scheduled should be false when predicted is true")
+}
+
+func TestBuildTripStatus_NoRealtimeData_SetsScheduled(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+	t.Cleanup(api.GtfsManager.MockResetRealTimeData)
+	ctx := context.Background()
+
+	agencies := api.GtfsManager.GetAgencies()
+	require.NotEmpty(t, agencies)
+	agencyID := agencies[0].Id
+
+	trips := api.GtfsManager.GetTrips()
+	require.NotEmpty(t, trips)
+	tripID := trips[0].ID
+
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := serviceDate.Add(8 * time.Hour)
+
+	// No vehicle, no trip updates — purely scheduled
+	status, err := api.BuildTripStatus(ctx, agencyID, tripID, serviceDate, currentTime)
+	require.NoError(t, err)
+	require.NotNil(t, status)
+
+	assert.Equal(t, 0, status.ScheduleDeviation, "ScheduleDeviation should be 0 with no real-time data")
+	assert.False(t, status.Predicted, "Predicted should be false with no real-time data")
+	assert.True(t, status.Scheduled, "Scheduled should be true with no real-time data")
+	assert.Equal(t, "default", status.Status)
+	assert.Equal(t, "scheduled", status.Phase)
+}
+
+func TestBuildTripStatus_ShapeData_ComputesDistanceAlongTrip(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+	t.Cleanup(api.GtfsManager.MockResetRealTimeData)
+	ctx := context.Background()
+
+	agencies := api.GtfsManager.GetAgencies()
+	require.NotEmpty(t, agencies)
+	agencyID := agencies[0].Id
+
+	// Find a trip that has both shape data and stop times
+	trips := api.GtfsManager.GetTrips()
+	require.NotEmpty(t, trips)
+
+	var tripID, routeID string
+	for _, trip := range trips {
+		shapeRows, err := api.GtfsManager.GtfsDB.Queries.GetShapePointsByTripID(ctx, trip.ID)
+		if err == nil && len(shapeRows) > 1 {
+			st, err := api.GtfsManager.GtfsDB.Queries.GetStopTimesForTrip(ctx, trip.ID)
+			if err == nil && len(st) >= 2 {
+				tripID = trip.ID
+				routeID = trip.Route.Id
+				break
+			}
+		}
+	}
+	require.NotEmpty(t, tripID, "Need a trip with shape data and stop times")
+
+	// Get a mid-route stop to position the vehicle
+	stopTimes, err := api.GtfsManager.GtfsDB.Queries.GetStopTimesForTrip(ctx, tripID)
+	require.NoError(t, err)
+
+	midIdx := len(stopTimes) / 2
+	midStopID := stopTimes[midIdx].StopID
+	stops, err := api.GtfsManager.GtfsDB.Queries.GetStopsByIDs(ctx, []string{midStopID})
+	require.NoError(t, err)
+	require.NotEmpty(t, stops)
+
+	lat := float32(stops[0].Lat)
+	lon := float32(stops[0].Lon)
+	vehicleID := "VEHICLE_SHAPE_TEST"
+
+	api.GtfsManager.MockAddVehicleWithOptions(vehicleID, tripID, routeID, internalgtfs.MockVehicleOptions{
+		Position: &gtfs.Position{
+			Latitude:  &lat,
+			Longitude: &lon,
+		},
+	})
+
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	arrivalSeconds := utils.EffectiveStopTimeSeconds(stopTimes[midIdx].ArrivalTime, stopTimes[midIdx].DepartureTime)
+	currentTime := serviceDate.Add(time.Duration(arrivalSeconds) * time.Second)
+
+	status, err := api.BuildTripStatus(ctx, agencyID, tripID, serviceDate, currentTime)
+	require.NoError(t, err)
+	require.NotNil(t, status)
+
+	assert.Greater(t, status.TotalDistanceAlongTrip, 0.0, "TotalDistanceAlongTrip should be > 0 with shape data")
+	assert.Greater(t, status.DistanceAlongTrip, 0.0, "DistanceAlongTrip should be > 0 for a vehicle mid-route")
+	assert.Less(t, status.DistanceAlongTrip, status.TotalDistanceAlongTrip,
+		"DistanceAlongTrip should be less than total for a mid-route vehicle")
+}
+
 func TestBuildTripStatus_VehicleIDFormat(t *testing.T) {
 	api := createTestApi(t)
 	defer api.Shutdown()
+	t.Cleanup(api.GtfsManager.MockResetRealTimeData)
 
 	agencyStatic := api.GtfsManager.GetAgencies()[0]
 	trips := api.GtfsManager.GetTrips()
@@ -936,7 +1129,7 @@ func TestFindClosestStopBySequence_Match(t *testing.T) {
 		{StopID: "s3", StopSequence: 3, ArrivalTime: secondsToNanos(9 * 3600), DepartureTime: secondsToNanos(9 * 3600)},
 	})
 
-	stopID, offset := api.findClosestStopBySequence(stops, 2, currentTime, serviceDate, 0, nil)
+	stopID, offset := api.findClosestStopBySequence(stops, 2, currentTime, serviceDate, 0)
 	assert.Equal(t, "s2", stopID)
 	// predicted arrival = 8*3600 + 0(deviation) = 28800; offset = 28800 - 28800 = 0
 	assert.Equal(t, 0, offset, "vehicle at on-time stop means offset == 0")
@@ -953,7 +1146,7 @@ func TestFindClosestStopBySequence_WithDeviation(t *testing.T) {
 	})
 
 	// Vehicle is 5 minutes late
-	stopID, offset := api.findClosestStopBySequence(stops, 1, currentTime, serviceDate, 300, nil)
+	stopID, offset := api.findClosestStopBySequence(stops, 1, currentTime, serviceDate, 300)
 	assert.Equal(t, "s1", stopID)
 	// predicted arrival = 8*3600 + 300 = 29100; current = 28800; offset = 300
 	assert.Equal(t, 300, offset, "offset should reflect 5-minute delay")
@@ -969,7 +1162,7 @@ func TestFindClosestStopBySequence_NoMatch(t *testing.T) {
 		{StopID: "s1", StopSequence: 1, ArrivalTime: secondsToNanos(8 * 3600)},
 	})
 
-	stopID, offset := api.findClosestStopBySequence(stops, 99, currentTime, serviceDate, 0, nil)
+	stopID, offset := api.findClosestStopBySequence(stops, 99, currentTime, serviceDate, 0)
 	assert.Empty(t, stopID, "no stop should match sequence 99")
 	assert.Equal(t, 0, offset)
 }
