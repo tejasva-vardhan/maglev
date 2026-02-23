@@ -78,10 +78,23 @@ func TestStaleDetector_NilVehicle(t *testing.T) {
 	assert.True(t, d.Check(nil, time.Now()), "nil vehicle should be considered stale")
 }
 
-func TestStaleDetector_NilTimestamp(t *testing.T) {
+func TestStaleDetector_NilTimestamp_NoPosition(t *testing.T) {
 	d := NewStaleDetector()
-	vehicle := &gtfs.Vehicle{} // Timestamp is nil
-	assert.True(t, d.Check(vehicle, time.Now()), "vehicle with nil timestamp should be considered stale")
+	vehicle := &gtfs.Vehicle{}
+	assert.True(t, d.Check(vehicle, time.Now()), "vehicle with nil timestamp and no position should be considered stale")
+}
+
+func TestStaleDetector_NilTimestamp_WithPosition(t *testing.T) {
+	d := NewStaleDetector()
+	lat := float32(37.7749)
+	lon := float32(-122.4194)
+	vehicle := &gtfs.Vehicle{
+		Position: &gtfs.Position{
+			Latitude:  &lat,
+			Longitude: &lon,
+		},
+	}
+	assert.False(t, d.Check(vehicle, time.Now()), "vehicle with nil timestamp but valid position should not be stale")
 }
 
 func TestStaleDetector_FreshVehicle(t *testing.T) {
