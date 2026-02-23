@@ -102,7 +102,7 @@ func TestGetScheduleDeviation_StopUpdateWithNoDelay(t *testing.T) {
 
 	deviation, hasData := api.GetScheduleDeviation("trip-nodelay-test")
 	assert.Equal(t, 0, deviation)
-	assert.True(t, hasData, "trip update exists so hasData should be true even with zero deviation")
+	assert.False(t, hasData, "trip update with no delay data should report hasData=false")
 }
 
 func TestGetScheduleDeviation_ZeroDeviationIsDistinguishedFromNoData(t *testing.T) {

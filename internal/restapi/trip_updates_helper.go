@@ -26,7 +26,7 @@ func (api *RestAPI) GetScheduleDeviation(tripID string) (int, bool) {
 		}
 	}
 
-	return 0, true
+	return 0, false
 }
 
 func (api *RestAPI) GetStopDelaysFromTripUpdates(tripID string) map[string]StopDelayInfo {
