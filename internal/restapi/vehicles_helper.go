@@ -28,8 +28,7 @@ func NewStaleDetector() *StaleDetector {
 }
 
 func (d *StaleDetector) WithThreshold(threshold time.Duration) *StaleDetector {
-	d.threshold = threshold
-	return d
+	return &StaleDetector{threshold: threshold}
 }
 
 func (d *StaleDetector) Check(vehicle *gtfs.Vehicle, currentTime time.Time) bool {
