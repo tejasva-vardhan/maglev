@@ -160,16 +160,6 @@ func GetVehicleActiveTripID(vehicle *gtfs.Vehicle) string {
 	return vehicle.Trip.ID.ID
 }
 
-func (api *RestAPI) projectPositionOntoRoute(ctx context.Context, tripID string, actualPos models.Location) *models.Location {
-	shapeRows, err := api.GtfsManager.GtfsDB.Queries.GetShapePointsByTripID(ctx, tripID)
-	if err != nil || len(shapeRows) < 2 {
-		return nil
-	}
-
-	shapePoints := shapeRowsToPoints(shapeRows)
-	return projectPositionWithShapePoints(shapePoints, actualPos)
-}
-
 // projectPositionWithShapePoints projects actualPos onto the nearest segment
 // of the given shape, returning nil if no segment is within 200 m.
 func projectPositionWithShapePoints(shapePoints []gtfs.ShapePoint, actualPos models.Location) *models.Location {
