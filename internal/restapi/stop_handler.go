@@ -66,9 +66,8 @@ func (api *RestAPI) stopHandler(w http.ResponseWriter, r *http.Request) {
 			models.RouteType(route.Type),
 			route.Url.String,
 			route.Color.String,
-			route.TextColor.String,
-			route.ShortName.String,
-		)
+			route.TextColor.String)
+
 		references.Routes = append(references.Routes, routeModel)
 		uniqueAgencyIDs[route.AgencyID] = true
 	}

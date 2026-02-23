@@ -2,6 +2,8 @@ package gtfs
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -111,6 +113,7 @@ func (manager *Manager) GetAlertsForRoute(routeID string) []gtfs.Alert {
 	return alerts
 }
 
+// GetAlertsByIDs returns alerts matching the given trip, route, or agency IDs.
 func (manager *Manager) GetAlertsByIDs(tripID, routeID, agencyID string) []gtfs.Alert {
 	manager.realTimeMutex.RLock()
 	defer manager.realTimeMutex.RUnlock()
@@ -122,7 +125,7 @@ func (manager *Manager) GetAlertsByIDs(tripID, routeID, agencyID string) []gtfs.
 			continue
 		}
 		for _, entity := range alert.InformedEntities {
-			if entity.TripID != nil && entity.TripID.ID == tripID {
+			if entity.TripID != nil && tripID != "" && entity.TripID.ID == tripID {
 				alerts = append(alerts, alert)
 				break
 			}
@@ -152,7 +155,18 @@ func (manager *Manager) GetAlertsForTrip(ctx context.Context, tripID string) []g
 			route, err := manager.GtfsDB.Queries.GetRoute(ctx, routeID)
 			if err == nil {
 				agencyID = route.AgencyID
+			} else if !errors.Is(err, sql.ErrNoRows) {
+				slog.WarnContext(ctx, "Failed to fetch route for alerts; degrading to trip+route matching only",
+					slog.String("trip_id", tripID),
+					slog.String("route_id", routeID),
+					slog.Any("error", err),
+				)
 			}
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			slog.WarnContext(ctx, "Failed to fetch trip for alerts",
+				slog.String("trip_id", tripID),
+				slog.Any("error", err),
+			)
 		}
 	}
 

@@ -107,9 +107,8 @@ func (api *RestAPI) scheduleForRouteHandler(w http.ResponseWriter, r *http.Reque
 		models.RouteType(route.Type),
 		route.Url.String,
 		route.Color.String,
-		route.TextColor.String,
-		route.ShortName.String,
-	)
+		route.TextColor.String)
+
 	routeRefs[utils.FormCombinedID(agencyID, route.ID)] = routeModel
 
 	type tripGroupKey struct {

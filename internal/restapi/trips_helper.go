@@ -2,6 +2,8 @@ package restapi
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"log/slog"
 	"math"
 	"time"
@@ -647,7 +649,18 @@ func (api *RestAPI) GetSituationIDsForTrip(ctx context.Context, tripID string) [
 			route, err := api.GtfsManager.GtfsDB.Queries.GetRoute(ctx, routeID)
 			if err == nil {
 				agencyID = route.AgencyID
+			} else if !errors.Is(err, sql.ErrNoRows) {
+				api.Logger.Warn("Failed to fetch route for alerts; degrading to trip+route matching only",
+					slog.String("trip_id", tripID),
+					slog.String("route_id", routeID),
+					slog.Any("error", err),
+				)
 			}
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			api.Logger.Warn("Failed to fetch trip for alerts; degrading to trip matching only",
+				slog.String("trip_id", tripID),
+				slog.Any("error", err),
+			)
 		}
 	}
 

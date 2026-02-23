@@ -32,9 +32,7 @@ func (api *RestAPI) routeHandler(w http.ResponseWriter, r *http.Request) {
 		models.RouteType(route.Type),
 		route.Url.String,
 		route.Color.String,
-		route.TextColor.String,
-		utils.NullStringOrEmpty(route.ShortName),
-	)
+		route.TextColor.String)
 
 	references := models.NewEmptyReferences()
 

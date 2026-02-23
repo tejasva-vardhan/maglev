@@ -15,7 +15,12 @@ type Route struct {
 	URL               string    `json:"url"`
 }
 
-func NewRoute(id, agencyID, shortName, longName, description string, routeType RouteType, url, color, textColor, nullSafeShortName string) Route {
+func NewRoute(id, agencyID, shortName, longName, description string, routeType RouteType, url, color, textColor string) Route {
+	nullSafeShortName := shortName
+	if nullSafeShortName == "" {
+		nullSafeShortName = longName
+	}
+
 	return Route{
 		AgencyID:          agencyID,
 		Color:             color,

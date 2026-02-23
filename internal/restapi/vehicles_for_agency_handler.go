@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"maglev.onebusaway.org/gtfsdb"
 	"maglev.onebusaway.org/internal/models"
 	"maglev.onebusaway.org/internal/utils"
 )
@@ -29,6 +30,27 @@ func (api *RestAPI) vehiclesForAgencyHandler(w http.ResponseWriter, r *http.Requ
 	offset, limit := utils.ParsePaginationParams(r)
 	vehiclesForAgency, limitExceeded := utils.PaginateSlice(vehiclesForAgency, offset, limit)
 	vehiclesList := make([]models.VehicleStatus, 0, len(vehiclesForAgency))
+
+	// Collect unique route IDs and batch-fetch routes
+	routeIDSet := make(map[string]struct{})
+	for _, vehicle := range vehiclesForAgency {
+		if vehicle.Trip != nil {
+			routeIDSet[vehicle.Trip.ID.RouteID] = struct{}{}
+		}
+	}
+	routeIDs := make([]string, 0, len(routeIDSet))
+	for id := range routeIDSet {
+		routeIDs = append(routeIDs, id)
+	}
+	routes, err := api.GtfsManager.GtfsDB.Queries.GetRoutesByIDs(ctx, routeIDs)
+	if err != nil {
+		api.serverErrorResponse(w, r, err)
+		return
+	}
+	routeByID := make(map[string]gtfsdb.Route, len(routes))
+	for _, r := range routes {
+		routeByID[r.ID] = r
+	}
 
 	// Maps to build references
 	agencyRefs := make(map[string]models.AgencyReference)
@@ -101,8 +123,8 @@ func (api *RestAPI) vehiclesForAgencyHandler(w http.ResponseWriter, r *http.Requ
 				"routeId": vehicle.Trip.ID.RouteID,
 			}
 
-			// Find and add route to references
-			if route, err := api.GtfsManager.GtfsDB.Queries.GetRoute(ctx, vehicle.Trip.ID.RouteID); err == nil {
+			// Add route to references (from batch-fetched map)
+			if route, ok := routeByID[vehicle.Trip.ID.RouteID]; ok {
 				shortName := ""
 				if route.ShortName.Valid {
 					shortName = route.ShortName.String
@@ -131,8 +153,8 @@ func (api *RestAPI) vehiclesForAgencyHandler(w http.ResponseWriter, r *http.Requ
 				routeRefs[route.ID] = models.NewRoute(
 					route.ID, route.AgencyID, shortName, longName,
 					desc, models.RouteType(route.Type),
-					url, color, textColor, shortName,
-				)
+					url, color, textColor)
+
 			}
 		}
 

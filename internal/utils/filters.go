@@ -35,8 +35,7 @@ func FilterRoutes(q *gtfsdb.Queries, ctx context.Context, present map[string]boo
 			refs = append(refs, models.NewRoute(
 				routeIDStr, r.AgencyID, r.ShortName.String, r.LongName.String,
 				r.Desc.String, models.RouteType(r.Type), r.Url.String,
-				r.Color.String, r.TextColor.String, r.ShortName.String,
-			))
+				r.Color.String, r.TextColor.String))
 		}
 	}
 	return refs
@@ -52,8 +51,7 @@ func GetAllRoutesRefs(q *gtfsdb.Queries, ctx context.Context) []interface{} {
 		refs = append(refs, models.NewRoute(
 			FormCombinedID(r.AgencyID, r.ID), r.AgencyID, r.ShortName.String, r.LongName.String,
 			r.Desc.String, models.RouteType(r.Type), r.Url.String,
-			r.Color.String, r.TextColor.String, r.ShortName.String,
-		))
+			r.Color.String, r.TextColor.String))
 	}
 	return refs
 }

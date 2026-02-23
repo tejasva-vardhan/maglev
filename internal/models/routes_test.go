@@ -2,8 +2,9 @@ package models
 
 import (
 	"encoding/json"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestRouteCreation(t *testing.T) {
@@ -16,12 +17,10 @@ func TestRouteCreation(t *testing.T) {
 	url := "https://transit.org/routes/1"
 	color := "FF0000"
 	textColor := "FFFFFF"
-	nullSafeShortName := "A"
 
 	route := NewRoute(
 		id, agencyID, shortName, longName, description,
-		routeType, url, color, textColor, nullSafeShortName,
-	)
+		routeType, url, color, textColor)
 
 	assert.Equal(t, id, route.ID)
 	assert.Equal(t, agencyID, route.AgencyID)
@@ -32,7 +31,7 @@ func TestRouteCreation(t *testing.T) {
 	assert.Equal(t, url, route.URL)
 	assert.Equal(t, color, route.Color)
 	assert.Equal(t, textColor, route.TextColor)
-	assert.Equal(t, nullSafeShortName, route.NullSafeShortName)
+	assert.Equal(t, "A", route.NullSafeShortName)
 }
 
 func TestRouteJSON(t *testing.T) {
@@ -69,7 +68,7 @@ func TestRouteJSON(t *testing.T) {
 }
 
 func TestRouteWithEmptyValues(t *testing.T) {
-	route := NewRoute("", "", "", "", "", 0, "", "", "", "")
+	route := NewRoute("", "", "", "", "", 0, "", "", "")
 
 	assert.Equal(t, "", route.ID)
 	assert.Equal(t, "", route.AgencyID)
@@ -101,8 +100,8 @@ func TestRouteWithNilValuesJSON(t *testing.T) {
 }
 
 func TestRouteDataJSON(t *testing.T) {
-	route1 := NewRoute("1", "agency-1", "A", "Route A", "Description A", 3, "url-a", "FF0000", "FFFFFF", "A")
-	route2 := NewRoute("2", "agency-1", "B", "Route B", "Description B", 2, "url-b", "00FF00", "000000", "B")
+	route1 := NewRoute("1", "agency-1", "A", "Route A", "Description A", 3, "url-a", "FF0000", "FFFFFF")
+	route2 := NewRoute("2", "agency-1", "B", "Route B", "Description B", 2, "url-b", "00FF00", "000000")
 
 	routeData := RouteData{
 		LimitExceeded: false,
@@ -124,7 +123,7 @@ func TestRouteDataJSON(t *testing.T) {
 }
 
 func TestRouteResponseJSON(t *testing.T) {
-	route := NewRoute("1", "agency-1", "A", "Route A", "Description A", 3, "url-a", "FF0000", "FFFFFF", "A")
+	route := NewRoute("1", "agency-1", "A", "Route A", "Description A", 3, "url-a", "FF0000", "FFFFFF")
 
 	references := ReferencesModel{
 		Agencies: []AgencyReference{
@@ -169,4 +168,15 @@ func TestRouteResponseJSON(t *testing.T) {
 
 	assert.Len(t, unmarshaledResponse.Data.References.Agencies, 1)
 	assert.Equal(t, "agency-1", unmarshaledResponse.Data.References.Agencies[0].ID)
+}
+
+func TestRouteNullSafeShortNameFallback(t *testing.T) {
+	// When shortName is empty, NullSafeShortName should fall back to longName
+	route := NewRoute("1", "agency-1", "", "Downtown Express", "", 3, "", "", "")
+	assert.Equal(t, "Downtown Express", route.NullSafeShortName)
+	assert.Equal(t, "", route.ShortName) // ShortName itself stays empty
+
+	// When shortName is present, NullSafeShortName should use it
+	route2 := NewRoute("2", "agency-1", "DX", "Downtown Express", "", 3, "", "", "")
+	assert.Equal(t, "DX", route2.NullSafeShortName)
 }

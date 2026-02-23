@@ -1,7 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,6 +16,7 @@ import (
 	_ "github.com/mattn/go-sqlite3" // CGo-based SQLite driver
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"maglev.onebusaway.org/internal/app"
 	"maglev.onebusaway.org/internal/appconf"
 	"maglev.onebusaway.org/internal/gtfs"
 )
@@ -476,17 +481,7 @@ func TestBuildApplicationWithConfigFile(t *testing.T) {
 		// Convert to app and GTFS configs
 		cfg := jsonConfig.ToAppConfig()
 		gtfsCfgData := jsonConfig.ToGtfsConfigData()
-		gtfsCfg := gtfs.Config{
-			GtfsURL:                 gtfsCfgData.GtfsURL,
-			TripUpdatesURL:          gtfsCfgData.TripUpdatesURL,
-			VehiclePositionsURL:     gtfsCfgData.VehiclePositionsURL,
-			ServiceAlertsURL:        gtfsCfgData.ServiceAlertsURL,
-			RealTimeAuthHeaderKey:   gtfsCfgData.RealTimeAuthHeaderKey,
-			RealTimeAuthHeaderValue: gtfsCfgData.RealTimeAuthHeaderValue,
-			GTFSDataPath:            gtfsCfgData.GTFSDataPath,
-			Env:                     gtfsCfgData.Env,
-			Verbose:                 gtfsCfgData.Verbose,
-		}
+		gtfsCfg := gtfsConfigFromData(gtfsCfgData)
 
 		// Build application
 		coreApp, err := BuildApplication(cfg, gtfsCfg)
@@ -499,4 +494,96 @@ func TestBuildApplicationWithConfigFile(t *testing.T) {
 		assert.Equal(t, []string{"test-key"}, coreApp.Config.ApiKeys)
 		assert.Equal(t, 50, coreApp.Config.RateLimit)
 	})
+}
+
+func TestRun_GracefulShutdown(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	coreApp := &app.Application{}
+
+	srv := &http.Server{
+		Addr: "127.0.0.1:0",
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}),
+	}
+
+	errCh := make(chan error, 1)
+
+	go func() {
+		errCh <- Run(ctx, srv, coreApp, nil, logger)
+	}()
+
+	// Small delay so ListenAndServe starts
+	time.Sleep(120 * time.Millisecond)
+
+	// Trigger graceful shutdown
+	cancel()
+
+	select {
+	case err := <-errCh:
+		require.NoError(t, err, "Run returned error on graceful shutdown")
+	case <-time.After(3 * time.Second):
+		assert.Fail(t, "server did not shut down in time")
+	}
+}
+
+func TestDumpConfigJSON_WithExampleFile(t *testing.T) {
+	// Load configuration from JSON file
+	jsonConfig, err := appconf.LoadFromFile("../../config.example.json")
+
+	require.NoError(t, err, "failed to load config.example.json")
+
+	// Convert to app config
+	cfg := jsonConfig.ToAppConfig()
+
+	// Convert to GTFS config
+	gtfsCfgData := jsonConfig.ToGtfsConfigData()
+	gtfsCfg := gtfsConfigFromData(gtfsCfgData)
+
+	gtfsCfg.RealTimeAuthHeaderKey = "X-API-Key"
+	gtfsCfg.RealTimeAuthHeaderValue = "my-secret-api-key"
+
+	// Make a pipe to capture stdout
+	oldStdout := os.Stdout
+	defer func() { os.Stdout = oldStdout }()
+	r, w, err := os.Pipe()
+	require.NoError(t, err, "Failed to create OS Pipe")
+	os.Stdout = w
+
+	dumpConfigJSON(cfg, gtfsCfg)
+
+	_ = w.Close()
+	os.Stdout = oldStdout
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+
+	output := buf.String()
+
+	// Parse and validate json
+	var parsed map[string]interface{}
+
+	err = json.Unmarshal([]byte(output), &parsed)
+	require.NoError(t, err, "Output is not a valid JSON")
+
+	assert.Equal(t, float64(cfg.Port), parsed["port"])
+	staticFeed, ok := parsed["gtfs-static-feed"].(map[string]interface{})
+	require.True(t, ok, "gtfs-static-feed should be a map")
+	assert.Equal(t, gtfsCfg.GtfsURL, staticFeed["url"])
+
+	feeds, ok := parsed["gtfs-rt-feeds"].([]interface{})
+	require.True(t, ok, "gtfs-rt-feeds should be an array of maps")
+	assert.Equal(t, 1, len(feeds))
+
+	rtFeed, ok := feeds[0].(map[string]interface{})
+	require.True(t, ok, "feeds[0] should be a map")
+
+	assert.NotEqual(t, "my-secret-api-key", rtFeed["realtime-auth-header-value"])
+	assert.Equal(t, "***REDACTED***", rtFeed["realtime-auth-header-value"])
+
+	assert.NotEqual(t, "", rtFeed["trip-updates-url"])
+	assert.Equal(t, gtfsCfg.GTFSDataPath, parsed["data-path"])
 }

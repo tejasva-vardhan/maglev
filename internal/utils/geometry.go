@@ -3,7 +3,7 @@ package utils
 import "math"
 
 const (
-	// RADIUS_OF_EARTH_IN_METERS RADIUS_OF_EARTH_IN_KM * 1000
+	// RadiusOfEarthInMeters is RADIUS_OF_EARTH_IN_KM * 1000
 	RadiusOfEarthInMeters = 6371010.0
 )
 
@@ -15,8 +15,25 @@ type CoordinateBounds struct {
 	MaxLon float64
 }
 
-// Distance calculates the distance between two points on the Earth
+// Distance calculates the distance between two points on the Earth.
+// For short distances (under ~22km), it uses a highly optimized Equirectangular
+// approximation to save CPU cycles. For longer distances, it falls back to the exact formula.
 func Distance(lat1, lon1, lat2, lon2 float64) float64 {
+	// Fast-path for short distances: coordinate differences less than 0.2 degrees (~22km)
+	// Bypasses expensive Atan2, Pow, and multiple Sin/Cos calls for 99% of transit queries.
+	if math.Abs(lat2-lat1) < 0.2 && math.Abs(lon2-lon1) < 0.2 {
+		lat1Rad := lat1 * (math.Pi / 180)
+		lat2Rad := lat2 * (math.Pi / 180)
+		dLatRad := (lat2 - lat1) * (math.Pi / 180)
+		dLonRad := (lon2 - lon1) * (math.Pi / 180)
+
+		// Equirectangular approximation
+		x := dLonRad * math.Cos((lat1Rad+lat2Rad)/2)
+		y := dLatRad
+		return RadiusOfEarthInMeters * math.Sqrt(x*x+y*y)
+	}
+
+	// Exact calculation fallback for longer distances
 	lat1Rad := lat1 * (math.Pi / 180)
 	lon1Rad := lon1 * (math.Pi / 180)
 	lat2Rad := lat2 * (math.Pi / 180)
