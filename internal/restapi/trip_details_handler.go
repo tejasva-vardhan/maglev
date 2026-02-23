@@ -2,6 +2,7 @@ package restapi
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -135,7 +136,13 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 	var status *models.TripStatusForTripDetails
 
 	if params.IncludeStatus {
-		status, _ = api.BuildTripStatus(ctx, agencyID, trip.ID, serviceDate, currentTime)
+		var statusErr error
+		status, statusErr = api.BuildTripStatus(ctx, agencyID, trip.ID, serviceDate, currentTime)
+		if statusErr != nil {
+			slog.Warn("BuildTripStatus failed",
+				slog.String("trip_id", trip.ID),
+				slog.String("error", statusErr.Error()))
+		}
 	}
 
 	if params.IncludeSchedule {
