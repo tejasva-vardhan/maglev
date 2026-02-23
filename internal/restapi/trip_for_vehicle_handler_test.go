@@ -22,6 +22,7 @@ func setupTestApiWithMockVehicle(t *testing.T) (*RestAPI, string, string) {
 	api := createTestApi(t)
 	// Initialize the logger to prevent nil pointer panics during handler execution
 	api.Logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	t.Cleanup(api.GtfsManager.MockResetRealTimeData)
 
 	// Note: caller is responsible for calling api.Shutdown()
 
@@ -257,6 +258,7 @@ func TestTripForVehicleHandlerWithNonExistentTrip(t *testing.T) {
 	// Initialize the logger to prevent nil pointer panics during handler execution
 	api.Logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	defer api.Shutdown()
+	t.Cleanup(api.GtfsManager.MockResetRealTimeData)
 
 	agencyID := api.GtfsManager.GetAgencies()[0].Id
 
