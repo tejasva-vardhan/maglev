@@ -924,6 +924,304 @@ func BenchmarkOptimized_MonotonicBatch(b *testing.B) {
 	}
 }
 
+func TestFindClosestStopBySequence_Match(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC) // 28800s into service day
+
+	stops := makeStopTimePtrs([]gtfsdb.StopTime{
+		{StopID: "s1", StopSequence: 1, ArrivalTime: secondsToNanos(7 * 3600), DepartureTime: secondsToNanos(7 * 3600)},
+		{StopID: "s2", StopSequence: 2, ArrivalTime: secondsToNanos(8 * 3600), DepartureTime: secondsToNanos(8 * 3600)},
+		{StopID: "s3", StopSequence: 3, ArrivalTime: secondsToNanos(9 * 3600), DepartureTime: secondsToNanos(9 * 3600)},
+	})
+
+	stopID, offset := api.findClosestStopBySequence(stops, 2, currentTime, serviceDate, 0, nil)
+	assert.Equal(t, "s2", stopID)
+	// predicted arrival = 8*3600 + 0(deviation) = 28800; offset = 28800 - 28800 = 0
+	assert.Equal(t, 0, offset, "vehicle at on-time stop means offset == 0")
+}
+
+func TestFindClosestStopBySequence_WithDeviation(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC)
+
+	stops := makeStopTimePtrs([]gtfsdb.StopTime{
+		{StopID: "s1", StopSequence: 1, ArrivalTime: secondsToNanos(8 * 3600), DepartureTime: secondsToNanos(8 * 3600)},
+	})
+
+	// Vehicle is 5 minutes late
+	stopID, offset := api.findClosestStopBySequence(stops, 1, currentTime, serviceDate, 300, nil)
+	assert.Equal(t, "s1", stopID)
+	// predicted arrival = 8*3600 + 300 = 29100; current = 28800; offset = 300
+	assert.Equal(t, 300, offset, "offset should reflect 5-minute delay")
+}
+
+func TestFindClosestStopBySequence_NoMatch(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC)
+
+	stops := makeStopTimePtrs([]gtfsdb.StopTime{
+		{StopID: "s1", StopSequence: 1, ArrivalTime: secondsToNanos(8 * 3600)},
+	})
+
+	stopID, offset := api.findClosestStopBySequence(stops, 99, currentTime, serviceDate, 0, nil)
+	assert.Empty(t, stopID, "no stop should match sequence 99")
+	assert.Equal(t, 0, offset)
+}
+
+func TestFindNextStopBySequence_InTransit(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+	ctx := context.Background()
+
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC)
+
+	stops := makeStopTimePtrs([]gtfsdb.StopTime{
+		{StopID: "s1", StopSequence: 1, ArrivalTime: secondsToNanos(7 * 3600), DepartureTime: secondsToNanos(7 * 3600)},
+		{StopID: "s2", StopSequence: 2, ArrivalTime: secondsToNanos(8 * 3600), DepartureTime: secondsToNanos(8 * 3600)},
+		{StopID: "s3", StopSequence: 3, ArrivalTime: secondsToNanos(9 * 3600), DepartureTime: secondsToNanos(9 * 3600)},
+	})
+
+	// Vehicle is IN_TRANSIT_TO (CurrentStatus 2 = the default for nil)
+	inTransit := gtfs.CurrentStatus(2)
+	vehicle := &gtfs.Vehicle{CurrentStatus: &inTransit}
+
+	// When in transit, the current sequence stop IS the next stop
+	stopID, offset := api.findNextStopBySequence(ctx, stops, 2, currentTime, serviceDate, 0, vehicle, "trip1", serviceDate)
+	assert.Equal(t, "s2", stopID)
+	assert.Equal(t, 0, offset)
+}
+
+func TestFindNextStopBySequence_StoppedAt(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+	ctx := context.Background()
+
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC)
+
+	stops := makeStopTimePtrs([]gtfsdb.StopTime{
+		{StopID: "s1", StopSequence: 1, ArrivalTime: secondsToNanos(7 * 3600), DepartureTime: secondsToNanos(7 * 3600)},
+		{StopID: "s2", StopSequence: 2, ArrivalTime: secondsToNanos(8 * 3600), DepartureTime: secondsToNanos(8 * 3600)},
+		{StopID: "s3", StopSequence: 3, ArrivalTime: secondsToNanos(9 * 3600), DepartureTime: secondsToNanos(9 * 3600)},
+	})
+
+	// Vehicle is STOPPED_AT (CurrentStatus 1) at stop sequence 2
+	stoppedAt := gtfs.CurrentStatus(1)
+	vehicle := &gtfs.Vehicle{CurrentStatus: &stoppedAt}
+
+	stopID, offset := api.findNextStopBySequence(ctx, stops, 2, currentTime, serviceDate, 0, vehicle, "trip1", serviceDate)
+	// Stopped at s2, so next stop should be s3
+	assert.Equal(t, "s3", stopID)
+	// s3 arrival = 9*3600 + 0(deviation) = 32400; current = 28800; offset = 3600
+	assert.Equal(t, 3600, offset)
+}
+
+func TestFindNextStopBySequence_StoppedAtLastStop(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+	ctx := context.Background()
+
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := time.Date(2024, 1, 1, 9, 0, 0, 0, time.UTC)
+
+	stops := makeStopTimePtrs([]gtfsdb.StopTime{
+		{StopID: "s1", StopSequence: 1, ArrivalTime: secondsToNanos(8 * 3600), DepartureTime: secondsToNanos(8 * 3600)},
+		{StopID: "s2", StopSequence: 2, ArrivalTime: secondsToNanos(9 * 3600), DepartureTime: secondsToNanos(9 * 3600)},
+	})
+
+	stoppedAt := gtfs.CurrentStatus(1)
+	vehicle := &gtfs.Vehicle{CurrentStatus: &stoppedAt}
+
+	// Stopped at last stop (sequence 2), no next stop in this trip
+	// because "trip1" doesn't exist in the DB. So we expect empty.
+	stopID, _ := api.findNextStopBySequence(ctx, stops, 2, currentTime, serviceDate, 0, vehicle, "trip1", serviceDate)
+	assert.Empty(t, stopID, "no next stop when stopped at last stop of trip without block continuation")
+}
+
+func TestFindNextStopBySequence_NoMatch(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+	ctx := context.Background()
+
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC)
+
+	stops := makeStopTimePtrs([]gtfsdb.StopTime{
+		{StopID: "s1", StopSequence: 1, ArrivalTime: secondsToNanos(8 * 3600)},
+	})
+
+	stopID, offset := api.findNextStopBySequence(ctx, stops, 99, currentTime, serviceDate, 0, nil, "trip1", serviceDate)
+	assert.Empty(t, stopID)
+	assert.Equal(t, 0, offset)
+}
+
+func TestFindStopsByScheduleDeviation_OnTime(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC) // 28800s
+
+	stops := makeStopTimePtrs([]gtfsdb.StopTime{
+		{StopID: "s1", ArrivalTime: secondsToNanos(7 * 3600), DepartureTime: secondsToNanos(7 * 3600)},
+		{StopID: "s2", ArrivalTime: secondsToNanos(8 * 3600), DepartureTime: secondsToNanos(8 * 3600)},
+		{StopID: "s3", ArrivalTime: secondsToNanos(9 * 3600), DepartureTime: secondsToNanos(9 * 3600)},
+	})
+
+	closestStopID, closestOffset, nextStopID, nextOffset := api.findStopsByScheduleDeviation(stops, currentTime, serviceDate, 0)
+
+	// With 0 deviation, effective schedule time = 28800 = 8*3600 → closest is s2
+	assert.Equal(t, "s2", closestStopID)
+	// predicted arrival for s2 = 28800 + 0 = 28800; current = 28800; offset = 0
+	assert.Equal(t, 0, closestOffset)
+	// Next stop after s2 is s3
+	assert.Equal(t, "s3", nextStopID)
+	// predicted arrival for s3 = 32400 + 0 = 32400; current = 28800; offset = 3600
+	assert.Equal(t, 3600, nextOffset)
+}
+
+func TestFindStopsByScheduleDeviation_Late(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := time.Date(2024, 1, 1, 8, 5, 0, 0, time.UTC) // 28800 + 300 = 29100s
+
+	stops := makeStopTimePtrs([]gtfsdb.StopTime{
+		{StopID: "s1", ArrivalTime: secondsToNanos(7 * 3600), DepartureTime: secondsToNanos(7 * 3600)},
+		{StopID: "s2", ArrivalTime: secondsToNanos(8 * 3600), DepartureTime: secondsToNanos(8 * 3600)},
+		{StopID: "s3", ArrivalTime: secondsToNanos(9 * 3600), DepartureTime: secondsToNanos(9 * 3600)},
+	})
+
+	// Vehicle is 5 minutes late (300s deviation)
+	// effectiveScheduleTime = 29100 - 300 = 28800 → closest is still s2
+	closestStopID, closestOffset, nextStopID, nextOffset := api.findStopsByScheduleDeviation(stops, currentTime, serviceDate, 300)
+
+	assert.Equal(t, "s2", closestStopID)
+	// predicted arrival = 28800 + 300 = 29100; current = 29100; offset = 0
+	assert.Equal(t, 0, closestOffset)
+	assert.Equal(t, "s3", nextStopID)
+	// predicted next arrival = 32400 + 300 = 32700; current = 29100; offset = 3600
+	assert.Equal(t, 3600, nextOffset)
+}
+
+func TestFindStopsByScheduleDeviation_Empty(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC)
+
+	closestStopID, closestOffset, nextStopID, nextOffset := api.findStopsByScheduleDeviation(nil, currentTime, serviceDate, 0)
+	assert.Empty(t, closestStopID)
+	assert.Equal(t, 0, closestOffset)
+	assert.Empty(t, nextStopID)
+	assert.Equal(t, 0, nextOffset)
+}
+
+func TestFindStopsByScheduleDeviation_LastStop(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := time.Date(2024, 1, 1, 9, 0, 0, 0, time.UTC) // 32400s
+
+	stops := makeStopTimePtrs([]gtfsdb.StopTime{
+		{StopID: "s1", ArrivalTime: secondsToNanos(8 * 3600), DepartureTime: secondsToNanos(8 * 3600)},
+		{StopID: "s2", ArrivalTime: secondsToNanos(9 * 3600), DepartureTime: secondsToNanos(9 * 3600)},
+	})
+
+	closestStopID, _, nextStopID, _ := api.findStopsByScheduleDeviation(stops, currentTime, serviceDate, 0)
+	assert.Equal(t, "s2", closestStopID, "should identify last stop as closest")
+	assert.Empty(t, nextStopID, "no next stop after the last one")
+}
+
+func TestInterpolateDistanceAtScheduledTime_BetweenStops(t *testing.T) {
+	stopTimes := []gtfsdb.StopTime{
+		{DepartureTime: secondsToNanos(100), ArrivalTime: secondsToNanos(100)},
+		{DepartureTime: secondsToNanos(200), ArrivalTime: secondsToNanos(200)},
+	}
+	distances := []float64{0.0, 1000.0}
+
+	// Midpoint in time → midpoint in distance
+	d := interpolateDistanceAtScheduledTime(150, stopTimes, distances)
+	assert.InDelta(t, 500.0, d, 0.01, "midpoint time should give midpoint distance")
+}
+
+func TestInterpolateDistanceAtScheduledTime_AtStopBoundaries(t *testing.T) {
+	stopTimes := []gtfsdb.StopTime{
+		{DepartureTime: secondsToNanos(100), ArrivalTime: secondsToNanos(100)},
+		{DepartureTime: secondsToNanos(200), ArrivalTime: secondsToNanos(200)},
+		{DepartureTime: secondsToNanos(300), ArrivalTime: secondsToNanos(300)},
+	}
+	distances := []float64{0.0, 500.0, 1500.0}
+
+	// At exact first departure
+	d := interpolateDistanceAtScheduledTime(100, stopTimes, distances)
+	assert.InDelta(t, 0.0, d, 0.01, "at first departure should be distance 0")
+
+	// At exact second arrival
+	d = interpolateDistanceAtScheduledTime(200, stopTimes, distances)
+	assert.InDelta(t, 500.0, d, 0.01, "at second stop should be distance 500")
+}
+
+func TestInterpolateDistanceAtScheduledTime_BeforeFirstStop(t *testing.T) {
+	stopTimes := []gtfsdb.StopTime{
+		{DepartureTime: secondsToNanos(100), ArrivalTime: secondsToNanos(100)},
+		{DepartureTime: secondsToNanos(200), ArrivalTime: secondsToNanos(200)},
+	}
+	distances := []float64{0.0, 1000.0}
+
+	d := interpolateDistanceAtScheduledTime(50, stopTimes, distances)
+	assert.Equal(t, 0.0, d, "before first stop should return 0")
+}
+
+func TestInterpolateDistanceAtScheduledTime_AfterLastStop(t *testing.T) {
+	stopTimes := []gtfsdb.StopTime{
+		{DepartureTime: secondsToNanos(100), ArrivalTime: secondsToNanos(100)},
+		{DepartureTime: secondsToNanos(200), ArrivalTime: secondsToNanos(200)},
+	}
+	distances := []float64{0.0, 1000.0}
+
+	d := interpolateDistanceAtScheduledTime(999, stopTimes, distances)
+	assert.Equal(t, 1000.0, d, "after last stop should return total distance")
+}
+
+func TestInterpolateDistanceAtScheduledTime_EmptyInput(t *testing.T) {
+	assert.Equal(t, 0.0, interpolateDistanceAtScheduledTime(100, nil, nil))
+	assert.Equal(t, 0.0, interpolateDistanceAtScheduledTime(100,
+		[]gtfsdb.StopTime{{DepartureTime: secondsToNanos(100)}},
+		[]float64{0.0, 1.0}), // mismatched lengths
+	)
+}
+
+func TestInterpolateDistanceAtScheduledTime_MultipleSegments(t *testing.T) {
+	stopTimes := []gtfsdb.StopTime{
+		{DepartureTime: secondsToNanos(0), ArrivalTime: secondsToNanos(0)},
+		{DepartureTime: secondsToNanos(100), ArrivalTime: secondsToNanos(100)},
+		{DepartureTime: secondsToNanos(300), ArrivalTime: secondsToNanos(300)},
+	}
+	distances := []float64{0.0, 500.0, 1500.0}
+
+	// 75% through first segment: time=75 of [0,100] → 75% of [0, 500] = 375
+	d := interpolateDistanceAtScheduledTime(75, stopTimes, distances)
+	assert.InDelta(t, 375.0, d, 0.01)
+
+	// 50% through second segment: time=200 of [100,300] → 50% of [500, 1500] = 1000
+	d = interpolateDistanceAtScheduledTime(200, stopTimes, distances)
+	assert.InDelta(t, 1000.0, d, 0.01)
+}
+
 func TestGetDistanceAlongShape_Projection(t *testing.T) {
 	shape := []gtfs.ShapePoint{
 		{Latitude: 0.0, Longitude: 0.0},
