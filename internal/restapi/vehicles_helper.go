@@ -32,10 +32,12 @@ func (d *StaleDetector) WithThreshold(threshold time.Duration) *StaleDetector {
 	return d
 }
 
-// Check returns true when the vehicle's timestamp is missing or older than the threshold.
 func (d *StaleDetector) Check(vehicle *gtfs.Vehicle, currentTime time.Time) bool {
-	if vehicle == nil || vehicle.Timestamp == nil {
+	if vehicle == nil {
 		return true
+	}
+	if vehicle.Timestamp == nil {
+		return vehicle.Position == nil
 	}
 	return currentTime.Sub(*vehicle.Timestamp) > d.threshold
 }
@@ -64,18 +66,17 @@ func scheduleRelationshipStatus(sr gtfs.TripScheduleRelationship) string {
 	}
 }
 
-/*
-Note!!
-GetVehicleStatusAndPhase returns the OBA status and phase for a vehicle.
-Java reference: VehicleStatusServiceImpl.java (handleVehicleLocationRecord)
-onebusaway-transit-data-federation/src/main/java/org/onebusaway/transit_data_federation/impl/realtime/VehicleStatusServiceImpl.java
-The Java implementation does not map directly to GTFS-RT CurrentStatus values.
-Instead, it uses a simple rule: if a vehicle location record has been received,
-the trip is "in_progress"; otherwise it remains "scheduled". The phase is
-determined solely by the presence of the vehicle, not by its GTFS-RT stop status.
-Status comes from the trip's schedule relationship ("SCHEDULED", "CANCELED", "ADDED", "DUPLICATED").
-"default" is only returned when no real-time data exists at all.
-*/
+// GetVehicleStatusAndPhase returns the OBA status and phase for a vehicle.
+//
+// Java reference: VehicleStatusServiceImpl.java (handleVehicleLocationRecord)
+// onebusaway-transit-data-federation/src/main/java/org/onebusaway/transit_data_federation/impl/realtime/VehicleStatusServiceImpl.java
+//
+// The Java implementation does not map directly to GTFS-RT CurrentStatus values.
+// Instead, it uses a simple rule: if a vehicle location record has been received,
+// the trip is "in_progress"; otherwise it remains "scheduled". The phase is
+// determined solely by the presence of the vehicle, not by its GTFS-RT stop status.
+// Status comes from the trip's schedule relationship ("SCHEDULED", "CANCELED", "ADDED", "DUPLICATED").
+// "default" is only returned when no real-time data exists at all.
 func GetVehicleStatusAndPhase(vehicle *gtfs.Vehicle) (status string, phase string) {
 	if vehicle == nil {
 		// "default" matches the Java OBA behavior. In TripStatusBeanServiceImpl.getBlockLocationAsStatusBean()
@@ -111,8 +112,10 @@ func (api *RestAPI) BuildVehicleStatus(
 		return
 	}
 
+	var lastUpdateTime int64
 	if vehicle.Timestamp != nil {
-		status.LastUpdateTime = api.GtfsManager.GetVehicleLastUpdateTime(vehicle)
+		lastUpdateTime = api.GtfsManager.GetVehicleLastUpdateTime(vehicle)
+		status.LastUpdateTime = lastUpdateTime
 	}
 
 	if vehicle.Position != nil && vehicle.Position.Latitude != nil && vehicle.Position.Longitude != nil {
@@ -121,16 +124,13 @@ func (api *RestAPI) BuildVehicleStatus(
 			Lon: float64(*vehicle.Position.Longitude),
 		}
 		status.LastKnownLocation = actualPosition
-
-		projectedPosition := api.projectPositionOntoRoute(ctx, tripID, actualPosition)
-		if projectedPosition != nil {
-			status.Position = *projectedPosition
-		} else {
-			status.Position = actualPosition
-		}
+		// Position is initially set to the raw GPS position.
+		// BuildTripStatus refines this via shape projection once shape data
+		// is fetched, avoiding a duplicate GetShapePointsByTripID query.
+		status.Position = actualPosition
 
 		if vehicle.Timestamp != nil {
-			status.LastLocationUpdateTime = api.GtfsManager.GetVehicleLastUpdateTime(vehicle)
+			status.LastLocationUpdateTime = lastUpdateTime
 		}
 	}
 
@@ -167,6 +167,15 @@ func (api *RestAPI) projectPositionOntoRoute(ctx context.Context, tripID string,
 	}
 
 	shapePoints := shapeRowsToPoints(shapeRows)
+	return projectPositionWithShapePoints(shapePoints, actualPos)
+}
+
+// projectPositionWithShapePoints projects actualPos onto the nearest segment
+// of the given shape, returning nil if no segment is within 200 m.
+func projectPositionWithShapePoints(shapePoints []gtfs.ShapePoint, actualPos models.Location) *models.Location {
+	if len(shapePoints) < 2 {
+		return nil
+	}
 
 	minDistance := math.MaxFloat64
 	var closestPoint models.Location
