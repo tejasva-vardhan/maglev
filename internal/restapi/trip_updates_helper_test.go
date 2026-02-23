@@ -188,7 +188,7 @@ func TestGetStopDelaysFromTripUpdates_SkipsStopWithNoStopID(t *testing.T) {
 	assert.Empty(t, delays, "stop updates without StopID should be skipped")
 }
 
-func TestGetStopDelaysFromTripUpdates_SkipsStopWithZeroDelays(t *testing.T) {
+func TestGetStopDelaysFromTripUpdates_IncludesStopWithZeroDelays(t *testing.T) {
 	api := createTestApi(t)
 	defer api.Shutdown()
 
@@ -203,7 +203,9 @@ func TestGetStopDelaysFromTripUpdates_SkipsStopWithZeroDelays(t *testing.T) {
 	api.GtfsManager.MockAddTripUpdate("trip-zero-delays", nil, updates)
 
 	delays := api.GetStopDelaysFromTripUpdates("trip-zero-delays")
-	assert.Empty(t, delays, "stops with zero delays should be excluded")
+	assert.Len(t, delays, 1, "stops with zero delays should be included")
+	assert.Contains(t, delays, "stop-C")
+	assert.Equal(t, int64(0), delays["stop-C"].ArrivalDelay)
 }
 
 func TestGetStopDelaysFromTripUpdates_MultipleStops(t *testing.T) {
@@ -219,13 +221,15 @@ func TestGetStopDelaysFromTripUpdates_MultipleStops(t *testing.T) {
 	updates := []gtfs.StopTimeUpdate{
 		{StopID: &stopA, Arrival: &gtfs.StopTimeEvent{Delay: &delayA}},
 		{StopID: &stopB, Departure: &gtfs.StopTimeEvent{Delay: &delayB}},
-		{StopID: &stopC}, // no delay — should be omitted
+		{StopID: &stopC}, // no delay events — still included with zero values
 	}
 	api.GtfsManager.MockAddTripUpdate("trip-multi-stops", nil, updates)
 
 	delays := api.GetStopDelaysFromTripUpdates("trip-multi-stops")
-	assert.Len(t, delays, 2)
+	assert.Len(t, delays, 3, "all stops with StopID should be included")
 	assert.Equal(t, int64(30), delays["stop-A"].ArrivalDelay)
 	assert.Equal(t, int64(60), delays["stop-B"].DepartureDelay)
-	assert.NotContains(t, delays, "stop-C")
+	assert.Contains(t, delays, "stop-C")
+	assert.Equal(t, int64(0), delays["stop-C"].ArrivalDelay)
+	assert.Equal(t, int64(0), delays["stop-C"].DepartureDelay)
 }
