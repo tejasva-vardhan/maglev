@@ -883,6 +883,220 @@ func TestFillStopsFromSchedule_InvalidTripID(t *testing.T) {
 	assert.Empty(t, status.NextStop)
 }
 
+func TestCalculateOffsetForStop_MatchingStop(t *testing.T) {
+	api := &RestAPI{}
+
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC) // 28800s
+
+	stops := makeStopTimePtrs([]gtfsdb.StopTime{
+		{StopID: "s1", ArrivalTime: secondsToNanos(7 * 3600), DepartureTime: secondsToNanos(7 * 3600)},
+		{StopID: "s2", ArrivalTime: secondsToNanos(8 * 3600), DepartureTime: secondsToNanos(8 * 3600)},
+		{StopID: "s3", ArrivalTime: secondsToNanos(9 * 3600), DepartureTime: secondsToNanos(9 * 3600)},
+	})
+
+	offset := api.calculateOffsetForStop("s2", stops, currentTime, serviceDate, 0)
+	// predicted arrival = 28800 + 0 = 28800; current = 28800; offset = 0
+	assert.Equal(t, 0, offset, "on-time vehicle at exact stop time should have offset 0")
+}
+
+func TestCalculateOffsetForStop_NonMatchingStop(t *testing.T) {
+	api := &RestAPI{}
+
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC)
+
+	stops := makeStopTimePtrs([]gtfsdb.StopTime{
+		{StopID: "s1", ArrivalTime: secondsToNanos(8 * 3600), DepartureTime: secondsToNanos(8 * 3600)},
+	})
+
+	offset := api.calculateOffsetForStop("nonexistent", stops, currentTime, serviceDate, 0)
+	assert.Equal(t, 0, offset, "non-matching stop should return 0")
+}
+
+func TestCalculateOffsetForStop_WithDeviation(t *testing.T) {
+	api := &RestAPI{}
+
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC) // 28800s
+
+	stops := makeStopTimePtrs([]gtfsdb.StopTime{
+		{StopID: "s1", ArrivalTime: secondsToNanos(8 * 3600), DepartureTime: secondsToNanos(8 * 3600)},
+	})
+
+	// 5-minute late deviation
+	offset := api.calculateOffsetForStop("s1", stops, currentTime, serviceDate, 300)
+	// predicted arrival = 28800 + 300 = 29100; current = 28800; offset = 300
+	assert.Equal(t, 300, offset, "offset should reflect 5-minute delay")
+}
+
+func TestCalculateOffsetForStop_EmptyStops(t *testing.T) {
+	api := &RestAPI{}
+
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC)
+
+	offset := api.calculateOffsetForStop("s1", nil, currentTime, serviceDate, 0)
+	assert.Equal(t, 0, offset, "empty stop times should return 0")
+}
+
+func TestFindNextStopAfter_MidTrip(t *testing.T) {
+	api := &RestAPI{}
+
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC) // 28800s
+
+	stops := makeStopTimePtrs([]gtfsdb.StopTime{
+		{StopID: "s1", ArrivalTime: secondsToNanos(7 * 3600), DepartureTime: secondsToNanos(7 * 3600)},
+		{StopID: "s2", ArrivalTime: secondsToNanos(8 * 3600), DepartureTime: secondsToNanos(8 * 3600)},
+		{StopID: "s3", ArrivalTime: secondsToNanos(9 * 3600), DepartureTime: secondsToNanos(9 * 3600)},
+	})
+
+	nextStopID, nextOffset := api.findNextStopAfter("s2", stops, currentTime, serviceDate, 0)
+	assert.Equal(t, "s3", nextStopID, "next stop after s2 should be s3")
+	// predicted arrival for s3 = 32400 + 0 = 32400; current = 28800; offset = 3600
+	assert.Equal(t, 3600, nextOffset, "offset should be 1 hour")
+}
+
+func TestFindNextStopAfter_LastStop(t *testing.T) {
+	api := &RestAPI{}
+
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := time.Date(2024, 1, 1, 9, 0, 0, 0, time.UTC)
+
+	stops := makeStopTimePtrs([]gtfsdb.StopTime{
+		{StopID: "s1", ArrivalTime: secondsToNanos(8 * 3600), DepartureTime: secondsToNanos(8 * 3600)},
+		{StopID: "s2", ArrivalTime: secondsToNanos(9 * 3600), DepartureTime: secondsToNanos(9 * 3600)},
+	})
+
+	nextStopID, nextOffset := api.findNextStopAfter("s2", stops, currentTime, serviceDate, 0)
+	assert.Empty(t, nextStopID, "no next stop after last stop")
+	assert.Equal(t, 0, nextOffset, "offset should be 0 when no next stop")
+}
+
+func TestFindNextStopAfter_WithDeviation(t *testing.T) {
+	api := &RestAPI{}
+
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC) // 28800s
+
+	stops := makeStopTimePtrs([]gtfsdb.StopTime{
+		{StopID: "s1", ArrivalTime: secondsToNanos(7 * 3600), DepartureTime: secondsToNanos(7 * 3600)},
+		{StopID: "s2", ArrivalTime: secondsToNanos(8 * 3600), DepartureTime: secondsToNanos(8 * 3600)},
+	})
+
+	// 5-minute late deviation
+	nextStopID, nextOffset := api.findNextStopAfter("s1", stops, currentTime, serviceDate, 300)
+	assert.Equal(t, "s2", nextStopID)
+	// predicted arrival for s2 = 28800 + 300 = 29100; current = 28800; offset = 300
+	assert.Equal(t, 300, nextOffset, "offset should include schedule deviation")
+}
+
+func TestFindNextStopAfter_NonMatchingStop(t *testing.T) {
+	api := &RestAPI{}
+
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC)
+
+	stops := makeStopTimePtrs([]gtfsdb.StopTime{
+		{StopID: "s1", ArrivalTime: secondsToNanos(8 * 3600), DepartureTime: secondsToNanos(8 * 3600)},
+	})
+
+	nextStopID, nextOffset := api.findNextStopAfter("nonexistent", stops, currentTime, serviceDate, 0)
+	assert.Empty(t, nextStopID, "non-matching stop should return empty")
+	assert.Equal(t, 0, nextOffset)
+}
+
+func TestFindNextStopAfter_EmptyStops(t *testing.T) {
+	api := &RestAPI{}
+
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	currentTime := time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC)
+
+	nextStopID, nextOffset := api.findNextStopAfter("s1", nil, currentTime, serviceDate, 0)
+	assert.Empty(t, nextStopID, "empty stops should return empty")
+	assert.Equal(t, 0, nextOffset)
+}
+
+func TestBuildTripStatus_VehicleWithStopID_FindsStops(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+	t.Cleanup(api.GtfsManager.MockResetRealTimeData)
+	ctx := context.Background()
+
+	agencies := api.GtfsManager.GetAgencies()
+	require.NotEmpty(t, agencies)
+	agencyID := agencies[0].Id
+
+	trips := api.GtfsManager.GetTrips()
+	require.NotEmpty(t, trips)
+
+	// Find a trip with at least 3 stop times so we can place the vehicle mid-trip
+	var tripID string
+	var stopTimes []gtfsdb.StopTime
+	for _, trip := range trips {
+		st, err := api.GtfsManager.GtfsDB.Queries.GetStopTimesForTrip(ctx, trip.ID)
+		if err == nil && len(st) >= 3 {
+			tripID = trip.ID
+			stopTimes = st
+			break
+		}
+	}
+	require.NotEmpty(t, tripID, "Need a trip with at least 3 stop times")
+
+	// Use the middle stop so there is both a closest and a next stop
+	midIdx := len(stopTimes) / 2
+	midStopID := stopTimes[midIdx].StopID
+
+	// Look up coordinates for the mid stop
+	stops, err := api.GtfsManager.GtfsDB.Queries.GetStopsByIDs(ctx, []string{midStopID})
+	require.NoError(t, err)
+	require.NotEmpty(t, stops)
+
+	lat := float32(stops[0].Lat)
+	lon := float32(stops[0].Lon)
+
+	routeID := trips[0].Route.Id
+	vehicleID := "VEHICLE_STOPID_TEST"
+
+	// Mark the vehicle as STOPPED_AT to exercise the StopID + isStoppedAt branch
+	stoppedAt := gtfs.CurrentStatus(1)
+	api.GtfsManager.MockAddVehicleWithOptions(vehicleID, tripID, routeID, internalgtfs.MockVehicleOptions{
+		Position: &gtfs.Position{
+			Latitude:  &lat,
+			Longitude: &lon,
+		},
+		StopID:        &midStopID,
+		CurrentStatus: &stoppedAt,
+	})
+
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	arrivalSeconds := utils.EffectiveStopTimeSeconds(stopTimes[midIdx].ArrivalTime, stopTimes[midIdx].DepartureTime)
+	currentTime := serviceDate.Add(time.Duration(arrivalSeconds) * time.Second)
+
+	status, err := api.BuildTripStatus(ctx, agencyID, tripID, serviceDate, currentTime)
+	require.NoError(t, err)
+	require.NotNil(t, status)
+
+	// The StopID branch should have identified the closest stop
+	assert.NotEmpty(t, status.ClosestStop, "ClosestStop should be populated when vehicle has StopID")
+	assert.Contains(t, status.ClosestStop, midStopID,
+		"ClosestStop should contain the vehicle's reported StopID")
+
+	// Because the vehicle is STOPPED_AT a mid-trip stop, NextStop should be the following stop
+	if midIdx+1 < len(stopTimes) {
+		assert.NotEmpty(t, status.NextStop, "NextStop should be populated when stopped at a mid-trip stop")
+		assert.Contains(t, status.NextStop, stopTimes[midIdx+1].StopID,
+			"NextStop should be the stop after the vehicle's current stop")
+	}
+
+	// Vehicle is fresh so status/phase reflect ScheduleRelationship (SCHEDULED → "SCHEDULED"/"in_progress"),
+	// not CurrentStatus. CurrentStatus only affects the stop-finding branch, not GetVehicleStatusAndPhase.
+	assert.Equal(t, "SCHEDULED", status.Status)
+	assert.Equal(t, "in_progress", status.Phase)
+	assert.NotZero(t, status.LastKnownLocation.Lat, "LastKnownLocation should be set from vehicle position")
+}
+
 // BenchmarkDistanceToLineSegment benchmarks the line segment distance calculation
 func BenchmarkDistanceToLineSegment(b *testing.B) {
 	px, py := 0.5, 1.0
