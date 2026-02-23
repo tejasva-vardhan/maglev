@@ -2,6 +2,7 @@ package restapi
 
 import (
 	"context"
+	"log/slog"
 	"math"
 	"time"
 
@@ -11,7 +12,6 @@ import (
 	"maglev.onebusaway.org/internal/utils"
 )
 
-// IMPORTANT: Caller must hold manager.RLock() before calling this method.
 func (api *RestAPI) BuildTripStatus(
 	ctx context.Context,
 	agencyID, tripID string,
@@ -81,7 +81,7 @@ func (api *RestAPI) BuildTripStatus(
 				}
 			} else if vehicle.CurrentStopSequence != nil {
 				closestStopID, closestOffset = api.findClosestStopBySequence(
-					stopTimesPtrs, *vehicle.CurrentStopSequence, currentTime, serviceDate, scheduleDeviation, vehicle,
+					stopTimesPtrs, *vehicle.CurrentStopSequence, currentTime, serviceDate, scheduleDeviation,
 				)
 				nextStopID, nextOffset = api.findNextStopBySequence(
 					ctx, stopTimesPtrs, *vehicle.CurrentStopSequence, currentTime, serviceDate, scheduleDeviation, vehicle, tripID, serviceDate,
@@ -239,7 +239,13 @@ func (api *RestAPI) GetNextAndPreviousTripIDs(ctx context.Context, trip *gtfsdb.
 
 func (api *RestAPI) fillStopsFromSchedule(ctx context.Context, status *models.TripStatusForTripDetails, tripID string, currentTime time.Time, serviceDate time.Time, agencyID string) {
 	stopTimes, err := api.GtfsManager.GtfsDB.Queries.GetStopTimesForTrip(ctx, tripID)
-	if err != nil || len(stopTimes) == 0 {
+	if err != nil {
+		slog.Warn("fillStopsFromSchedule: failed to get stop times",
+			slog.String("trip_id", tripID),
+			slog.String("error", err.Error()))
+		return
+	}
+	if len(stopTimes) == 0 {
 		return
 	}
 
@@ -843,7 +849,6 @@ func (api *RestAPI) findClosestStopBySequence(
 	currentTime time.Time,
 	serviceDate time.Time,
 	scheduleDeviation int,
-	vehicle *gtfs.Vehicle,
 ) (stopID string, offset int) {
 	currentTimeSeconds := utils.CalculateSecondsSinceServiceDate(currentTime, serviceDate)
 
