@@ -50,9 +50,7 @@ func (api *RestAPI) GetStopDelaysFromTripUpdates(tripID string) map[string]StopD
 			info.DepartureDelay = int64(stu.Departure.Delay.Seconds())
 		}
 
-		if info.ArrivalDelay != 0 || info.DepartureDelay != 0 {
-			delays[*stu.StopID] = info
-		}
+		delays[*stu.StopID] = info
 	}
 
 	return delays
