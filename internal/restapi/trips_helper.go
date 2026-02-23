@@ -59,6 +59,11 @@ func (api *RestAPI) BuildTripStatus(
 	status.Scheduled = !status.Predicted
 
 	stopTimes, err := api.GtfsManager.GtfsDB.Queries.GetStopTimesForTrip(ctx, activeTripRawID)
+	if err != nil {
+		slog.Warn("BuildTripStatus: failed to get stop times",
+			slog.String("trip_id", activeTripRawID),
+			slog.String("error", err.Error()))
+	}
 	if err == nil && len(stopTimes) > 0 {
 		stopTimesPtrs := make([]*gtfsdb.StopTime, len(stopTimes))
 		for i := range stopTimes {
@@ -112,6 +117,11 @@ func (api *RestAPI) BuildTripStatus(
 	}
 
 	shapeRows, shapeErr := api.GtfsManager.GtfsDB.Queries.GetShapePointsByTripID(ctx, tripID)
+	if shapeErr != nil {
+		slog.Warn("BuildTripStatus: failed to get shape points",
+			slog.String("trip_id", tripID),
+			slog.String("error", shapeErr.Error()))
+	}
 	if shapeErr == nil && len(shapeRows) > 1 {
 		shapePoints := shapeRowsToPoints(shapeRows)
 		cumulativeDistances := preCalculateCumulativeDistances(shapePoints)
@@ -281,6 +291,10 @@ func findClosestStopByTimeWithDelays(currentTime time.Time, serviceDate time.Tim
 	var closestStopTimeSeconds int64
 
 	for _, st := range stopTimes {
+		// NOTE: Intentionally prefers DepartureTime over ArrivalTime, unlike
+		// EffectiveStopTimeSeconds which prefers arrival. When per-stop delays
+		// are available (from GTFS-RT StopTimeUpdates), departure delays are the
+		// more relevant metric for predicting when the vehicle leaves a stop.
 		var stopTimeSeconds int64
 		if st.DepartureTime > 0 {
 			stopTimeSeconds = utils.NanosToSeconds(st.DepartureTime)
@@ -321,6 +335,9 @@ func findNextStopByTimeWithDelays(currentTime time.Time, serviceDate time.Time, 
 	var nextStopTimeSeconds int64
 
 	for _, st := range stopTimes {
+		// NOTE: Intentionally prefers DepartureTime over ArrivalTime, unlike
+		// EffectiveStopTimeSeconds which prefers arrival. See comment in
+		// findClosestStopByTimeWithDelays for rationale.
 		var stopTimeSeconds int64
 		if st.DepartureTime > 0 {
 			stopTimeSeconds = utils.NanosToSeconds(st.DepartureTime)
@@ -453,6 +470,9 @@ func getDistanceAlongShapeInRange(lat, lon float64, shape []gtfs.ShapePoint, min
 func (api *RestAPI) calculateBlockTripSequence(ctx context.Context, tripID string, serviceDate time.Time) int {
 	trip, err := api.GtfsManager.GtfsDB.Queries.GetTrip(ctx, tripID)
 	if err != nil {
+		slog.Warn("calculateBlockTripSequence: failed to get trip",
+			slog.String("trip_id", tripID),
+			slog.String("error", err.Error()))
 		return 0
 	}
 
@@ -462,7 +482,14 @@ func (api *RestAPI) calculateBlockTripSequence(ctx context.Context, tripID strin
 
 	formattedDate := serviceDate.Format("20060102")
 	activeServiceIDs, err := api.GtfsManager.GtfsDB.Queries.GetActiveServiceIDsForDate(ctx, formattedDate)
-	if err != nil || len(activeServiceIDs) == 0 {
+	if err != nil {
+		slog.Warn("calculateBlockTripSequence: failed to get active service IDs",
+			slog.String("trip_id", tripID),
+			slog.String("date", formattedDate),
+			slog.String("error", err.Error()))
+		return 0
+	}
+	if len(activeServiceIDs) == 0 {
 		return 0
 	}
 
@@ -471,6 +498,10 @@ func (api *RestAPI) calculateBlockTripSequence(ctx context.Context, tripID strin
 		ServiceIds: activeServiceIDs,
 	})
 	if err != nil {
+		slog.Warn("calculateBlockTripSequence: failed to get ordered block trips",
+			slog.String("trip_id", tripID),
+			slog.String("block_id", trip.BlockID.String),
+			slog.String("error", err.Error()))
 		return 0
 	}
 
