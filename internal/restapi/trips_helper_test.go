@@ -925,8 +925,7 @@ func BenchmarkOptimized_MonotonicBatch(b *testing.B) {
 }
 
 func TestFindClosestStopBySequence_Match(t *testing.T) {
-	api := createTestApi(t)
-	defer api.Shutdown()
+	api := &RestAPI{}
 
 	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	currentTime := time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC) // 28800s into service day
@@ -944,8 +943,7 @@ func TestFindClosestStopBySequence_Match(t *testing.T) {
 }
 
 func TestFindClosestStopBySequence_WithDeviation(t *testing.T) {
-	api := createTestApi(t)
-	defer api.Shutdown()
+	api := &RestAPI{}
 
 	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	currentTime := time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC)
@@ -962,8 +960,7 @@ func TestFindClosestStopBySequence_WithDeviation(t *testing.T) {
 }
 
 func TestFindClosestStopBySequence_NoMatch(t *testing.T) {
-	api := createTestApi(t)
-	defer api.Shutdown()
+	api := &RestAPI{}
 
 	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	currentTime := time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC)
@@ -978,8 +975,7 @@ func TestFindClosestStopBySequence_NoMatch(t *testing.T) {
 }
 
 func TestFindNextStopBySequence_InTransit(t *testing.T) {
-	api := createTestApi(t)
-	defer api.Shutdown()
+	api := &RestAPI{}
 	ctx := context.Background()
 
 	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -1002,8 +998,7 @@ func TestFindNextStopBySequence_InTransit(t *testing.T) {
 }
 
 func TestFindNextStopBySequence_StoppedAt(t *testing.T) {
-	api := createTestApi(t)
-	defer api.Shutdown()
+	api := &RestAPI{}
 	ctx := context.Background()
 
 	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -1049,8 +1044,7 @@ func TestFindNextStopBySequence_StoppedAtLastStop(t *testing.T) {
 }
 
 func TestFindNextStopBySequence_NoMatch(t *testing.T) {
-	api := createTestApi(t)
-	defer api.Shutdown()
+	api := &RestAPI{}
 	ctx := context.Background()
 
 	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -1066,8 +1060,7 @@ func TestFindNextStopBySequence_NoMatch(t *testing.T) {
 }
 
 func TestFindStopsByScheduleDeviation_OnTime(t *testing.T) {
-	api := createTestApi(t)
-	defer api.Shutdown()
+	api := &RestAPI{}
 
 	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	currentTime := time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC) // 28800s
@@ -1091,8 +1084,7 @@ func TestFindStopsByScheduleDeviation_OnTime(t *testing.T) {
 }
 
 func TestFindStopsByScheduleDeviation_Late(t *testing.T) {
-	api := createTestApi(t)
-	defer api.Shutdown()
+	api := &RestAPI{}
 
 	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	currentTime := time.Date(2024, 1, 1, 8, 5, 0, 0, time.UTC) // 28800 + 300 = 29100s
@@ -1116,8 +1108,7 @@ func TestFindStopsByScheduleDeviation_Late(t *testing.T) {
 }
 
 func TestFindStopsByScheduleDeviation_Empty(t *testing.T) {
-	api := createTestApi(t)
-	defer api.Shutdown()
+	api := &RestAPI{}
 
 	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	currentTime := time.Date(2024, 1, 1, 8, 0, 0, 0, time.UTC)
@@ -1130,8 +1121,7 @@ func TestFindStopsByScheduleDeviation_Empty(t *testing.T) {
 }
 
 func TestFindStopsByScheduleDeviation_LastStop(t *testing.T) {
-	api := createTestApi(t)
-	defer api.Shutdown()
+	api := &RestAPI{}
 
 	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	currentTime := time.Date(2024, 1, 1, 9, 0, 0, 0, time.UTC) // 32400s
