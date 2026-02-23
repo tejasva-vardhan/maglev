@@ -210,3 +210,72 @@ func TestBuildVehicleStatus_FreshVehicleNoPosition_DoesNotSetPredicted(t *testin
 
 	assert.False(t, status.Predicted, "BuildVehicleStatus must not set Predicted")
 }
+
+func TestBuildVehicleStatus_BearingConversion(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+	ctx := context.Background()
+
+	tests := []struct {
+		name                string
+		bearing             float32
+		expectedOrientation float64
+	}{
+		{
+			name:                "North (0°) → 90°",
+			bearing:             0,
+			expectedOrientation: 90,
+		},
+		{
+			name:                "East (90°) → 0°",
+			bearing:             90,
+			expectedOrientation: 0,
+		},
+		{
+			name:                "South (180°) → 270°",
+			bearing:             180,
+			expectedOrientation: 270,
+		},
+		{
+			name:                "West (270°) → 180°",
+			bearing:             270,
+			expectedOrientation: 180,
+		},
+		{
+			name:                "NW (315°) → 135°",
+			bearing:             315,
+			expectedOrientation: 135,
+		},
+		{
+			name:                "Bearing > 90 wraps (120°) → 330°",
+			bearing:             120,
+			expectedOrientation: 330,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			now := time.Now()
+			lat := float32(37.7749)
+			lon := float32(-122.4194)
+			bearing := tt.bearing
+			vehicle := &gtfs.Vehicle{
+				ID:        &gtfs.VehicleID{ID: "v-bearing"},
+				Timestamp: &now,
+				Position: &gtfs.Position{
+					Latitude:  &lat,
+					Longitude: &lon,
+					Bearing:   &bearing,
+				},
+			}
+
+			status := &models.TripStatusForTripDetails{}
+			api.BuildVehicleStatus(ctx, vehicle, "any-trip", "any-agency", status, now)
+
+			assert.Equal(t, tt.expectedOrientation, status.Orientation,
+				"Orientation should be (90 - bearing) with wraparound")
+			assert.Equal(t, tt.expectedOrientation, status.LastKnownOrientation,
+				"LastKnownOrientation should match Orientation")
+		})
+	}
+}
