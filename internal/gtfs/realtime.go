@@ -45,54 +45,19 @@ func newRealtimeHTTPClient() *http.Client {
 	}
 }
 
-// GetRealTimeTrips returns the real-time trip updates
+// staleVehicleTimeout is the duration after which a vehicle is considered stale
+const staleVehicleTimeout = 15 * time.Minute
+
 func (manager *Manager) GetRealTimeTrips() []gtfs.Trip {
 	manager.realTimeMutex.RLock()
 	defer manager.realTimeMutex.RUnlock()
 	return manager.realTimeTrips
 }
 
-// GetRealTimeVehicles returns the real-time vehicle positions
 func (manager *Manager) GetRealTimeVehicles() []gtfs.Vehicle {
 	manager.realTimeMutex.RLock()
 	defer manager.realTimeMutex.RUnlock()
 	return manager.realTimeVehicles
-}
-
-func loadRealtimeData(ctx context.Context, source string, headers map[string]string) (*gtfs.Realtime, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", source, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	for key, value := range headers {
-		req.Header.Add(key, value)
-	}
-
-	resp, err := realtimeHTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute GTFS-RT request: %w", err)
-	}
-
-	defer logging.SafeCloseWithLogging(resp.Body,
-		slog.Default().With(slog.String("component", "gtfs_realtime_downloader")),
-		"http_response_body")
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("gtfs-rt fetch failed: %s returned %s", source, resp.Status)
-	}
-
-	const maxBodySize = 25 * 1024 * 1024
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodySize+1))
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	if int64(len(body)) > maxBodySize {
-		return nil, fmt.Errorf("GTFS-RT response exceeds size limit of %d bytes", maxBodySize)
-	}
-
-	return gtfs.ParseRealtime(body, &gtfs.ParseRealtimeOptions{})
 }
 
 func (manager *Manager) GetAlertsForRoute(routeID string) []gtfs.Alert {
@@ -113,13 +78,12 @@ func (manager *Manager) GetAlertsForRoute(routeID string) []gtfs.Alert {
 	return alerts
 }
 
-// GetAlertsByIDs returns alerts matching the given trip, route, or agency IDs.
+// It acquires the realTimeMutex internally; callers must NOT hold it.
 func (manager *Manager) GetAlertsByIDs(tripID, routeID, agencyID string) []gtfs.Alert {
 	manager.realTimeMutex.RLock()
 	defer manager.realTimeMutex.RUnlock()
 
 	var alerts []gtfs.Alert
-
 	for _, alert := range manager.realTimeAlerts {
 		if alert.InformedEntities == nil {
 			continue
@@ -143,7 +107,7 @@ func (manager *Manager) GetAlertsByIDs(tripID, routeID, agencyID string) []gtfs.
 }
 
 // GetAlertsForTrip returns alerts matching the trip, its route, or agency.
-// IMPORTANT: Caller must hold manager.RLock() before calling this method.
+// It acquires the realTimeMutex internally via GetAlertsByIDs.
 func (manager *Manager) GetAlertsForTrip(ctx context.Context, tripID string) []gtfs.Alert {
 	var routeID string
 	var agencyID string
@@ -191,53 +155,93 @@ func (manager *Manager) GetAlertsForStop(stopID string) []gtfs.Alert {
 	return alerts
 }
 
-func (manager *Manager) updateGTFSRealtime(ctx context.Context, config Config) {
-	logger := logging.FromContext(ctx).With(slog.String("component", "gtfs_realtime"))
-
-	headers := map[string]string{}
-	if config.RealTimeAuthHeaderKey != "" && config.RealTimeAuthHeaderValue != "" {
-		headers[config.RealTimeAuthHeaderKey] = config.RealTimeAuthHeaderValue
+// Fetches GTFS-RT data from a URL with per-feed headers.
+func loadRealtimeData(ctx context.Context, source string, headers map[string]string) (*gtfs.Realtime, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", source, nil)
+	if err != nil {
+		return nil, err
 	}
+
+	for key, value := range headers {
+		req.Header.Add(key, value)
+	}
+
+	resp, err := realtimeHTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute GTFS-RT request: %w", err)
+	}
+
+	defer logging.SafeCloseWithLogging(resp.Body,
+		slog.Default().With(slog.String("component", "gtfs_realtime_downloader")),
+		"http_response_body")
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("gtfs-rt fetch failed: %s returned %s", source, resp.Status)
+	}
+
+	const maxBodySize = 25 * 1024 * 1024
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodySize+1))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if int64(len(body)) > maxBodySize {
+		return nil, fmt.Errorf("GTFS-RT response exceeds size limit of %d bytes", maxBodySize)
+	}
+
+	return gtfs.ParseRealtime(body, &gtfs.ParseRealtimeOptions{})
+}
+
+// updateFeedRealtime fetches and processes realtime data for a single feed.
+// It updates the per-feed sub-maps and then calls rebuildMergedRealtimeLocked.
+func (manager *Manager) updateFeedRealtime(ctx context.Context, feedCfg RTFeedConfig) {
+	logger := logging.FromContext(ctx).With(slog.String("component", "gtfs_realtime"))
+	feedID := feedCfg.ID
 
 	var wg sync.WaitGroup
 	var tripData, vehicleData, alertData *gtfs.Realtime
 	var tripErr, vehicleErr, alertErr error
 
-	// Fetch trip updates in parallel
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		tripData, tripErr = loadRealtimeData(ctx, config.TripUpdatesURL, headers)
-		if tripErr != nil {
-			logging.LogError(logger, "Error loading GTFS-RT trip updates data", tripErr,
-				slog.String("url", config.TripUpdatesURL))
-		}
-	}()
-
-	// Fetch vehicle positions in parallel
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		vehicleData, vehicleErr = loadRealtimeData(ctx, config.VehiclePositionsURL, headers)
-		if vehicleErr != nil {
-			logging.LogError(logger, "Error loading GTFS-RT vehicle positions data", vehicleErr,
-				slog.String("url", config.VehiclePositionsURL))
-		}
-	}()
-
-	if config.ServiceAlertsURL != "" {
+	// Fetch trip updates, vehicle positions, and alerts in parallel
+	if feedCfg.TripUpdatesURL != "" {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			alertData, alertErr = loadRealtimeData(ctx, config.ServiceAlertsURL, headers)
-			if alertErr != nil {
-				logging.LogError(logger, "Error loading GTFS-RT service alerts data", alertErr,
-					slog.String("url", config.ServiceAlertsURL))
+			tripData, tripErr = loadRealtimeData(ctx, feedCfg.TripUpdatesURL, feedCfg.Headers)
+			if tripErr != nil {
+				logging.LogError(logger, "Error loading GTFS-RT trip updates data", tripErr,
+					slog.String("feed", feedID),
+					slog.String("url", feedCfg.TripUpdatesURL))
 			}
 		}()
 	}
 
-	// Wait for both to complete
+	if feedCfg.VehiclePositionsURL != "" {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			vehicleData, vehicleErr = loadRealtimeData(ctx, feedCfg.VehiclePositionsURL, feedCfg.Headers)
+			if vehicleErr != nil {
+				logging.LogError(logger, "Error loading GTFS-RT vehicle positions data", vehicleErr,
+					slog.String("feed", feedID),
+					slog.String("url", feedCfg.VehiclePositionsURL))
+			}
+		}()
+	}
+
+	if feedCfg.ServiceAlertsURL != "" {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			alertData, alertErr = loadRealtimeData(ctx, feedCfg.ServiceAlertsURL, feedCfg.Headers)
+			if alertErr != nil {
+				logging.LogError(logger, "Error loading GTFS-RT service alerts data", alertErr,
+					slog.String("feed", feedID),
+					slog.String("url", feedCfg.ServiceAlertsURL))
+			}
+		}()
+	}
+
 	wg.Wait()
 
 	// Check for context cancellation
@@ -245,48 +249,165 @@ func (manager *Manager) updateGTFSRealtime(ctx context.Context, config Config) {
 		return
 	}
 
-	// Update data if at least one fetch succeeded
 	manager.realTimeMutex.Lock()
 	defer manager.realTimeMutex.Unlock()
 
 	if tripData != nil && tripErr == nil {
-		manager.realTimeTrips = tripData.Trips
-		rebuildRealTimeTripLookup(manager)
-
+		manager.feedTrips[feedID] = tripData.Trips
 	}
+
 	if vehicleData != nil && vehicleErr == nil {
-		manager.realTimeVehicles = vehicleData.Vehicles
-		filterRealTimeVehicleByValidId(manager)
-		rebuildRealTimeVehicleLookupByTrip(manager)
-		rebuildRealTimeVehicleLookupByVehicle(manager)
+		validVehicles := make([]gtfs.Vehicle, 0, len(vehicleData.Vehicles))
+		for _, v := range vehicleData.Vehicles {
+			if v.ID != nil {
+				validVehicles = append(validVehicles, v)
+			}
+		}
+
+		now := time.Now()
+		if manager.feedVehicleLastSeen[feedID] == nil {
+			manager.feedVehicleLastSeen[feedID] = make(map[string]time.Time)
+		}
+		lastSeenMap := manager.feedVehicleLastSeen[feedID]
+
+		currentVehicleIDs := make(map[string]struct{}, len(validVehicles))
+		for _, v := range validVehicles {
+			lastSeenMap[v.ID.ID] = now
+			currentVehicleIDs[v.ID.ID] = struct{}{}
+		}
+
+		// Delete stale vehicles
+		for vid, lastSeen := range lastSeenMap {
+			if _, current := currentVehicleIDs[vid]; !current {
+				if now.Sub(lastSeen) > staleVehicleTimeout {
+					delete(lastSeenMap, vid)
+				}
+			}
+		}
+
+		// Retain recently-disappeared vehicles whose last-seen time hasn't expired
+		prevVehicles := manager.feedVehicles[feedID]
+		for _, pv := range prevVehicles {
+			if pv.ID == nil {
+				continue
+			}
+			if _, current := currentVehicleIDs[pv.ID.ID]; !current {
+				if lastSeen, ok := lastSeenMap[pv.ID.ID]; ok && now.Sub(lastSeen) <= staleVehicleTimeout {
+					validVehicles = append(validVehicles, pv)
+				}
+			}
+		}
+
+		manager.feedVehicles[feedID] = validVehicles
 	}
 
 	if alertData != nil && alertErr == nil {
-		manager.realTimeAlerts = alertData.Alerts
-	} else if alertErr != nil {
-		logging.LogError(logger, "Error loading GTFS-RT service alerts", alertErr)
+		manager.feedAlerts[feedID] = alertData.Alerts
 	}
+
+	logger.Info("updated realtime feed",
+		slog.String("feed", feedID),
+		slog.Int("trips", len(manager.feedTrips[feedID])),
+		slog.Int("vehicles", len(manager.feedVehicles[feedID])),
+		slog.Int("alerts", len(manager.feedAlerts[feedID])),
+	)
+
+	manager.rebuildMergedRealtimeLocked()
 }
 
-func filterRealTimeVehicleByValidId(manager *Manager) {
-	validVehicles := make([]gtfs.Vehicle, 0, len(manager.realTimeVehicles))
-	for _, v := range manager.realTimeVehicles {
-		if v.ID != nil {
-			validVehicles = append(validVehicles, v)
+func (manager *Manager) rebuildMergedRealtimeLocked() {
+	var allTrips []gtfs.Trip
+	for _, trips := range manager.feedTrips {
+		allTrips = append(allTrips, trips...)
+	}
+
+	var allVehicles []gtfs.Vehicle
+	for _, vehicles := range manager.feedVehicles {
+		allVehicles = append(allVehicles, vehicles...)
+	}
+
+	var allAlerts []gtfs.Alert
+	for _, alerts := range manager.feedAlerts {
+		allAlerts = append(allAlerts, alerts...)
+	}
+
+	tripLookup := make(map[string]int, len(allTrips))
+	for i, trip := range allTrips {
+		tripLookup[trip.ID.ID] = i
+	}
+
+	vehicleLookupByTrip := make(map[string]int, len(allVehicles))
+	vehicleLookupByVehicle := make(map[string]int, len(allVehicles))
+	for i, vehicle := range allVehicles {
+		if vehicle.Trip != nil && vehicle.Trip.ID.ID != "" {
+			vehicleLookupByTrip[vehicle.Trip.ID.ID] = i
+		}
+		if vehicle.ID != nil && vehicle.ID.ID != "" {
+			vehicleLookupByVehicle[vehicle.ID.ID] = i
 		}
 	}
-	manager.realTimeVehicles = validVehicles
+
+	manager.realTimeTrips = allTrips
+	manager.realTimeVehicles = allVehicles
+	manager.realTimeAlerts = allAlerts
+	manager.realTimeTripLookup = tripLookup
+	manager.realTimeVehicleLookupByTrip = vehicleLookupByTrip
+	manager.realTimeVehicleLookupByVehicle = vehicleLookupByVehicle
+}
+
+// pollFeed runs the polling loop for a single feed. Each feed gets its own
+// goroutine with its own ticker at the feed's configured refresh interval.
+func (manager *Manager) pollFeed(feedCfg RTFeedConfig) {
+	defer manager.wg.Done()
+
+	if feedCfg.RefreshInterval <= 0 {
+		feedCfg.RefreshInterval = 30
+	}
+
+	logger := slog.Default().With(slog.String("component", "gtfs_realtime_updater"))
+	interval := time.Duration(feedCfg.RefreshInterval) * time.Second
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	logging.LogOperation(logger, "started_realtime_feed_poller",
+		slog.String("feed", feedCfg.ID),
+		slog.Duration("interval", interval),
+		slog.String("tripUpdatesURL", feedCfg.TripUpdatesURL),
+		slog.String("vehiclePositionsURL", feedCfg.VehiclePositionsURL),
+		slog.String("serviceAlertsURL", feedCfg.ServiceAlertsURL),
+	)
+
+	for {
+		select {
+		case <-manager.shutdownChan:
+			logging.LogOperation(logger, "shutting_down_realtime_feed_poller",
+				slog.String("feed", feedCfg.ID))
+			return
+		case <-ticker.C:
+			func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+				defer cancel()
+				ctx = logging.WithLogger(ctx, logger)
+
+				logging.LogOperation(logger, "updating_gtfs_realtime_data",
+					slog.String("feed", feedCfg.ID))
+				manager.updateFeedRealtime(ctx, feedCfg)
+			}()
+		}
+	}
 }
 
 func rebuildRealTimeTripLookup(manager *Manager) {
-	manager.realTimeTripLookup = make(map[string]int, len(manager.realTimeTrips))
+	manager.realTimeTripLookup = make(map[string]int)
 	for i, trip := range manager.realTimeTrips {
-		manager.realTimeTripLookup[trip.ID.ID] = i
+		if trip.ID.ID != "" {
+			manager.realTimeTripLookup[trip.ID.ID] = i
+		}
 	}
 }
 
 func rebuildRealTimeVehicleLookupByTrip(manager *Manager) {
-	manager.realTimeVehicleLookupByTrip = make(map[string]int, len(manager.realTimeVehicles))
+	manager.realTimeVehicleLookupByTrip = make(map[string]int)
 	for i, vehicle := range manager.realTimeVehicles {
 		if vehicle.Trip != nil && vehicle.Trip.ID.ID != "" {
 			manager.realTimeVehicleLookupByTrip[vehicle.Trip.ID.ID] = i
@@ -295,7 +416,7 @@ func rebuildRealTimeVehicleLookupByTrip(manager *Manager) {
 }
 
 func rebuildRealTimeVehicleLookupByVehicle(manager *Manager) {
-	manager.realTimeVehicleLookupByVehicle = make(map[string]int, len(manager.realTimeVehicles))
+	manager.realTimeVehicleLookupByVehicle = make(map[string]int)
 	for i, vehicle := range manager.realTimeVehicles {
 		if vehicle.ID.ID != "" {
 			manager.realTimeVehicleLookupByVehicle[vehicle.ID.ID] = i
@@ -303,30 +424,12 @@ func rebuildRealTimeVehicleLookupByVehicle(manager *Manager) {
 	}
 }
 
-func (manager *Manager) updateGTFSRealtimePeriodically(config Config) {
-	defer manager.wg.Done()
-
-	// Create a logger for this goroutine
-	logger := slog.Default().With(slog.String("component", "gtfs_realtime_updater"))
-
-	// Update every 30 seconds
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	for { // nolint
-		select {
-		case <-ticker.C:
-			// Create a context with timeout for the download
-			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-			ctx = logging.WithLogger(ctx, logger)
-
-			// Download realtime data
-			logging.LogOperation(logger, "updating_gtfs_realtime_data")
-			manager.updateGTFSRealtime(ctx, config)
-			cancel() // Ensure the context is canceled when done
-		case <-manager.shutdownChan:
-			logging.LogOperation(logger, "shutting_down_realtime_updates")
-			return
+func filterRealTimeVehicleByValidId(manager *Manager) {
+	valid := make([]gtfs.Vehicle, 0)
+	for _, v := range manager.realTimeVehicles {
+		if v.ID != nil {
+			valid = append(valid, v)
 		}
 	}
+	manager.realTimeVehicles = valid
 }
