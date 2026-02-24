@@ -413,14 +413,13 @@ func TestConfigFileLoading(t *testing.T) {
 		assert.Equal(t, []string{"key1", "key2", "key3"}, appCfg.ApiKeys)
 		assert.Equal(t, 50, appCfg.RateLimit)
 
-		// Verify GTFS config with first feed only
-		assert.Equal(t, "https://example.com/gtfs.zip", gtfsCfgData.GtfsURL)
-		assert.Equal(t, "/data/gtfs.db", gtfsCfgData.GTFSDataPath)
-		assert.Equal(t, "https://api.example.com/trip-updates.pb", gtfsCfgData.TripUpdatesURL)
-		assert.Equal(t, "https://api.example.com/vehicle-positions.pb", gtfsCfgData.VehiclePositionsURL)
-		assert.Equal(t, "https://api.example.com/service-alerts.pb", gtfsCfgData.ServiceAlertsURL)
-		assert.Equal(t, "Authorization", gtfsCfgData.RealTimeAuthHeaderKey)
-		assert.Equal(t, "Bearer token123", gtfsCfgData.RealTimeAuthHeaderValue)
+		// Verify GTFS config - feeds are now in RTFeeds
+		require.NotEmpty(t, gtfsCfgData.RTFeeds)
+		feed0 := gtfsCfgData.RTFeeds[0]
+		assert.Equal(t, "https://api.example.com/trip-updates.pb", feed0.TripUpdatesURL)
+		assert.Equal(t, "https://api.example.com/vehicle-positions.pb", feed0.VehiclePositionsURL)
+		assert.Equal(t, "https://api.example.com/service-alerts.pb", feed0.ServiceAlertsURL)
+		assert.Equal(t, "Bearer token123", feed0.Headers["Authorization"])
 	})
 
 	t.Run("fails on invalid config file", func(t *testing.T) {
@@ -543,8 +542,12 @@ func TestDumpConfigJSON_WithExampleFile(t *testing.T) {
 	gtfsCfgData := jsonConfig.ToGtfsConfigData()
 	gtfsCfg := gtfsConfigFromData(gtfsCfgData)
 
-	gtfsCfg.RealTimeAuthHeaderKey = "X-API-Key"
-	gtfsCfg.RealTimeAuthHeaderValue = "my-secret-api-key"
+	if len(gtfsCfg.RTFeeds) > 0 {
+		if gtfsCfg.RTFeeds[0].Headers == nil {
+			gtfsCfg.RTFeeds[0].Headers = make(map[string]string)
+		}
+		gtfsCfg.RTFeeds[0].Headers["X-API-Key"] = "my-secret-api-key"
+	}
 
 	// Make a pipe to capture stdout
 	oldStdout := os.Stdout
@@ -576,13 +579,16 @@ func TestDumpConfigJSON_WithExampleFile(t *testing.T) {
 
 	feeds, ok := parsed["gtfs-rt-feeds"].([]interface{})
 	require.True(t, ok, "gtfs-rt-feeds should be an array of maps")
-	assert.Equal(t, 1, len(feeds))
+	assert.Equal(t, len(gtfsCfg.RTFeeds), len(feeds))
 
 	rtFeed, ok := feeds[0].(map[string]interface{})
 	require.True(t, ok, "feeds[0] should be a map")
 
-	assert.NotEqual(t, "my-secret-api-key", rtFeed["realtime-auth-header-value"])
-	assert.Equal(t, "***REDACTED***", rtFeed["realtime-auth-header-value"])
+	// Check that headers are redacted (:
+	headersMap, ok := rtFeed["headers"].(map[string]interface{})
+	require.True(t, ok, "headers should be a map")
+	assert.NotEqual(t, "my-secret-api-key", headersMap["X-API-Key"])
+	assert.Equal(t, "***REDACTED***", headersMap["X-API-Key"])
 
 	assert.NotEqual(t, "", rtFeed["trip-updates-url"])
 	assert.Equal(t, gtfsCfg.GTFSDataPath, parsed["data-path"])
