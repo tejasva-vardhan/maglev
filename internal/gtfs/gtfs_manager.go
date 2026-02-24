@@ -591,17 +591,13 @@ func (manager *Manager) MarkUnhealthy() {
 }
 
 // SetRealTimeTripsForTest manually sets realtime trips for testing purposes.
-// This allows injecting mock data into the private realTimeTrips slice.
+// It stores the trips under the synthetic feed ID "_test" so that a subsequent
+// call to rebuildMergedRealtimeLocked (e.g. from a real feed update) does not
+// silently discard the injected data.
 func (manager *Manager) SetRealTimeTripsForTest(trips []gtfs.Trip) {
 	manager.realTimeMutex.Lock()
 	defer manager.realTimeMutex.Unlock()
 
-	manager.realTimeTrips = trips
-	manager.realTimeTripLookup = make(map[string]int)
-
-	for i, trip := range trips {
-		if trip.ID.ID != "" {
-			manager.realTimeTripLookup[trip.ID.ID] = i
-		}
-	}
+	manager.feedTrips["_test"] = trips
+	manager.rebuildMergedRealtimeLocked()
 }
