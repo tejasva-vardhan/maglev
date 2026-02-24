@@ -6,16 +6,17 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
-	"github.com/OneBusAway/go-gtfs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // TestMultiFeedDataMerging verifies that rebuildMergedRealtimeLocked correctly
+// concatenates vehicles from distinct feeds and that per-feed lookup maps work.
+// Feed A uses RABA vehicle positions; feed B uses Unitrans vehicle positions so
+// that each feed contributes genuinely different vehicle IDs.
 func TestMultiFeedDataMerging(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/feed-a/vehicle-positions", func(w http.ResponseWriter, r *http.Request) {
@@ -25,7 +26,7 @@ func TestMultiFeedDataMerging(t *testing.T) {
 		_, _ = w.Write(data)
 	})
 	mux.HandleFunc("/feed-b/vehicle-positions", func(w http.ResponseWriter, r *http.Request) {
-		data, err := os.ReadFile(filepath.Join("../../testdata", "raba-vehicle-positions.pb"))
+		data, err := os.ReadFile(filepath.Join("../../testdata", "unitrans-vehicle-positions.pb"))
 		require.NoError(t, err)
 		w.Header().Set("Content-Type", "application/x-protobuf")
 		_, _ = w.Write(data)
@@ -52,133 +53,102 @@ func TestMultiFeedDataMerging(t *testing.T) {
 	manager.updateFeedRealtime(ctx, feedA)
 	manager.updateFeedRealtime(ctx, feedB)
 
-	vehicles := manager.GetRealTimeVehicles()
-
-	// Each feed contributes at least 1 vehicle from the protobuf file
 	feedAVehicles := manager.feedVehicles["feed-a"]
 	feedBVehicles := manager.feedVehicles["feed-b"]
 	require.NotEmpty(t, feedAVehicles, "Feed A should have vehicles")
 	require.NotEmpty(t, feedBVehicles, "Feed B should have vehicles")
 
-	// Merged view must contain vehicles from both feeds
+	// Merged view must contain vehicles from both feeds.
+	vehicles := manager.GetRealTimeVehicles()
 	assert.Equal(t, len(feedAVehicles)+len(feedBVehicles), len(vehicles),
-		"Merged vehicles should equal sum of per-feed vehicles")
+		"merged vehicles should equal sum of per-feed vehicles")
+
+	// Vehicles from each feed must be independently reachable through the
+	// lookup map, confirming data isolation rather than overwriting.
+	manager.realTimeMutex.RLock()
+	defer manager.realTimeMutex.RUnlock()
+	for _, v := range feedAVehicles {
+		if v.ID == nil || v.ID.ID == "" {
+			continue
+		}
+		_, found := manager.realTimeVehicleLookupByVehicle[v.ID.ID]
+		assert.True(t, found, "feed-A vehicle %q should be in the merged lookup", v.ID.ID)
+	}
+	for _, v := range feedBVehicles {
+		if v.ID == nil || v.ID.ID == "" {
+			continue
+		}
+		_, found := manager.realTimeVehicleLookupByVehicle[v.ID.ID]
+		assert.True(t, found, "feed-B vehicle %q should be in the merged lookup", v.ID.ID)
+	}
 }
 
 func TestStaleVehicleExpiry(t *testing.T) {
-	callCount := 0
-	var mu sync.Mutex
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		callCount++
-		n := callCount
-		mu.Unlock()
-
+	// emptyServer serves a minimal valid GTFS-RT FeedMessage that contains no
+	// vehicle entities. The 7-byte proto2 encoding represents:
+	//   FeedMessage { header { gtfs_realtime_version: "2.0" } }
+	// This satisfies the required FeedMessage.header field so the parser
+	// succeeds and returns a Realtime value with an empty Vehicles slice.
+	emptyFeedBytes := []byte{0x0a, 0x05, 0x0a, 0x03, 0x32, 0x2e, 0x30}
+	emptyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-protobuf")
-		if n == 1 {
-			data, err := os.ReadFile(filepath.Join("../../testdata", "raba-vehicle-positions.pb"))
-			require.NoError(t, err)
-			_, _ = w.Write(data)
-		} else {
-			empty := &gtfs.Realtime{Vehicles: []gtfs.Vehicle{}}
-			_ = empty // we just write empty protobuf bytes
-			_, _ = w.Write([]byte{})
-		}
+		_, _ = w.Write(emptyFeedBytes)
 	}))
-	defer server.Close()
+	defer emptyServer.Close()
+
+	realServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		data, err := os.ReadFile(filepath.Join("../../testdata", "raba-vehicle-positions.pb"))
+		require.NoError(t, err)
+		w.Header().Set("Content-Type", "application/x-protobuf")
+		_, _ = w.Write(data)
+	}))
+	defer realServer.Close()
 
 	manager := newTestManager()
-	feedCfg := RTFeedConfig{
+	realFeed := RTFeedConfig{
 		ID:                  "stale-test",
-		VehiclePositionsURL: server.URL,
+		VehiclePositionsURL: realServer.URL,
+		RefreshInterval:     30,
+		Enabled:             true,
+	}
+	emptyFeed := RTFeedConfig{
+		ID:                  "stale-test",
+		VehiclePositionsURL: emptyServer.URL,
 		RefreshInterval:     30,
 		Enabled:             true,
 	}
 
 	ctx := context.Background()
 
-	// First poll: seed vehicles
-	manager.updateFeedRealtime(ctx, feedCfg)
-	firstPollVehicles := manager.GetRealTimeVehicles()
-	require.NotEmpty(t, firstPollVehicles, "First poll should return vehicles")
+	// First poll: seed vehicles via the production updateFeedRealtime path.
+	manager.updateFeedRealtime(ctx, realFeed)
+	require.NotEmpty(t, manager.GetRealTimeVehicles(), "first poll should seed vehicles")
 
-	// Simulate a second poll where vehicles disappear but last-seen is recent.
-	// Manually set last-seen to 5 minutes ago (within 15-min window).
-	fiveMinAgo := time.Now().Add(-5 * time.Minute)
+	// Wind last-seen back to 5 minutes ago so vehicles are within the 15-min
+	// retention window but will appear to have disappeared on the next poll.
 	manager.realTimeMutex.Lock()
 	for vid := range manager.feedVehicleLastSeen["stale-test"] {
-		manager.feedVehicleLastSeen["stale-test"][vid] = fiveMinAgo
+		manager.feedVehicleLastSeen["stale-test"][vid] = time.Now().Add(-5 * time.Minute)
 	}
 	manager.realTimeMutex.Unlock()
 
-	// Second poll with empty data — vehicles should be retained (within window)
-	emptyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-protobuf")
-		data, _ := os.ReadFile(filepath.Join("../../testdata", "raba-vehicle-positions.pb"))
-		// Create a minimal valid protobuf with no vehicles by using empty bytes
-		// Actually, let's just return empty bytes to trigger a parse error
-		// which means vehicleData will be nil and feedVehicles won't be updated.
-		// Instead, we need to produce a valid feed with 0 vehicles.
-		_ = data
-		_, _ = w.Write([]byte{})
-	}))
-	defer emptyServer.Close()
+	// Second poll returns an empty feed — the production stale-retention logic
+	// should keep vehicles whose last-seen is within the 15-min window.
+	manager.updateFeedRealtime(ctx, emptyFeed)
+	assert.NotEmpty(t, manager.GetRealTimeVehicles(),
+		"vehicles should be retained when last-seen is within 15-min window")
 
-	// We can't easily produce an empty valid protobuf, so instead we directly
-	// manipulate the manager state to simulate what happens when the feed
-	// returns a response with no vehicles.
-	manager.realTimeMutex.Lock()
-	// Simulate receiving an empty vehicle response: the code filters valid IDs
-	// and then checks previous vehicles. We'll do it manually.
-	now := time.Now()
-	lastSeenMap := manager.feedVehicleLastSeen["stale-test"]
-	prevVehicles := manager.feedVehicles["stale-test"]
-
-	// "New poll" has zero vehicles
-	currentVehicleIDs := make(map[string]struct{})
-	var retained []gtfs.Vehicle
-
-	// Re-inject stale vehicles whose last-seen hasn't expired
-	for _, pv := range prevVehicles {
-		if pv.ID == nil {
-			continue
-		}
-		if _, current := currentVehicleIDs[pv.ID.ID]; !current {
-			if lastSeen, ok := lastSeenMap[pv.ID.ID]; ok && now.Sub(lastSeen) <= staleVehicleTimeout {
-				retained = append(retained, pv)
-			}
-		}
-	}
-	manager.feedVehicles["stale-test"] = retained
-	manager.rebuildMergedRealtimeLocked()
-	manager.realTimeMutex.Unlock()
-
-	retainedVehicles := manager.GetRealTimeVehicles()
-	assert.NotEmpty(t, retainedVehicles, "Vehicles should be retained when last-seen is within 15-min window")
-
-	// Now simulate expiry: set last-seen to 20 minutes ago (beyond 15-min window)
-	twentyMinAgo := time.Now().Add(-20 * time.Minute)
+	// Wind last-seen back to 20 minutes ago (beyond the 15-min window).
 	manager.realTimeMutex.Lock()
 	for vid := range manager.feedVehicleLastSeen["stale-test"] {
-		manager.feedVehicleLastSeen["stale-test"][vid] = twentyMinAgo
+		manager.feedVehicleLastSeen["stale-test"][vid] = time.Now().Add(-20 * time.Minute)
 	}
-	prevVehicles = manager.feedVehicles["stale-test"]
-	now = time.Now()
-	var expired []gtfs.Vehicle
-	for _, pv := range prevVehicles {
-		if pv.ID == nil {
-			continue
-		}
-		if lastSeen, ok := lastSeenMap[pv.ID.ID]; ok && now.Sub(lastSeen) <= staleVehicleTimeout {
-			expired = append(expired, pv)
-		}
-	}
-	manager.feedVehicles["stale-test"] = expired
-	manager.rebuildMergedRealtimeLocked()
 	manager.realTimeMutex.Unlock()
 
-	expiredVehicles := manager.GetRealTimeVehicles()
-	assert.Empty(t, expiredVehicles, "Vehicles should be expired when last-seen exceeds 15-min window")
+	// Third poll — stale vehicles should now be evicted by the production logic.
+	manager.updateFeedRealtime(ctx, emptyFeed)
+	assert.Empty(t, manager.GetRealTimeVehicles(),
+		"vehicles should be expired when last-seen exceeds 15-min window")
 }
 
 // TestFeedIsolation verifies that updating one feed does not affect another
@@ -224,4 +194,60 @@ func TestFeedIsolation(t *testing.T) {
 	// Verify feed-B sub-map is unchanged
 	assert.Equal(t, feedBCount, len(manager.feedVehicles["feed-b"]),
 		"Feed-B sub-map should be unaffected by feed-A update")
+}
+
+// TestConcurrentFeedUpdates verifies data isolation when two feeds update
+// simultaneously. Both goroutines race to write their per-feed sub-maps and
+// trigger rebuildMergedRealtimeLocked; the final merged view must contain
+// vehicles from both feeds with no data corruption.
+func TestConcurrentFeedUpdates(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/feed-a/vehicle-positions", func(w http.ResponseWriter, r *http.Request) {
+		data, err := os.ReadFile(filepath.Join("../../testdata", "raba-vehicle-positions.pb"))
+		require.NoError(t, err)
+		w.Header().Set("Content-Type", "application/x-protobuf")
+		_, _ = w.Write(data)
+	})
+	mux.HandleFunc("/feed-b/vehicle-positions", func(w http.ResponseWriter, r *http.Request) {
+		data, err := os.ReadFile(filepath.Join("../../testdata", "unitrans-vehicle-positions.pb"))
+		require.NoError(t, err)
+		w.Header().Set("Content-Type", "application/x-protobuf")
+		_, _ = w.Write(data)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	manager := newTestManager()
+	feedA := RTFeedConfig{
+		ID:                  "feed-a",
+		VehiclePositionsURL: server.URL + "/feed-a/vehicle-positions",
+		RefreshInterval:     30,
+		Enabled:             true,
+	}
+	feedB := RTFeedConfig{
+		ID:                  "feed-b",
+		VehiclePositionsURL: server.URL + "/feed-b/vehicle-positions",
+		RefreshInterval:     30,
+		Enabled:             true,
+	}
+
+	ctx := context.Background()
+
+	// Run several rounds of concurrent updates to increase the chance of
+	// exposing races. The -race detector will catch any unsynchronised access.
+	const rounds = 5
+	for i := 0; i < rounds; i++ {
+		done := make(chan struct{}, 2)
+		go func() { manager.updateFeedRealtime(ctx, feedA); done <- struct{}{} }()
+		go func() { manager.updateFeedRealtime(ctx, feedB); done <- struct{}{} }()
+		<-done
+		<-done
+	}
+
+	// After all goroutines have finished, both per-feed sub-maps must be
+	// populated and the merged view must be non-empty. The -race detector
+	// validates that no unsynchronised access occurred during the updates.
+	assert.NotEmpty(t, manager.feedVehicles["feed-a"], "feed-a should have vehicles after concurrent updates")
+	assert.NotEmpty(t, manager.feedVehicles["feed-b"], "feed-b should have vehicles after concurrent updates")
+	assert.NotEmpty(t, manager.GetRealTimeVehicles(), "merged view should be non-empty after concurrent updates")
 }
