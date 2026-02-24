@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"sort"
 	"sync"
 	"time"
 
@@ -37,9 +38,9 @@ func newRealtimeHTTPClient() *http.Client {
 
 	return &http.Client{
 		// Timeout acts as an absolute safety net per request. The caller in
-		// updateGTFSRealtimePeriodically also sets a 15s context timeout;
-		// the stricter of the two wins. Keep this <= the context timeout so
-		// the client enforces the bound even if a caller forgets a context.
+		// pollFeed also sets a 15s context timeout; the stricter of the two
+		// wins. Keep this <= the context timeout so the client enforces the
+		// bound even if a caller forgets a context.
 		Timeout:   10 * time.Second,
 		Transport: transport,
 	}
@@ -341,24 +342,44 @@ func (manager *Manager) updateFeedRealtime(ctx context.Context, feedCfg RTFeedCo
 }
 
 func (manager *Manager) rebuildMergedRealtimeLocked() {
-	var allTrips []gtfs.Trip
-	for _, trips := range manager.feedTrips {
-		allTrips = append(allTrips, trips...)
+	feedIDs := make([]string, 0, len(manager.feedTrips))
+	for id := range manager.feedTrips {
+		feedIDs = append(feedIDs, id)
 	}
+	sort.Strings(feedIDs)
+
+	var allTrips []gtfs.Trip
+	for _, id := range feedIDs {
+		allTrips = append(allTrips, manager.feedTrips[id]...)
+	}
+
+	vehicleFeedIDs := make([]string, 0, len(manager.feedVehicles))
+	for id := range manager.feedVehicles {
+		vehicleFeedIDs = append(vehicleFeedIDs, id)
+	}
+	sort.Strings(vehicleFeedIDs)
 
 	var allVehicles []gtfs.Vehicle
-	for _, vehicles := range manager.feedVehicles {
-		allVehicles = append(allVehicles, vehicles...)
+	for _, id := range vehicleFeedIDs {
+		allVehicles = append(allVehicles, manager.feedVehicles[id]...)
 	}
 
+	alertFeedIDs := make([]string, 0, len(manager.feedAlerts))
+	for id := range manager.feedAlerts {
+		alertFeedIDs = append(alertFeedIDs, id)
+	}
+	sort.Strings(alertFeedIDs)
+
 	var allAlerts []gtfs.Alert
-	for _, alerts := range manager.feedAlerts {
-		allAlerts = append(allAlerts, alerts...)
+	for _, id := range alertFeedIDs {
+		allAlerts = append(allAlerts, manager.feedAlerts[id]...)
 	}
 
 	tripLookup := make(map[string]int, len(allTrips))
 	for i, trip := range allTrips {
-		tripLookup[trip.ID.ID] = i
+		if trip.ID.ID != "" {
+			tripLookup[trip.ID.ID] = i
+		}
 	}
 
 	vehicleLookupByTrip := make(map[string]int, len(allVehicles))
