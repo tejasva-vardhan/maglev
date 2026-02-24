@@ -70,7 +70,11 @@ func main() {
 		cfg = jsonConfig.ToAppConfig()
 
 		// Convert to GTFS config
-		gtfsCfgData := jsonConfig.ToGtfsConfigData()
+		gtfsCfgData, err := jsonConfig.ToGtfsConfigData()
+		if err != nil {
+			slog.Error("failed to convert config", "error", err)
+			os.Exit(1)
+		}
 		gtfsCfg = gtfsConfigFromData(gtfsCfgData)
 
 	} else {
