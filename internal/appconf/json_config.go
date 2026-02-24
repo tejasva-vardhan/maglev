@@ -246,6 +246,10 @@ func (j *JSONConfig) ToGtfsConfigData() (GtfsConfigData, error) {
 					slog.String("header", feed.RealTimeAuthHeaderName),
 				)
 			}
+		} else if feed.RealTimeAuthHeaderName != "" || feed.RealTimeAuthHeaderValue != "" {
+			slog.Warn("Legacy realtime-auth-header-name and realtime-auth-header-value must both be set; ignoring incomplete pair",
+				slog.String("feed", feedID),
+			)
 		}
 
 		// Default refresh interval is 30 seconds
