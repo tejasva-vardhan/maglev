@@ -19,7 +19,7 @@ RUN go install github.com/go-delve/delve/cmd/dlv@latest
 
 # Create app directory and set ownership
 # Critical Fix: chown -R /go ensures the maglev user can access the Go module cache volume
-RUN mkdir -p /app && \
+RUN mkdir -p /app/data && \
     addgroup -g ${GROUP_ID} maglev && \
     adduser -u ${USER_ID} -G maglev -s /bin/sh -D maglev && \
     chown -R maglev:maglev /app && \
