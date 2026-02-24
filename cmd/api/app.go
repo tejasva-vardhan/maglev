@@ -25,18 +25,26 @@ import (
 
 func gtfsConfigFromData(gtfsCfgData appconf.GtfsConfigData) gtfs.Config {
 	gtfsCfg := gtfs.Config{
-		GtfsURL:                 gtfsCfgData.GtfsURL,
-		StaticAuthHeaderKey:     gtfsCfgData.StaticAuthHeaderKey,
-		StaticAuthHeaderValue:   gtfsCfgData.StaticAuthHeaderValue,
-		TripUpdatesURL:          gtfsCfgData.TripUpdatesURL,
-		VehiclePositionsURL:     gtfsCfgData.VehiclePositionsURL,
-		ServiceAlertsURL:        gtfsCfgData.ServiceAlertsURL,
-		RealTimeAuthHeaderKey:   gtfsCfgData.RealTimeAuthHeaderKey,
-		RealTimeAuthHeaderValue: gtfsCfgData.RealTimeAuthHeaderValue,
-		GTFSDataPath:            gtfsCfgData.GTFSDataPath,
-		Env:                     gtfsCfgData.Env,
-		Verbose:                 gtfsCfgData.Verbose,
-		EnableGTFSTidy:          gtfsCfgData.EnableGTFSTidy,
+		GtfsURL:               gtfsCfgData.GtfsURL,
+		StaticAuthHeaderKey:   gtfsCfgData.StaticAuthHeaderKey,
+		StaticAuthHeaderValue: gtfsCfgData.StaticAuthHeaderValue,
+		GTFSDataPath:          gtfsCfgData.GTFSDataPath,
+		Env:                   gtfsCfgData.Env,
+		Verbose:               gtfsCfgData.Verbose,
+		EnableGTFSTidy:        gtfsCfgData.EnableGTFSTidy,
+	}
+
+	for _, feedData := range gtfsCfgData.RTFeeds {
+		gtfsCfg.RTFeeds = append(gtfsCfg.RTFeeds, gtfs.RTFeedConfig{
+			ID:                  feedData.ID,
+			AgencyIDs:           feedData.AgencyIDs,
+			TripUpdatesURL:      feedData.TripUpdatesURL,
+			VehiclePositionsURL: feedData.VehiclePositionsURL,
+			ServiceAlertsURL:    feedData.ServiceAlertsURL,
+			Headers:             feedData.Headers,
+			RefreshInterval:     feedData.RefreshInterval,
+			Enabled:             feedData.Enabled,
+		})
 	}
 
 	return gtfsCfg
@@ -246,21 +254,26 @@ func dumpConfigJSON(cfg appconf.Config, gtfsCfg gtfs.Config) {
 		"data-path":        gtfsCfg.GTFSDataPath,
 	}
 
-	// Add GTFS-RT feed if configured
-	feeds := []map[string]string{}
-	if gtfsCfg.TripUpdatesURL != "" || gtfsCfg.VehiclePositionsURL != "" {
-		// Mask sensitive auth header value
-		authHeaderValue := gtfsCfg.RealTimeAuthHeaderValue
-		if authHeaderValue != "" {
-			authHeaderValue = "***REDACTED***"
+	var feeds []map[string]interface{}
+	for _, feedCfg := range gtfsCfg.RTFeeds {
+		redactedHeaders := make(map[string]string)
+		for k := range feedCfg.Headers {
+			redactedHeaders[k] = "***REDACTED***"
 		}
 
-		feed := map[string]string{
-			"trip-updates-url":           gtfsCfg.TripUpdatesURL,
-			"vehicle-positions-url":      gtfsCfg.VehiclePositionsURL,
-			"service-alerts-url":         gtfsCfg.ServiceAlertsURL,
-			"realtime-auth-header-name":  gtfsCfg.RealTimeAuthHeaderKey,
-			"realtime-auth-header-value": authHeaderValue,
+		feed := map[string]interface{}{
+			"id":                    feedCfg.ID,
+			"trip-updates-url":      feedCfg.TripUpdatesURL,
+			"vehicle-positions-url": feedCfg.VehiclePositionsURL,
+			"service-alerts-url":    feedCfg.ServiceAlertsURL,
+			"refresh-interval":      feedCfg.RefreshInterval,
+			"enabled":               feedCfg.Enabled,
+		}
+		if len(feedCfg.AgencyIDs) > 0 {
+			feed["agency-ids"] = feedCfg.AgencyIDs
+		}
+		if len(redactedHeaders) > 0 {
+			feed["headers"] = redactedHeaders
 		}
 		feeds = append(feeds, feed)
 	}
