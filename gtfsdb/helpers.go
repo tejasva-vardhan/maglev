@@ -1045,15 +1045,20 @@ func (c *Client) buildBlockTripIndex(ctx context.Context, staticData *gtfs.Stati
 		slog.Int("total_trips", len(tripMap)),
 		slog.Int("unique_indices", len(indexGroups)))
 
-	// Create block_trip_index and block_trip_entry records
-	// BlockLayoverIndex groups trips by first stop (layover location where trips begin)
+	tx, err := c.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer logging.SafeRollbackWithLogging(tx, logger, "build_block_trip_index")
+
+	qtx := c.Queries.WithTx(tx)
 	createdAt := time.Now().Unix()
 
 	for key, trips := range indexGroups {
 		// Create unique index key (service ID + layover stop)
 		indexKey := fmt.Sprintf("%s|%s", key.serviceIDs, key.stopSequenceKey)
 
-		indexID, err := c.Queries.CreateBlockTripIndex(ctx, CreateBlockTripIndexParams{
+		indexID, err := qtx.CreateBlockTripIndex(ctx, CreateBlockTripIndexParams{
 			IndexKey:        indexKey,
 			ServiceIds:      key.serviceIDs,
 			StopSequenceKey: key.stopSequenceKey,
@@ -1061,7 +1066,9 @@ func (c *Client) buildBlockTripIndex(ctx context.Context, staticData *gtfs.Stati
 		})
 		if err != nil {
 			return fmt.Errorf("failed to create block trip index: %w", err)
-		} // Sort trips within the group by block_id and then trip_id for deterministic ordering
+		}
+
+		// Sort trips within the group by block_id and then trip_id for deterministic ordering
 		sort.Slice(trips, func(i, j int) bool {
 			if trips[i].blockID != trips[j].blockID {
 				return trips[i].blockID < trips[j].blockID
@@ -1071,7 +1078,7 @@ func (c *Client) buildBlockTripIndex(ctx context.Context, staticData *gtfs.Stati
 
 		// Insert block_trip_entry records for each trip in this index
 		for sequence, trip := range trips {
-			err = c.Queries.CreateBlockTripEntry(ctx, CreateBlockTripEntryParams{
+			err = qtx.CreateBlockTripEntry(ctx, CreateBlockTripEntryParams{
 				BlockTripIndexID:  indexID,
 				TripID:            trip.tripID,
 				BlockID:           toNullString(trip.blockID),
@@ -1082,6 +1089,10 @@ func (c *Client) buildBlockTripIndex(ctx context.Context, staticData *gtfs.Stati
 				return fmt.Errorf("failed to create block trip entry: %w", err)
 			}
 		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
 	}
 
 	totalEntries := 0

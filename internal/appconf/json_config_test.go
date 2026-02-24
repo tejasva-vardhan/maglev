@@ -213,8 +213,9 @@ func TestToGtfsConfigData_NoFeeds(t *testing.T) {
 		DataPath:    "/data/gtfs.db",
 	}
 
-	gtfsConfig := jsonConfig.ToGtfsConfigData()
+	gtfsConfig, err := jsonConfig.ToGtfsConfigData()
 
+	assert.NoError(t, err)
 	assert.Equal(t, "https://example.com/gtfs.zip", gtfsConfig.GtfsURL)
 	assert.Equal(t, "X-API-Key", gtfsConfig.StaticAuthHeaderKey)
 	assert.Equal(t, "secret123", gtfsConfig.StaticAuthHeaderValue)
@@ -222,15 +223,11 @@ func TestToGtfsConfigData_NoFeeds(t *testing.T) {
 	assert.Equal(t, Development, gtfsConfig.Env)
 	assert.True(t, gtfsConfig.Verbose)
 
-	// No feeds should result in empty URLs
-	assert.Empty(t, gtfsConfig.TripUpdatesURL)
-	assert.Empty(t, gtfsConfig.VehiclePositionsURL)
-	assert.Empty(t, gtfsConfig.ServiceAlertsURL)
-	assert.Empty(t, gtfsConfig.RealTimeAuthHeaderKey)
-	assert.Empty(t, gtfsConfig.RealTimeAuthHeaderValue)
+	// No feeds should result in empty RTFeeds
+	assert.Empty(t, gtfsConfig.RTFeeds)
 }
 
-func TestToGtfsConfigData_WithFirstFeed(t *testing.T) {
+func TestToGtfsConfigData_WithMultipleFeeds(t *testing.T) {
 	jsonConfig := &JSONConfig{
 		Port: 4000,
 		Env:  "production",
@@ -246,7 +243,6 @@ func TestToGtfsConfigData_WithFirstFeed(t *testing.T) {
 				RealTimeAuthHeaderValue: "Bearer token123",
 			},
 			{
-				// This second feed should be ignored
 				TripUpdatesURL:      "https://api.other.com/trip-updates.pb",
 				VehiclePositionsURL: "https://api.other.com/vehicle-positions.pb",
 			},
@@ -254,14 +250,28 @@ func TestToGtfsConfigData_WithFirstFeed(t *testing.T) {
 		DataPath: "/data/gtfs.db",
 	}
 
-	gtfsConfig := jsonConfig.ToGtfsConfigData()
+	gtfsConfig, err := jsonConfig.ToGtfsConfigData()
+	require.NoError(t, err)
 
-	// Should use first feed only
-	assert.Equal(t, "https://api.example.com/trip-updates.pb", gtfsConfig.TripUpdatesURL)
-	assert.Equal(t, "https://api.example.com/vehicle-positions.pb", gtfsConfig.VehiclePositionsURL)
-	assert.Equal(t, "https://api.example.com/service-alerts.pb", gtfsConfig.ServiceAlertsURL)
-	assert.Equal(t, "Authorization", gtfsConfig.RealTimeAuthHeaderKey)
-	assert.Equal(t, "Bearer token123", gtfsConfig.RealTimeAuthHeaderValue)
+	// Both feeds should be present
+	require.Len(t, gtfsConfig.RTFeeds, 2)
+
+	// First feed
+	feed0 := gtfsConfig.RTFeeds[0]
+	assert.Equal(t, "feed-0", feed0.ID)
+	assert.Equal(t, "https://api.example.com/trip-updates.pb", feed0.TripUpdatesURL)
+	assert.Equal(t, "https://api.example.com/vehicle-positions.pb", feed0.VehiclePositionsURL)
+	assert.Equal(t, "https://api.example.com/service-alerts.pb", feed0.ServiceAlertsURL)
+	assert.Equal(t, "Bearer token123", feed0.Headers["Authorization"])
+	assert.Equal(t, 30, feed0.RefreshInterval)
+	assert.True(t, feed0.Enabled)
+
+	// Second feed
+	feed1 := gtfsConfig.RTFeeds[1]
+	assert.Equal(t, "feed-1", feed1.ID)
+	assert.Equal(t, "https://api.other.com/trip-updates.pb", feed1.TripUpdatesURL)
+	assert.Equal(t, "https://api.other.com/vehicle-positions.pb", feed1.VehiclePositionsURL)
+	assert.True(t, feed1.Enabled)
 }
 
 func TestSetDefaults(t *testing.T) {

@@ -79,6 +79,17 @@
       "items": {
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier for this feed (auto-generated if missing)"
+          },
+          "agency-ids": {
+            "type": "array",
+            "description": "Optional subset of agency IDs that this feed provides data for",
+            "items": {
+              "type": "string"
+            }
+          },
           "trip-updates-url": {
             "type": "string",
             "description": "URL for a GTFS-RT trip updates feed",
@@ -96,22 +107,41 @@
           },
           "realtime-auth-header-name": {
             "type": "string",
-            "description": "Optional header name for GTFS-RT auth"
+            "description": "Optional header name for GTFS-RT auth (legacy)"
           },
           "realtime-auth-header-value": {
             "type": "string",
-            "description": "Optional header value for GTFS-RT auth"
+            "description": "Optional header value for GTFS-RT auth (legacy)"
+          },
+          "headers": {
+            "type": "object",
+            "description": "Optional HTTP headers to send with requests to this feed",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "refresh-interval": {
+            "type": "integer",
+            "description": "Polling interval in seconds",
+            "default": 30,
+            "minimum": 1
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether this feed is enabled",
+            "default": true
           }
         },
         "additionalProperties": false
       },
       "default": [
         {
+          "id": "sound-transit",
           "trip-updates-url": "https://api.pugetsound.onebusaway.org/api/gtfs_realtime/trip-updates-for-agency/40.pb?key=org.onebusaway.iphone",
           "vehicle-positions-url": "https://api.pugetsound.onebusaway.org/api/gtfs_realtime/vehicle-positions-for-agency/40.pb?key=org.onebusaway.iphone",
           "service-alerts-url": "",
-          "realtime-auth-header-name": "",
-          "realtime-auth-header-value": ""
+          "refresh-interval": 30,
+          "enabled": true
         }
       ]
     },
