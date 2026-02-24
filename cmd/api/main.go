@@ -19,6 +19,13 @@ func main() {
 	var configFile string
 	var dumpConfig bool
 
+	// CLI-only realtime feed fields (assembled into RTFeeds slice below)
+	var cliFeedTripUpdatesURL string
+	var cliFeedVehiclePositionsURL string
+	var cliFeedServiceAlertsURL string
+	var cliFeedAuthHeaderName string
+	var cliFeedAuthHeaderValue string
+
 	// Parse command-line flags
 	flag.StringVar(&configFile, "f", "", "Path to JSON configuration file (mutually exclusive with other flags)")
 	flag.BoolVar(&dumpConfig, "dump-config", false, "Dump current configuration as JSON and exit")
@@ -30,11 +37,11 @@ func main() {
 	flag.StringVar(&gtfsCfg.GtfsURL, "gtfs-url", "https://www.soundtransit.org/GTFS-rail/40_gtfs.zip", "URL for a static GTFS zip file")
 	flag.StringVar(&gtfsCfg.StaticAuthHeaderKey, "gtfs-static-auth-header-name", "", "Optional header name for static GTFS feed auth")
 	flag.StringVar(&gtfsCfg.StaticAuthHeaderValue, "gtfs-static-auth-header-value", "", "Optional header value for static GTFS feed auth")
-	flag.StringVar(&gtfsCfg.TripUpdatesURL, "trip-updates-url", "https://api.pugetsound.onebusaway.org/api/gtfs_realtime/trip-updates-for-agency/40.pb?key=org.onebusaway.iphone", "URL for a GTFS-RT trip updates feed")
-	flag.StringVar(&gtfsCfg.VehiclePositionsURL, "vehicle-positions-url", "https://api.pugetsound.onebusaway.org/api/gtfs_realtime/vehicle-positions-for-agency/40.pb?key=org.onebusaway.iphone", "URL for a GTFS-RT vehicle positions feed")
-	flag.StringVar(&gtfsCfg.RealTimeAuthHeaderKey, "realtime-auth-header-name", "", "Optional header name for GTFS-RT auth")
-	flag.StringVar(&gtfsCfg.RealTimeAuthHeaderValue, "realtime-auth-header-value", "", "Optional header value for GTFS-RT auth")
-	flag.StringVar(&gtfsCfg.ServiceAlertsURL, "service-alerts-url", "", "URL for a GTFS-RT service alerts feed")
+	flag.StringVar(&cliFeedTripUpdatesURL, "trip-updates-url", "https://api.pugetsound.onebusaway.org/api/gtfs_realtime/trip-updates-for-agency/40.pb?key=org.onebusaway.iphone", "URL for a GTFS-RT trip updates feed")
+	flag.StringVar(&cliFeedVehiclePositionsURL, "vehicle-positions-url", "https://api.pugetsound.onebusaway.org/api/gtfs_realtime/vehicle-positions-for-agency/40.pb?key=org.onebusaway.iphone", "URL for a GTFS-RT vehicle positions feed")
+	flag.StringVar(&cliFeedAuthHeaderName, "realtime-auth-header-name", "", "Optional header name for GTFS-RT auth")
+	flag.StringVar(&cliFeedAuthHeaderValue, "realtime-auth-header-value", "", "Optional header value for GTFS-RT auth")
+	flag.StringVar(&cliFeedServiceAlertsURL, "service-alerts-url", "", "URL for a GTFS-RT service alerts feed")
 	flag.StringVar(&gtfsCfg.GTFSDataPath, "data-path", "./gtfs.db", "Path to the SQLite database containing GTFS data")
 	flag.Parse()
 
@@ -85,6 +92,23 @@ func main() {
 
 		// Set GTFS config environment
 		gtfsCfg.Env = cfg.Env
+
+		// Build single-feed RTFeeds slice from CLI flags
+		headers := make(map[string]string)
+		if cliFeedAuthHeaderName != "" && cliFeedAuthHeaderValue != "" {
+			headers[cliFeedAuthHeaderName] = cliFeedAuthHeaderValue
+		}
+		gtfsCfg.RTFeeds = []gtfs.RTFeedConfig{
+			{
+				ID:                  "feed-0",
+				TripUpdatesURL:      cliFeedTripUpdatesURL,
+				VehiclePositionsURL: cliFeedVehiclePositionsURL,
+				ServiceAlertsURL:    cliFeedServiceAlertsURL,
+				Headers:             headers,
+				RefreshInterval:     30,
+				Enabled:             true,
+			},
+		}
 	}
 
 	// Handle dump-config flag
