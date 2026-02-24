@@ -72,6 +72,8 @@ RUN mkdir -p /app/data && chown -R maglev:maglev /app
 COPY --from=builder /build/maglev .
 # Copy example config (users should mount their own config.json)
 COPY --from=builder /build/config.example.json ./config.example.json
+COPY --from=builder /build/index.html ./index.html
+COPY --from=builder /build/marketing/ ./marketing/
 
 # Set ownership
 RUN chown -R maglev:maglev /app
