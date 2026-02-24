@@ -331,10 +331,17 @@ func createTestApiWithRealTimeData(t *testing.T) (*RestAPI, func()) {
 
 	// Create GTFS config with real-time URLs pointing to our test server
 	gtfsConfig := gtfs.Config{
-		GtfsURL:             filepath.Join("../../testdata", "raba.zip"),
-		GTFSDataPath:        ":memory:",
-		TripUpdatesURL:      server.URL + "/trip-updates",
-		VehiclePositionsURL: server.URL + "/vehicle-positions",
+		GtfsURL:      filepath.Join("../../testdata", "raba.zip"),
+		GTFSDataPath: ":memory:",
+		RTFeeds: []gtfs.RTFeedConfig{
+			{
+				ID:                  "test-feed",
+				TripUpdatesURL:      server.URL + "/trip-updates",
+				VehiclePositionsURL: server.URL + "/vehicle-positions",
+				RefreshInterval:     30,
+				Enabled:             true,
+			},
+		},
 	}
 
 	gtfsManager, err := gtfs.InitGTFSManager(gtfsConfig)
