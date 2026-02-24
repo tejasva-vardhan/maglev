@@ -287,12 +287,22 @@ The GTFS Manager (`internal/gtfs/gtfs_manager.go`) maintains:
 - Accessed via: `GetAgencies()`, `GetTrips()`, `GetStops()`, `GetStaticData()`
 
 **Real-Time Data** (protected by `realTimeMutex`):
-- `realTimeTrips` - GTFS-RT trip updates
-- `realTimeVehicles` - GTFS-RT vehicle positions
-- `realTimeAlerts` - Service alerts
+
+*Per-feed source of truth* (keyed by feed ID):
+- `feedTrips` - `map[string][]gtfs.Trip` — trips per feed
+- `feedVehicles` - `map[string][]gtfs.Vehicle` — vehicles per feed
+- `feedAlerts` - `map[string][]gtfs.Alert` — alerts per feed
+- `feedVehicleLastSeen` - `map[string]map[string]time.Time` — per-feed, per-vehicle last-seen timestamps for stale vehicle expiry (15 min window)
+
+*Derived merged view* (rebuilt by `rebuildMergedRealtimeLocked` after each feed update):
+- `realTimeTrips` - Concatenation of all `feedTrips` values
+- `realTimeVehicles` - Concatenation of all `feedVehicles` values
+- `realTimeAlerts` - Concatenation of all `feedAlerts` values
 - `realTimeTripLookup` - Map of trip ID → index for O(1) lookup
 - `realTimeVehicleLookupByTrip` - Map of trip ID → vehicle index
 - `realTimeVehicleLookupByVehicle` - Map of vehicle ID → vehicle index
+
+When a single feed refreshes, only its per-feed sub-map is overwritten; other feeds' data is untouched. The merged slices are then rebuilt from all sub-maps.
 
 **Direction Calculator** (shape-based direction inference):
 - `DirectionCalculator` - Precomputed stop directions from shape geometry
@@ -504,9 +514,26 @@ Maglev supports JSON configuration files with IDE validation via `config.schema.
   "api-keys": ["test"],
   "rate-limit": 100,
   "gtfs-static-feed": { "url": "..." },
-  "gtfs-rt-feeds": [{ "vehicle-positions-url": "..." }]
+  "gtfs-rt-feeds": [
+    {
+      "id": "my-feed",
+      "agency-ids": ["40"],
+      "vehicle-positions-url": "...",
+      "trip-updates-url": "...",
+      "service-alerts-url": "...",
+      "headers": { "Authorization": "Bearer ..." },
+      "refresh-interval": 30,
+      "enabled": true
+    }
+  ]
 }
 ```
+
+### GTFS-RT Feed Defaults
+- `id` — auto-generated as `"feed-0"`, `"feed-1"`, … when omitted
+- `refresh-interval` — defaults to `30` seconds
+- `enabled` — defaults to `true`
+- A feed is activated only if it has at least one URL (trip-updates, vehicle-positions, or service-alerts)
 
 ## REST API Documentation
 

@@ -97,11 +97,21 @@ Example `config.json`:
   },
   "gtfs-rt-feeds": [
     {
-      "trip-updates-url": "https://api.example.com/trip-updates.pb",
-      "vehicle-positions-url": "https://api.example.com/vehicle-positions.pb",
-      "service-alerts-url": "https://api.example.com/service-alerts.pb",
-      "realtime-auth-header-name": "Authorization",
-      "realtime-auth-header-value": "Bearer token123"
+      "id": "agency-a",
+      "agency-ids": ["40"],
+      "trip-updates-url": "https://api.example.com/agency-a/trip-updates.pb",
+      "vehicle-positions-url": "https://api.example.com/agency-a/vehicle-positions.pb",
+      "service-alerts-url": "https://api.example.com/agency-a/service-alerts.pb",
+      "headers": { "Authorization": "Bearer token123" },
+      "refresh-interval": 30,
+      "enabled": true
+    },
+    {
+      "id": "agency-b",
+      "agency-ids": ["1"],
+      "trip-updates-url": "https://api.example.com/agency-b/trip-updates.pb",
+      "vehicle-positions-url": "https://api.example.com/agency-b/vehicle-positions.pb",
+      "refresh-interval": 60
     }
   ],
   "data-path": "/data/gtfs.db"
@@ -143,8 +153,25 @@ A JSON schema file is provided at `config.schema.json` for IDE autocomplete and 
 | `api-keys` | array | ["test"] | API keys for authentication |
 | `rate-limit` | integer | 100 | Requests per second per API key |
 | `gtfs-static-feed` | object | (Sound Transit) | Static GTFS feed configuration |
-| `gtfs-rt-feeds` | array | (Sound Transit) | GTFS-RT feed configurations |
+| `gtfs-rt-feeds` | array | (Sound Transit) | GTFS-RT feed configurations (see below) |
 | `data-path` | string | "./gtfs.db" | Path to SQLite database |
+
+#### GTFS-RT Feed Options
+
+Each entry in the `gtfs-rt-feeds` array supports:
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `id` | string | auto (`"feed-0"`, `"feed-1"`, …) | Unique identifier for the feed, used in logs and internal data partitioning |
+| `agency-ids` | array | `[]` | Transit agency IDs this feed provides data for |
+| `trip-updates-url` | string | `""` | URL for GTFS-RT trip updates protobuf |
+| `vehicle-positions-url` | string | `""` | URL for GTFS-RT vehicle positions protobuf |
+| `service-alerts-url` | string | `""` | URL for GTFS-RT service alerts protobuf |
+| `headers` | object | `{}` | HTTP headers sent with every request to this feed |
+| `refresh-interval` | integer | `30` | Polling interval in seconds |
+| `enabled` | boolean | `true` | Set to `false` to disable polling without removing the entry |
+
+A feed must have at least one URL (`trip-updates-url`, `vehicle-positions-url`, or `service-alerts-url`) to be activated. Each feed runs its own independent polling goroutine. Data from all enabled feeds is merged into a single unified view for the API.
 
 ## Basic Commands
 
