@@ -213,8 +213,9 @@ func TestToGtfsConfigData_NoFeeds(t *testing.T) {
 		DataPath:    "/data/gtfs.db",
 	}
 
-	gtfsConfig := jsonConfig.ToGtfsConfigData()
+	gtfsConfig, err := jsonConfig.ToGtfsConfigData()
 
+	assert.NoError(t, err)
 	assert.Equal(t, "https://example.com/gtfs.zip", gtfsConfig.GtfsURL)
 	assert.Equal(t, "X-API-Key", gtfsConfig.StaticAuthHeaderKey)
 	assert.Equal(t, "secret123", gtfsConfig.StaticAuthHeaderValue)
@@ -249,7 +250,8 @@ func TestToGtfsConfigData_WithMultipleFeeds(t *testing.T) {
 		DataPath: "/data/gtfs.db",
 	}
 
-	gtfsConfig := jsonConfig.ToGtfsConfigData()
+	gtfsConfig, err := jsonConfig.ToGtfsConfigData()
+	require.NoError(t, err)
 
 	// Both feeds should be present
 	require.Len(t, gtfsConfig.RTFeeds, 2)
