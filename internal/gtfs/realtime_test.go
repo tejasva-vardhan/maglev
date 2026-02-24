@@ -210,3 +210,79 @@ func TestLoadRealtimeData_Non200StatusCode(t *testing.T) {
 		})
 	}
 }
+
+func TestEnabledFeeds(t *testing.T) {
+	tests := []struct {
+		name    string
+		feeds   []RTFeedConfig
+		wantIDs []string
+	}{
+		{
+			name:    "empty config returns no feeds",
+			feeds:   nil,
+			wantIDs: nil,
+		},
+		{
+			name: "disabled feed is excluded",
+			feeds: []RTFeedConfig{
+				{ID: "disabled", VehiclePositionsURL: "http://example.com/vp", Enabled: false},
+			},
+			wantIDs: nil,
+		},
+		{
+			name: "enabled feed with no URLs is excluded",
+			feeds: []RTFeedConfig{
+				{ID: "no-urls", Enabled: true},
+			},
+			wantIDs: nil,
+		},
+		{
+			name: "enabled feed with trip-updates URL is included",
+			feeds: []RTFeedConfig{
+				{ID: "trip-feed", TripUpdatesURL: "http://example.com/tu", Enabled: true},
+			},
+			wantIDs: []string{"trip-feed"},
+		},
+		{
+			name: "enabled feed with vehicle-positions URL is included",
+			feeds: []RTFeedConfig{
+				{ID: "vp-feed", VehiclePositionsURL: "http://example.com/vp", Enabled: true},
+			},
+			wantIDs: []string{"vp-feed"},
+		},
+		{
+			name: "enabled feed with service-alerts URL is included",
+			feeds: []RTFeedConfig{
+				{ID: "alert-feed", ServiceAlertsURL: "http://example.com/sa", Enabled: true},
+			},
+			wantIDs: []string{"alert-feed"},
+		},
+		{
+			name: "mixed enabled and disabled feeds",
+			feeds: []RTFeedConfig{
+				{ID: "active", VehiclePositionsURL: "http://example.com/vp", Enabled: true},
+				{ID: "inactive", VehiclePositionsURL: "http://example.com/vp", Enabled: false},
+				{ID: "no-url", Enabled: true},
+			},
+			wantIDs: []string{"active"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Config{RTFeeds: tt.feeds}
+			got := cfg.enabledFeeds()
+
+			if tt.wantIDs == nil {
+				assert.Empty(t, got)
+				return
+			}
+
+			gotIDs := make([]string, len(got))
+			for i, f := range got {
+				gotIDs[i] = f.ID
+			}
+			assert.Equal(t, tt.wantIDs, gotIDs)
+		})
+	}
+}

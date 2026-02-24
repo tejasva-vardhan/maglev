@@ -191,13 +191,9 @@ func TestRealTimeDataConsistency(t *testing.T) {
 
 	wg.Wait()
 
-	// Should not panic or cause data corruption
-	trips := manager.GetRealTimeTrips()
-	vehicles := manager.GetRealTimeVehicles()
-
-	// Slices may be nil or empty due to invalid URLs, but function should not panic
-	assert.True(t, trips != nil || len(trips) == 0, "Trips should be accessible without panic")
-	assert.True(t, vehicles != nil || len(vehicles) == 0, "Vehicles should be accessible without panic")
+	// Should not panic or cause data corruption; invalid URLs produce no data.
+	assert.Empty(t, manager.GetRealTimeTrips(), "no trips should be stored when all URLs are unreachable")
+	assert.Empty(t, manager.GetRealTimeVehicles(), "no vehicles should be stored when all URLs are unreachable")
 }
 
 // newTestManager creates a minimal Manager for tests that only exercise realtime code
