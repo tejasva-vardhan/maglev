@@ -7,7 +7,7 @@ import (
 // Configuration for a single GTFS-RT feed.
 type RTFeedConfig struct {
 	ID                  string
-	AgencyIDs           []string
+	AgencyIDs           []string // Reserved for future use - currently not used for filtering realtime data
 	TripUpdatesURL      string
 	VehiclePositionsURL string
 	ServiceAlertsURL    string
