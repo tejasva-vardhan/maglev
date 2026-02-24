@@ -80,17 +80,20 @@ func TestGetAlertsForStop(t *testing.T) {
 
 func TestRebuildRealTimeTripLookup(t *testing.T) {
 	manager := &Manager{
-		realTimeTrips: []gtfs.Trip{
-			{
-				ID: gtfs.TripID{ID: "trip1"},
-			},
-			{
-				ID: gtfs.TripID{ID: "trip2"},
+		realTimeMutex: sync.RWMutex{},
+		feedTrips: map[string][]gtfs.Trip{
+			"feed-0": {
+				{
+					ID: gtfs.TripID{ID: "trip1"},
+				},
+				{
+					ID: gtfs.TripID{ID: "trip2"},
+				},
 			},
 		},
 	}
 
-	rebuildRealTimeTripLookup(manager)
+	manager.rebuildMergedRealtimeLocked()
 
 	assert.NotNil(t, manager.realTimeTripLookup)
 	assert.Len(t, manager.realTimeTripLookup, 2)
@@ -107,17 +110,20 @@ func TestRebuildRealTimeVehicleLookupByTrip(t *testing.T) {
 	}
 
 	manager := &Manager{
-		realTimeVehicles: []gtfs.Vehicle{
-			{
-				Trip: trip1,
-			},
-			{
-				Trip: trip2,
+		realTimeMutex: sync.RWMutex{},
+		feedVehicles: map[string][]gtfs.Vehicle{
+			"feed-0": {
+				{
+					Trip: trip1,
+				},
+				{
+					Trip: trip2,
+				},
 			},
 		},
 	}
 
-	rebuildRealTimeVehicleLookupByTrip(manager)
+	manager.rebuildMergedRealtimeLocked()
 
 	assert.NotNil(t, manager.realTimeVehicleLookupByTrip)
 	assert.Len(t, manager.realTimeVehicleLookupByTrip, 2)
@@ -130,17 +136,20 @@ func TestRebuildRealTimeVehicleLookupByVehicle(t *testing.T) {
 	vehicleID2 := &gtfs.VehicleID{ID: "vehicle2"}
 
 	manager := &Manager{
-		realTimeVehicles: []gtfs.Vehicle{
-			{
-				ID: vehicleID1,
-			},
-			{
-				ID: vehicleID2,
+		realTimeMutex: sync.RWMutex{},
+		feedVehicles: map[string][]gtfs.Vehicle{
+			"feed-0": {
+				{
+					ID: vehicleID1,
+				},
+				{
+					ID: vehicleID2,
+				},
 			},
 		},
 	}
 
-	rebuildRealTimeVehicleLookupByVehicle(manager)
+	manager.rebuildMergedRealtimeLocked()
 
 	assert.NotNil(t, manager.realTimeVehicleLookupByVehicle)
 	assert.Len(t, manager.realTimeVehicleLookupByVehicle, 2)
@@ -150,31 +159,31 @@ func TestRebuildRealTimeVehicleLookupByVehicle(t *testing.T) {
 
 func TestRebuildRealTimeVehicleLookupByVehicle_WithInvalidIDs(t *testing.T) {
 	manager := &Manager{
-		realTimeVehicles: []gtfs.Vehicle{
-			{
-				ID: &gtfs.VehicleID{ID: "vehicle1"},
-			},
-			{
-				// Vehicle with nil ID - should be skipped
-				ID: nil,
-			},
-			{
-				// Vehicle with empty ID - should be skipped
-				ID: &gtfs.VehicleID{ID: ""},
-			},
-			{
-				ID: &gtfs.VehicleID{ID: "vehicle3"},
+		realTimeMutex: sync.RWMutex{},
+		feedVehicles: map[string][]gtfs.Vehicle{
+			"feed-0": {
+				{
+					ID: &gtfs.VehicleID{ID: "vehicle1"},
+				},
+				{
+					ID: nil,
+				},
+				{
+					ID: &gtfs.VehicleID{ID: ""},
+				},
+				{
+					ID: &gtfs.VehicleID{ID: "vehicle3"},
+				},
 			},
 		},
 	}
 
-	filterRealTimeVehicleByValidId(manager)
-	rebuildRealTimeVehicleLookupByVehicle(manager)
+	manager.rebuildMergedRealtimeLocked()
 
 	assert.NotNil(t, manager.realTimeVehicleLookupByVehicle)
 	assert.Len(t, manager.realTimeVehicleLookupByVehicle, 2)
 	assert.Equal(t, 0, manager.realTimeVehicleLookupByVehicle["vehicle1"])
-	assert.Equal(t, 2, manager.realTimeVehicleLookupByVehicle["vehicle3"])
+	assert.Equal(t, 3, manager.realTimeVehicleLookupByVehicle["vehicle3"])
 }
 
 func TestLoadRealtimeData_Non200StatusCode(t *testing.T) {
