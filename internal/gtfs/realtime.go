@@ -305,12 +305,37 @@ func (manager *Manager) updateFeedRealtime(ctx context.Context, feedCfg RTFeedCo
 		manager.feedAlerts[feedID] = alertData.Alerts
 	}
 
-	logger.Info("updated realtime feed",
-		slog.String("feed", feedID),
-		slog.Int("trips", len(manager.feedTrips[feedID])),
-		slog.Int("vehicles", len(manager.feedVehicles[feedID])),
-		slog.Int("alerts", len(manager.feedAlerts[feedID])),
-	)
+	tripsUpdated := tripData != nil && tripErr == nil
+	vehiclesUpdated := vehicleData != nil && vehicleErr == nil
+	alertsUpdated := alertData != nil && alertErr == nil
+
+	hadDataBefore := len(manager.feedTrips[feedID]) > 0 || len(manager.feedVehicles[feedID]) > 0 || len(manager.feedAlerts[feedID]) > 0
+	hasNewData := tripsUpdated || vehiclesUpdated || alertsUpdated
+
+	if !hasNewData {
+		if hadDataBefore {
+			logger.Warn("all realtime feed sources failed - retaining stale data",
+				slog.String("feed", feedID),
+				slog.Bool("trip_updates_error", tripErr != nil),
+				slog.Bool("vehicle_positions_error", vehicleErr != nil),
+				slog.Bool("service_alerts_error", alertErr != nil),
+			)
+		} else {
+			logger.Error("all realtime feed sources failed - no data available",
+				slog.String("feed", feedID),
+				slog.Bool("trip_updates_error", tripErr != nil),
+				slog.Bool("vehicle_positions_error", vehicleErr != nil),
+				slog.Bool("service_alerts_error", alertErr != nil),
+			)
+		}
+	} else {
+		logger.Info("updated realtime feed",
+			slog.String("feed", feedID),
+			slog.Int("trips", len(manager.feedTrips[feedID])),
+			slog.Int("vehicles", len(manager.feedVehicles[feedID])),
+			slog.Int("alerts", len(manager.feedAlerts[feedID])),
+		)
+	}
 
 	manager.rebuildMergedRealtimeLocked()
 }
@@ -395,41 +420,4 @@ func (manager *Manager) pollFeed(feedCfg RTFeedConfig) {
 			}()
 		}
 	}
-}
-
-func rebuildRealTimeTripLookup(manager *Manager) {
-	manager.realTimeTripLookup = make(map[string]int)
-	for i, trip := range manager.realTimeTrips {
-		if trip.ID.ID != "" {
-			manager.realTimeTripLookup[trip.ID.ID] = i
-		}
-	}
-}
-
-func rebuildRealTimeVehicleLookupByTrip(manager *Manager) {
-	manager.realTimeVehicleLookupByTrip = make(map[string]int)
-	for i, vehicle := range manager.realTimeVehicles {
-		if vehicle.Trip != nil && vehicle.Trip.ID.ID != "" {
-			manager.realTimeVehicleLookupByTrip[vehicle.Trip.ID.ID] = i
-		}
-	}
-}
-
-func rebuildRealTimeVehicleLookupByVehicle(manager *Manager) {
-	manager.realTimeVehicleLookupByVehicle = make(map[string]int)
-	for i, vehicle := range manager.realTimeVehicles {
-		if vehicle.ID.ID != "" {
-			manager.realTimeVehicleLookupByVehicle[vehicle.ID.ID] = i
-		}
-	}
-}
-
-func filterRealTimeVehicleByValidId(manager *Manager) {
-	valid := make([]gtfs.Vehicle, 0)
-	for _, v := range manager.realTimeVehicles {
-		if v.ID != nil {
-			valid = append(valid, v)
-		}
-	}
-	manager.realTimeVehicles = valid
 }
