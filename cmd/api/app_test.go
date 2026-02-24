@@ -384,7 +384,8 @@ func TestConfigFileLoading(t *testing.T) {
 
 		// Convert to configs
 		appCfg := jsonConfig.ToAppConfig()
-		gtfsCfgData := jsonConfig.ToGtfsConfigData()
+		gtfsCfgData, err := jsonConfig.ToGtfsConfigData()
+		require.NoError(t, err)
 
 		// Verify app config
 		assert.Equal(t, 3000, appCfg.Port)
@@ -405,7 +406,8 @@ func TestConfigFileLoading(t *testing.T) {
 
 		// Convert to configs
 		appCfg := jsonConfig.ToAppConfig()
-		gtfsCfgData := jsonConfig.ToGtfsConfigData()
+		gtfsCfgData, err := jsonConfig.ToGtfsConfigData()
+		require.NoError(t, err)
 
 		// Verify app config
 		assert.Equal(t, 8080, appCfg.Port)
@@ -479,7 +481,8 @@ func TestBuildApplicationWithConfigFile(t *testing.T) {
 
 		// Convert to app and GTFS configs
 		cfg := jsonConfig.ToAppConfig()
-		gtfsCfgData := jsonConfig.ToGtfsConfigData()
+		gtfsCfgData, err := jsonConfig.ToGtfsConfigData()
+		require.NoError(t, err)
 		gtfsCfg := gtfsConfigFromData(gtfsCfgData)
 
 		// Build application
@@ -539,7 +542,8 @@ func TestDumpConfigJSON_WithExampleFile(t *testing.T) {
 	cfg := jsonConfig.ToAppConfig()
 
 	// Convert to GTFS config
-	gtfsCfgData := jsonConfig.ToGtfsConfigData()
+	gtfsCfgData, err := jsonConfig.ToGtfsConfigData()
+	require.NoError(t, err)
 	gtfsCfg := gtfsConfigFromData(gtfsCfgData)
 
 	if len(gtfsCfg.RTFeeds) > 0 {
