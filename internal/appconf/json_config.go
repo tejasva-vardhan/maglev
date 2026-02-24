@@ -20,7 +20,7 @@ type GtfsStaticFeed struct {
 // GtfsRtFeed represents a single GTFS-RT feed configuration
 type GtfsRtFeed struct {
 	ID                      string            `json:"id"`
-	AgencyIDs               []string          `json:"agency-ids"`
+	AgencyIDs               []string          `json:"agency-ids"` // Reserved for future use - not currently used for filtering
 	TripUpdatesURL          string            `json:"trip-updates-url"`
 	VehiclePositionsURL     string            `json:"vehicle-positions-url"`
 	ServiceAlertsURL        string            `json:"service-alerts-url"`
@@ -186,8 +186,8 @@ func (j *JSONConfig) ToAppConfig() Config {
 
 // RTFeedConfigData holds per-feed GTFS-RT configuration
 type RTFeedConfigData struct {
-	ID                  string // Note it's will be generated if missing
-	AgencyIDs           []string
+	ID                  string   // Note it's will be generated if missing
+	AgencyIDs           []string // Reserved for future use - not currently used for filtering
 	TripUpdatesURL      string
 	VehiclePositionsURL string
 	ServiceAlertsURL    string
@@ -210,7 +210,7 @@ type GtfsConfigData struct {
 }
 
 // ToGtfsConfigData converts JSONConfig to GtfsConfigData
-func (j *JSONConfig) ToGtfsConfigData() GtfsConfigData {
+func (j *JSONConfig) ToGtfsConfigData() (GtfsConfigData, error) {
 	cfg := GtfsConfigData{
 		GtfsURL:               j.GtfsStaticFeed.URL,
 		StaticAuthHeaderKey:   j.GtfsStaticFeed.AuthHeaderName,
@@ -225,6 +225,12 @@ func (j *JSONConfig) ToGtfsConfigData() GtfsConfigData {
 		feedID := feed.ID
 		if feedID == "" {
 			feedID = fmt.Sprintf("feed-%d", i)
+		}
+
+		for _, existingID := range cfg.RTFeeds {
+			if existingID.ID == feedID {
+				return GtfsConfigData{}, fmt.Errorf("duplicate feed ID found: %q", feedID)
+			}
 		}
 
 		headers := make(map[string]string)
@@ -266,7 +272,7 @@ func (j *JSONConfig) ToGtfsConfigData() GtfsConfigData {
 		})
 	}
 
-	return cfg
+	return cfg, nil
 }
 
 // LoadFromFile loads configuration from a JSON file
