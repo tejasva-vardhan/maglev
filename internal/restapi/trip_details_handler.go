@@ -149,8 +149,10 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 	if params.IncludeSchedule {
 		schedule, err = api.BuildTripSchedule(ctx, agencyID, serviceDate, &trip, loc)
 		if err != nil {
-			api.serverErrorResponse(w, r, err)
-			return
+			slog.Warn("BuildTripSchedule failed",
+				slog.String("trip_id", trip.ID),
+				slog.String("error", err.Error()))
+			schedule = nil
 		}
 	}
 
