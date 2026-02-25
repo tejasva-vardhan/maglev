@@ -31,6 +31,9 @@ func (m *Manager) MockAddRoute(id, agencyID, name string) {
 	})
 }
 func (m *Manager) MockAddVehicle(vehicleID, tripID, routeID string) {
+	m.realTimeMutex.Lock()
+	defer m.realTimeMutex.Unlock()
+
 	for _, v := range m.realTimeVehicles {
 		if v.ID.ID == vehicleID {
 			return
@@ -63,6 +66,9 @@ type MockVehicleOptions struct {
 }
 
 func (m *Manager) MockAddVehicleWithOptions(vehicleID, tripID, routeID string, opts MockVehicleOptions) {
+	m.realTimeMutex.Lock()
+	defer m.realTimeMutex.Unlock()
+
 	for _, v := range m.realTimeVehicles {
 		if v.ID.ID == vehicleID {
 			return
