@@ -711,7 +711,7 @@ func TestBuildTripStatus_VehicleIDFormat(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.NotEmpty(t, model)
-	assert.Equal(t, vehicleID, model.VehicleID)
+	assert.Equal(t, utils.FormCombinedID(agencyID, vehicleID), model.VehicleID)
 }
 
 func makeStopTimePtrs(stops []gtfsdb.StopTime) []*gtfsdb.StopTime {
@@ -1399,7 +1399,7 @@ func TestFindNextStopBySequence_InTransit(t *testing.T) {
 	vehicle := &gtfs.Vehicle{CurrentStatus: &inTransit}
 
 	// When in transit, the current sequence stop IS the next stop
-	stopID, offset := api.findNextStopBySequence(ctx, stops, 2, currentTime, serviceDate, 0, vehicle, "trip1", serviceDate)
+	stopID, offset := api.findNextStopBySequence(ctx, stops, 2, currentTime, serviceDate, 0, vehicle, "trip1")
 	assert.Equal(t, "s2", stopID)
 	assert.Equal(t, 0, offset)
 }
@@ -1421,7 +1421,7 @@ func TestFindNextStopBySequence_StoppedAt(t *testing.T) {
 	stoppedAt := gtfs.CurrentStatus(1)
 	vehicle := &gtfs.Vehicle{CurrentStatus: &stoppedAt}
 
-	stopID, offset := api.findNextStopBySequence(ctx, stops, 2, currentTime, serviceDate, 0, vehicle, "trip1", serviceDate)
+	stopID, offset := api.findNextStopBySequence(ctx, stops, 2, currentTime, serviceDate, 0, vehicle, "trip1")
 	// Stopped at s2, so next stop should be s3
 	assert.Equal(t, "s3", stopID)
 	// s3 arrival = 9*3600 + 0(deviation) = 32400; current = 28800; offset = 3600
@@ -1446,7 +1446,7 @@ func TestFindNextStopBySequence_StoppedAtLastStop(t *testing.T) {
 
 	// Stopped at last stop (sequence 2), no next stop in this trip
 	// because "trip1" doesn't exist in the DB. So we expect empty.
-	stopID, _ := api.findNextStopBySequence(ctx, stops, 2, currentTime, serviceDate, 0, vehicle, "trip1", serviceDate)
+	stopID, _ := api.findNextStopBySequence(ctx, stops, 2, currentTime, serviceDate, 0, vehicle, "trip1")
 	assert.Empty(t, stopID, "no next stop when stopped at last stop of trip without block continuation")
 }
 
@@ -1461,7 +1461,7 @@ func TestFindNextStopBySequence_NoMatch(t *testing.T) {
 		{StopID: "s1", StopSequence: 1, ArrivalTime: secondsToNanos(8 * 3600)},
 	})
 
-	stopID, offset := api.findNextStopBySequence(ctx, stops, 99, currentTime, serviceDate, 0, nil, "trip1", serviceDate)
+	stopID, offset := api.findNextStopBySequence(ctx, stops, 99, currentTime, serviceDate, 0, nil, "trip1")
 	assert.Empty(t, stopID)
 	assert.Equal(t, 0, offset)
 }
@@ -1654,4 +1654,74 @@ func TestGetDistanceAlongShape_LoopingRoute(t *testing.T) {
 
 	assert.InDelta(t, expectedDist, actualDist, 5.0,
 		"Should identify distance at the start of the loop, not jump to the end")
+}
+
+// TestFindStopsByScheduleDeviation_Early verifies that a negative deviation (early vehicle)
+// produces correct offsets. effectiveScheduleTime = currentSeconds - (-300) = currentSeconds + 300,
+// which shifts the "effective" clock forward, making the vehicle appear ahead of schedule.
+func TestFindStopsByScheduleDeviation_Early(t *testing.T) {
+	api := &RestAPI{}
+
+	serviceDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	// currentTime = 08:05 (29100s since midnight)
+	currentTime := time.Date(2024, 1, 1, 8, 5, 0, 0, time.UTC)
+
+	stops := makeStopTimePtrs([]gtfsdb.StopTime{
+		{StopID: "s1", ArrivalTime: secondsToNanos(7 * 3600), DepartureTime: secondsToNanos(7 * 3600)},
+		{StopID: "s2", ArrivalTime: secondsToNanos(8 * 3600), DepartureTime: secondsToNanos(8 * 3600)},
+		{StopID: "s3", ArrivalTime: secondsToNanos(9 * 3600), DepartureTime: secondsToNanos(9 * 3600)},
+	})
+
+	// Vehicle is 5 minutes early (deviation = -300s).
+	// effectiveScheduleTime = 29100 - (-300) = 29400 = 8h10m → closest to s2 (28800s)
+	closestStopID, closestOffset, nextStopID, nextOffset := api.findStopsByScheduleDeviation(stops, currentTime, serviceDate, -300)
+
+	assert.Equal(t, "s2", closestStopID, "early vehicle: closest stop should be s2")
+	// predicted arrival at s2 = 28800 + (-300) = 28500; current = 29100; offset = -600 (already passed)
+	assert.Equal(t, -600, closestOffset, "early vehicle: closestOffset should be negative (stop already passed)")
+
+	assert.Equal(t, "s3", nextStopID, "early vehicle: next stop should be s3")
+	// predicted arrival at s3 = 32400 + (-300) = 32100; current = 29100; offset = 3000
+	assert.Equal(t, 3000, nextOffset, "early vehicle: nextOffset should reflect earlier predicted arrival")
+}
+
+// TestGetFirstStopOfNextTripInBlock_WithBlockContinuation verifies that when a vehicle
+// stops at the last stop of a trip that belongs to a block, the function correctly
+// returns the first stop of the next trip in that block.
+func TestGetFirstStopOfNextTripInBlock_WithBlockContinuation(t *testing.T) {
+	api := createTestApi(t)
+	defer api.Shutdown()
+	ctx := context.Background()
+
+	// Find a trip that belongs to a block with at least two trips.
+	trips := api.GtfsManager.GetTrips()
+	require.NotEmpty(t, trips, "need at least one trip in test data")
+
+	// Locate a trip that has a block ID and more than one trip in the block.
+	var targetTripID string
+	for _, trip := range trips {
+		if trip.BlockID == "" {
+			continue
+		}
+		blockID := trip.BlockID
+		count := 0
+		for _, other := range trips {
+			if other.BlockID == blockID {
+				count++
+			}
+		}
+		if count >= 2 {
+			targetTripID = trip.ID
+			break
+		}
+	}
+
+	if targetTripID == "" {
+		t.Skip("no multi-trip block found in test data; skipping block continuation test")
+	}
+
+	serviceDate := time.Now()
+	result := api.getFirstStopOfNextTripInBlock(ctx, targetTripID, serviceDate)
+	assert.NotNil(t, result, "should find the first stop of the next block trip")
+	assert.NotEmpty(t, result.StopID, "returned stop should have a non-empty StopID")
 }
