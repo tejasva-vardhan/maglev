@@ -353,7 +353,7 @@ func TestManager_GetVehicleForTrip(t *testing.T) {
 
 	manager.rebuildMergedRealtimeLocked()
 
-	vehicle := manager.GetVehicleForTrip("5735633")
+	vehicle := manager.GetVehicleForTrip(context.Background(), "5735633")
 	if vehicle != nil {
 		assert.NotNil(t, vehicle)
 		assert.Equal(t, "vehicle1", vehicle.ID.ID)

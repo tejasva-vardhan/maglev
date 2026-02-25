@@ -24,7 +24,7 @@ func (api *RestAPI) BuildTripStatus(
 	currentTime time.Time,
 
 ) (*models.TripStatusForTripDetails, error) {
-	vehicle := api.GtfsManager.GetVehicleForTrip(tripID)
+	vehicle := api.GtfsManager.GetVehicleForTrip(ctx, tripID)
 
 	var occupancyStatus string
 	var vehicleID string
