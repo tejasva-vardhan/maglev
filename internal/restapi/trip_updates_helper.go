@@ -5,6 +5,10 @@ type StopDelayInfo struct {
 	DepartureDelay int64
 }
 
+// GetScheduleDeviation returns the schedule deviation in seconds for the given trip
+// (positive = late, negative = early) and whether any real-time trip update was found.
+// It prefers the trip-level delay from GTFS-RT; if absent, it falls back to the first
+// per-stop arrival or departure delay in the StopTimeUpdates list.
 func (api *RestAPI) GetScheduleDeviation(tripID string) (int, bool) {
 	tripUpdates := api.GtfsManager.GetTripUpdatesForTrip(tripID)
 	if len(tripUpdates) == 0 {
@@ -29,6 +33,9 @@ func (api *RestAPI) GetScheduleDeviation(tripID string) (int, bool) {
 	return 0, false
 }
 
+// GetStopDelaysFromTripUpdates returns a map of stop ID → per-stop delay information
+// (arrival and departure delays in seconds) derived from the GTFS-RT StopTimeUpdates
+// for the given trip. Returns an empty map when no real-time data is available.
 func (api *RestAPI) GetStopDelaysFromTripUpdates(tripID string) map[string]StopDelayInfo {
 	delays := make(map[string]StopDelayInfo)
 

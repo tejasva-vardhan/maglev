@@ -61,6 +61,10 @@ func scheduleRelationshipStatus(sr gtfs.TripScheduleRelationship) string {
 	case gtfsrt.TripDescriptor_DUPLICATED:
 		return "DUPLICATED"
 	default:
+		// UNSCHEDULED, REPLACEMENT, and DELETED all map to "SCHEDULED" here.
+		// This matches the Java OBA behavior where only CANCELED, ADDED, and DUPLICATED
+		// receive distinct statuses. A DELETED trip appearing as "SCHEDULED" is
+		// intentional: the Java server does not expose a DELETED status to clients.
 		return "SCHEDULED"
 	}
 }
@@ -92,6 +96,8 @@ func GetVehicleStatusAndPhase(vehicle *gtfs.Vehicle) (status string, phase strin
 
 	// Java sets phase to IN_PROGRESS whenever a vehicle location record is received,
 	// regardless of GTFS-RT CurrentStatus — unless the trip is canceled.
+	// For CANCELED trips phase is intentionally left as "" (empty string), matching
+	// the Java OBA null-phase behavior for canceled trips.
 	if sr != gtfsrt.TripDescriptor_CANCELED {
 		phase = "in_progress"
 	}
@@ -125,8 +131,9 @@ func (api *RestAPI) BuildVehicleStatus(
 		}
 		status.LastKnownLocation = actualPosition
 		// Position is initially set to the raw GPS position.
-		// BuildTripStatus refines this via shape projection once shape data
-		// is fetched, avoiding a duplicate GetShapePointsByTripID query.
+		// BuildTripStatus will refine this by projecting it onto the route shape
+		// after fetching shape data. Note: getVehicleDistanceAlongShapeContextual
+		// makes its own GetShapePointsByTripID call; these two fetches are separate.
 		status.Position = actualPosition
 
 		if vehicle.Timestamp != nil {
