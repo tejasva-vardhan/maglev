@@ -41,7 +41,9 @@ func TestScheduleForRouteHandler(t *testing.T) {
 		require.True(t, ok)
 
 		assert.Equal(t, routeID, entry["routeId"])
-		require.NotNil(t, entry["scheduleDate"])
+		scheduleDate, ok := entry["scheduleDate"].(float64)
+		require.True(t, ok, "scheduleDate should be a numeric Unix millisecond timestamp")
+		assert.Greater(t, scheduleDate, float64(0))
 
 		// serviceIds should exist
 		svcIds, ok := entry["serviceIds"].([]interface{})
@@ -57,8 +59,9 @@ func TestScheduleForRouteHandler(t *testing.T) {
 		require.True(t, ok)
 
 		// Check fields inside grouping
-		_, hasDir := firstGrouping["directionId"]
-		assert.True(t, hasDir)
+		directionId, hasDir := firstGrouping["directionId"].(string)
+		assert.True(t, hasDir, "directionId should be a string")
+		assert.NotEmpty(t, directionId)
 		ths, hasTH := firstGrouping["tripHeadsigns"].([]interface{})
 		assert.True(t, hasTH)
 		assert.NotNil(t, ths)
@@ -146,7 +149,9 @@ func TestScheduleForRouteHandlerDateParam(t *testing.T) {
 		require.True(t, ok)
 		entry, ok := data["entry"].(map[string]interface{})
 		require.True(t, ok)
-		require.NotNil(t, entry["scheduleDate"])
+		scheduleDate, ok := entry["scheduleDate"].(float64)
+		require.True(t, ok, "scheduleDate should be a numeric Unix millisecond timestamp")
+		assert.Greater(t, scheduleDate, float64(0))
 	})
 
 	t.Run("Invalid date format", func(t *testing.T) {
