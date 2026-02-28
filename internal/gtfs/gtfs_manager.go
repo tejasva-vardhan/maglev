@@ -55,7 +55,14 @@ type Manager struct {
 	blockLayoverIndices            map[string][]*BlockLayoverIndex
 	regionBounds                   *RegionBounds
 	isHealthy                      bool
+	systemETag                     string      // systemETag stores the SHA-256 hash of the currently loaded GTFS static dataset.
 	isReady                        atomic.Bool // Tracks whether initial data loading is complete
+
+	feedTrips    map[string][]gtfs.Trip
+	feedVehicles map[string][]gtfs.Vehicle
+	feedAlerts   map[string][]gtfs.Alert
+	// Per-feed, per-vehicle last-seen timestamps for stale vehicle expiry
+	feedVehicleLastSeen map[string]map[string]time.Time // feedID -> vehicleID -> lastSeen
 }
 
 // IsReady returns true if the GTFS data is fully initialized and indexed.
@@ -85,6 +92,10 @@ func InitGTFSManager(config Config) (*Manager, error) {
 		realTimeTripLookup:             make(map[string]int),
 		realTimeVehicleLookupByTrip:    make(map[string]int),
 		realTimeVehicleLookupByVehicle: make(map[string]int),
+		feedTrips:                      make(map[string][]gtfs.Trip),
+		feedVehicles:                   make(map[string][]gtfs.Vehicle),
+		feedAlerts:                     make(map[string][]gtfs.Alert),
+		feedVehicleLastSeen:            make(map[string]map[string]time.Time),
 	}
 	manager.setStaticGTFS(staticData)
 
@@ -94,21 +105,29 @@ func InitGTFSManager(config Config) (*Manager, error) {
 	}
 	manager.GtfsDB = gtfsDB
 
+	// Populate systemETag from import metadata
+	metadata, err := gtfsDB.Queries.GetImportMetadata(context.Background())
+	if err == nil && metadata.FileHash != "" {
+		manager.systemETag = fmt.Sprintf(`"%s"`, metadata.FileHash)
+	}
+
 	// Build spatial index for fast stop location queries
 	ctx := context.Background()
 	spatialIndex, err := buildStopSpatialIndex(ctx, gtfsDB.Queries)
 	if err != nil {
+		_ = gtfsDB.Close()
 		return nil, fmt.Errorf("error building spatial index: %w", err)
 	}
 	manager.stopSpatialIndex = spatialIndex
 
 	// STARTUP SEQUENCING:
-	// If realtime is enabled, perform the first fetch synchronously to "warm" the cache
-	// before marking the manager as ready.
-	if config.realTimeDataEnabled() {
+	// If realtime is enabled, perform the first fetch synchronously for each feed
+	// to "warm" the cache before marking the manager as ready.
+	enabledFeeds := config.enabledFeeds()
+	for _, feedCfg := range enabledFeeds {
 		initCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-		manager.updateGTFSRealtime(initCtx, config)
+		manager.updateFeedRealtime(initCtx, feedCfg)
+		cancel()
 	}
 
 	// Everything is now warm and ready for traffic
@@ -120,10 +139,10 @@ func InitGTFSManager(config Config) (*Manager, error) {
 		go manager.updateStaticGTFS()
 	}
 
-	// Start the periodic background updates only after the initial synchronous fetch is done
-	if config.realTimeDataEnabled() {
+	// Start one poller goroutine per enabled feed
+	for _, feedCfg := range enabledFeeds {
 		manager.wg.Add(1)
-		go manager.updateGTFSRealtimePeriodically(config)
+		go manager.pollFeed(feedCfg)
 	}
 
 	return manager, nil
@@ -152,12 +171,12 @@ func (manager *Manager) Shutdown() {
 	})
 }
 
-// IMPORTANT: Caller must hold manager.RLock() before calling this method.
+// RLock acquires the static data read lock.
 func (manager *Manager) RLock() {
 	manager.staticMutex.RLock()
 }
 
-// IMPORTANT: Caller must hold manager.RLock() before calling this method.
+// RUnlock releases the static data read lock.
 func (manager *Manager) RUnlock() {
 	manager.staticMutex.RUnlock()
 }
@@ -401,8 +420,9 @@ func (manager *Manager) VehiclesForAgencyID(agencyID string) []gtfs.Vehicle {
 // for that trip. Note we depend on getting the vehicle that may not match the trip ID exactly,
 // but is part of the same block.
 // IMPORTANT: Caller must hold manager.RLock() before calling this method.
-func (manager *Manager) GetVehicleForTrip(tripID string) *gtfs.Vehicle {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+func (manager *Manager) GetVehicleForTrip(ctx context.Context, tripID string) *gtfs.Vehicle {
+
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 
 	logger := slog.Default().With(slog.String("component", "gtfs_manager"))
@@ -557,6 +577,14 @@ func (manager *Manager) IsServiceActiveOnDate(ctx context.Context, serviceID str
 	}
 }
 
+// GetSystemETag retrieves the SystemETag in a thread-safe manner.
+// It acquires the static data read lock to prevent data races during GTFS reloads.
+func (manager *Manager) GetSystemETag() string {
+	manager.staticMutex.RLock()
+	defer manager.staticMutex.RUnlock()
+	return manager.systemETag
+}
+
 // IsHealthy returns true if the GTFS data is loaded and valid.
 func (manager *Manager) IsHealthy() bool {
 	manager.staticMutex.RLock()
@@ -579,17 +607,13 @@ func (manager *Manager) MarkUnhealthy() {
 }
 
 // SetRealTimeTripsForTest manually sets realtime trips for testing purposes.
-// This allows injecting mock data into the private realTimeTrips slice.
+// It stores the trips under the synthetic feed ID "_test" so that a subsequent
+// call to rebuildMergedRealtimeLocked (e.g. from a real feed update) does not
+// silently discard the injected data.
 func (manager *Manager) SetRealTimeTripsForTest(trips []gtfs.Trip) {
 	manager.realTimeMutex.Lock()
 	defer manager.realTimeMutex.Unlock()
 
-	manager.realTimeTrips = trips
-	manager.realTimeTripLookup = make(map[string]int)
-
-	for i, trip := range trips {
-		if trip.ID.ID != "" {
-			manager.realTimeTripLookup[trip.ID.ID] = i
-		}
-	}
+	manager.feedTrips["_test"] = trips
+	manager.rebuildMergedRealtimeLocked()
 }

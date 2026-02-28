@@ -292,7 +292,7 @@ func (api *RestAPI) arrivalsAndDeparturesForStopHandler(w http.ResponseWriter, r
 		)
 
 		// Get real-time updates from GTFS-RT
-		vehicle := api.GtfsManager.GetVehicleForTrip(st.TripID)
+		vehicle := api.GtfsManager.GetVehicleForTrip(ctx, st.TripID)
 		if vehicle != nil && vehicle.Trip != nil {
 			vehicleID = vehicle.ID.ID
 

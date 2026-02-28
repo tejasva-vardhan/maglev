@@ -29,7 +29,7 @@ func (api *RestAPI) BuildTripStatus(
 		OccupancyCount:    -1,
 	}
 
-	vehicle := api.GtfsManager.GetVehicleForTrip(tripID)
+	vehicle := api.GtfsManager.GetVehicleForTrip(ctx, tripID)
 
 	if vehicle != nil {
 		if vehicle.ID != nil {

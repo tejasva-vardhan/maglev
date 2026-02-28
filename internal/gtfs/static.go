@@ -314,6 +314,18 @@ func (manager *Manager) ForceUpdate(ctx context.Context) error {
 
 	manager.lastUpdated = time.Now()
 
+	metadata, err := manager.GtfsDB.Queries.GetImportMetadata(ctx)
+	if err != nil {
+		logging.LogError(logger, "Failed to fetch import metadata for ETag generation during hot-swap", err)
+		manager.systemETag = ""
+	} else if metadata.FileHash != "" {
+		manager.systemETag = fmt.Sprintf(`"%s"`, metadata.FileHash)
+		logging.LogOperation(logger, "system_etag_updated_successfully", slog.String("etag", manager.systemETag))
+	} else {
+		logging.LogOperation(logger, "import_metadata_empty_filehash_clearing_etag")
+		manager.systemETag = ""
+	}
+
 	manager.isHealthy = true
 
 	logging.LogOperation(logger, "gtfs_static_data_updated_hot_swap",
@@ -349,6 +361,18 @@ func (manager *Manager) setStaticGTFS(staticData *gtfs.Static) {
 		} else if manager.config.Verbose {
 			logger := slog.Default().With(slog.String("component", "gtfs_manager"))
 			logging.LogError(logger, "Failed to rebuild spatial index", err)
+		}
+
+		logger := slog.Default().With(slog.String("component", "gtfs_manager"))
+		metadata, err := manager.GtfsDB.Queries.GetImportMetadata(ctx)
+		if err != nil {
+			logging.LogError(logger, "Failed to fetch import metadata for ETag generation during initial load", err)
+			manager.systemETag = ""
+		} else if metadata.FileHash != "" {
+			manager.systemETag = fmt.Sprintf(`"%s"`, metadata.FileHash)
+			logging.LogOperation(logger, "system_etag_generated_successfully", slog.String("etag", manager.systemETag))
+		} else {
+			manager.systemETag = ""
 		}
 	}
 

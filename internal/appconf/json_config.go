@@ -19,11 +19,16 @@ type GtfsStaticFeed struct {
 
 // GtfsRtFeed represents a single GTFS-RT feed configuration
 type GtfsRtFeed struct {
-	TripUpdatesURL          string `json:"trip-updates-url"`
-	VehiclePositionsURL     string `json:"vehicle-positions-url"`
-	ServiceAlertsURL        string `json:"service-alerts-url"`
-	RealTimeAuthHeaderName  string `json:"realtime-auth-header-name"`
-	RealTimeAuthHeaderValue string `json:"realtime-auth-header-value"`
+	ID                      string            `json:"id"`
+	AgencyIDs               []string          `json:"agency-ids"` // Reserved for future use - not currently used for filtering
+	TripUpdatesURL          string            `json:"trip-updates-url"`
+	VehiclePositionsURL     string            `json:"vehicle-positions-url"`
+	ServiceAlertsURL        string            `json:"service-alerts-url"`
+	RealTimeAuthHeaderName  string            `json:"realtime-auth-header-name"`
+	RealTimeAuthHeaderValue string            `json:"realtime-auth-header-value"`
+	Headers                 map[string]string `json:"headers"`
+	RefreshInterval         int               `json:"refresh-interval"`
+	Enabled                 *bool             `json:"enabled"`
 }
 
 // JSONConfig represents the JSON configuration file structure
@@ -179,26 +184,33 @@ func (j *JSONConfig) ToAppConfig() Config {
 	}
 }
 
+// RTFeedConfigData holds per-feed GTFS-RT configuration
+type RTFeedConfigData struct {
+	ID                  string   // Note it's will be generated if missing
+	AgencyIDs           []string // Reserved for future use - not currently used for filtering
+	TripUpdatesURL      string
+	VehiclePositionsURL string
+	ServiceAlertsURL    string
+	Headers             map[string]string
+	RefreshInterval     int  // seconds, default 30
+	Enabled             bool // default true
+}
+
 // GtfsConfigData holds GTFS configuration data without importing gtfs package
 // This avoids import cycles
 type GtfsConfigData struct {
-	GtfsURL                 string
-	StaticAuthHeaderKey     string
-	StaticAuthHeaderValue   string
-	TripUpdatesURL          string
-	VehiclePositionsURL     string
-	ServiceAlertsURL        string
-	RealTimeAuthHeaderKey   string
-	RealTimeAuthHeaderValue string
-	GTFSDataPath            string
-	Env                     Environment
-	Verbose                 bool
-	EnableGTFSTidy          bool
+	GtfsURL               string
+	StaticAuthHeaderKey   string
+	StaticAuthHeaderValue string
+	RTFeeds               []RTFeedConfigData
+	GTFSDataPath          string
+	Env                   Environment
+	Verbose               bool
+	EnableGTFSTidy        bool
 }
 
 // ToGtfsConfigData converts JSONConfig to GtfsConfigData
-// For now, only uses the first GTFS-RT feed
-func (j *JSONConfig) ToGtfsConfigData() GtfsConfigData {
+func (j *JSONConfig) ToGtfsConfigData() (GtfsConfigData, error) {
 	cfg := GtfsConfigData{
 		GtfsURL:               j.GtfsStaticFeed.URL,
 		StaticAuthHeaderKey:   j.GtfsStaticFeed.AuthHeaderName,
@@ -209,17 +221,62 @@ func (j *JSONConfig) ToGtfsConfigData() GtfsConfigData {
 		EnableGTFSTidy:        j.GtfsStaticFeed.EnableGTFSTidy,
 	}
 
-	// Use first GTFS-RT feed if available
-	if len(j.GtfsRtFeeds) > 0 {
-		feed := j.GtfsRtFeeds[0]
-		cfg.TripUpdatesURL = feed.TripUpdatesURL
-		cfg.VehiclePositionsURL = feed.VehiclePositionsURL
-		cfg.ServiceAlertsURL = feed.ServiceAlertsURL
-		cfg.RealTimeAuthHeaderKey = feed.RealTimeAuthHeaderName
-		cfg.RealTimeAuthHeaderValue = feed.RealTimeAuthHeaderValue
+	for i, feed := range j.GtfsRtFeeds {
+		feedID := feed.ID
+		if feedID == "" {
+			feedID = fmt.Sprintf("feed-%d", i)
+		}
+
+		for _, existingID := range cfg.RTFeeds {
+			if existingID.ID == feedID {
+				return GtfsConfigData{}, fmt.Errorf("duplicate feed ID found: %q", feedID)
+			}
+		}
+
+		headers := make(map[string]string)
+		for k, v := range feed.Headers {
+			headers[k] = v
+		}
+		if feed.RealTimeAuthHeaderName != "" && feed.RealTimeAuthHeaderValue != "" {
+			if _, exists := headers[feed.RealTimeAuthHeaderName]; !exists {
+				headers[feed.RealTimeAuthHeaderName] = feed.RealTimeAuthHeaderValue
+			} else {
+				slog.Warn("Legacy auth header key conflicts with headers map; legacy value discarded",
+					slog.String("feed", feedID),
+					slog.String("header", feed.RealTimeAuthHeaderName),
+				)
+			}
+		} else if feed.RealTimeAuthHeaderName != "" || feed.RealTimeAuthHeaderValue != "" {
+			slog.Warn("Legacy realtime-auth-header-name and realtime-auth-header-value must both be set; ignoring incomplete pair",
+				slog.String("feed", feedID),
+			)
+		}
+
+		// Default refresh interval is 30 seconds
+		refreshInterval := feed.RefreshInterval
+		if refreshInterval <= 0 {
+			refreshInterval = 30
+		}
+
+		// Default enabled to true
+		enabled := true
+		if feed.Enabled != nil {
+			enabled = *feed.Enabled
+		}
+
+		cfg.RTFeeds = append(cfg.RTFeeds, RTFeedConfigData{
+			ID:                  feedID,
+			AgencyIDs:           feed.AgencyIDs,
+			TripUpdatesURL:      feed.TripUpdatesURL,
+			VehiclePositionsURL: feed.VehiclePositionsURL,
+			ServiceAlertsURL:    feed.ServiceAlertsURL,
+			Headers:             headers,
+			RefreshInterval:     refreshInterval,
+			Enabled:             enabled,
+		})
 	}
 
-	return cfg
+	return cfg, nil
 }
 
 // LoadFromFile loads configuration from a JSON file

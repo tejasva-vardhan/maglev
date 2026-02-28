@@ -11,11 +11,19 @@
   },
   "gtfs-rt-feeds": [
     {
+      "id": "sound-transit",
+      "agency-ids": ["40"],
       "trip-updates-url": "https://api.pugetsound.onebusaway.org/api/gtfs_realtime/trip-updates-for-agency/40.pb?key=org.onebusaway.iphone",
-      "vehicle-positions-url": "https://api.pugetsound.onebusaway.org/api/gtfs_realtime/vehicle-positions-for-agency/40.pb?key=org.onebusaway.iphone",
-      "service-alerts-url": "",
-      "realtime-auth-header-name": "",
-      "realtime-auth-header-value": ""
+      "vehicle-positions-url": "https://api.pugetsound.onebusaway.org/api/gtfs_realtime/vehicle-positions-for-agency/40.pb?key=org.onebusaway.iphone"
+    },
+    {
+      "id": "metro-transit",
+      "agency-ids": ["1"],
+      "trip-updates-url": "https://api.pugetsound.onebusaway.org/api/gtfs_realtime/trip-updates-for-agency/1.pb?key=org.onebusaway.iphone",
+      "headers": {
+        "X-API-Key": "my-secret-key"
+      },
+      "refresh-interval": 60
     }
   ],
   "data-path": "./gtfs.db"

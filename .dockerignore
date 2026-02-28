@@ -28,8 +28,7 @@ coverage.out
 *~
 .DS_Store
 
-# Documentation and marketing (not needed in container)
-marketing/
+# Documentation (not needed in container)
 *.md
 !README.markdown
 

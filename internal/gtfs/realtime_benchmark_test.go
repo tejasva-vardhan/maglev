@@ -2,6 +2,7 @@ package gtfs
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/OneBusAway/go-gtfs"
@@ -9,69 +10,63 @@ import (
 
 // Benchmark for map rebuild optimization
 func BenchmarkRebuildRealTimeTripLookup(b *testing.B) {
-	// Create a manager with sample data
 	manager := &Manager{
-		realTimeTrips: make([]gtfs.Trip, 1000),
+		realTimeMutex: sync.RWMutex{},
+		feedTrips:     make(map[string][]gtfs.Trip),
 	}
 
-	// Populate with sample trips
+	feedTrips := make([]gtfs.Trip, 1000)
 	for i := 0; i < 1000; i++ {
-		manager.realTimeTrips[i] = gtfs.Trip{
+		feedTrips[i] = gtfs.Trip{
 			ID: gtfs.TripID{ID: fmt.Sprintf("trip_%d", i)},
 		}
 	}
-
-	// Initialize the map
-	manager.realTimeTripLookup = make(map[string]int)
+	manager.feedTrips["feed-0"] = feedTrips
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		rebuildRealTimeTripLookup(manager)
+		manager.rebuildMergedRealtimeLocked()
 	}
 }
 
 func BenchmarkRebuildRealTimeVehicleLookupByTrip(b *testing.B) {
-	// Create a manager with sample data
 	manager := &Manager{
-		realTimeVehicles: make([]gtfs.Vehicle, 1000),
+		realTimeMutex: sync.RWMutex{},
+		feedVehicles:  make(map[string][]gtfs.Vehicle),
 	}
 
-	// Populate with sample vehicles
+	feedVehicles := make([]gtfs.Vehicle, 1000)
 	for i := 0; i < 1000; i++ {
-		manager.realTimeVehicles[i] = gtfs.Vehicle{
+		feedVehicles[i] = gtfs.Vehicle{
 			Trip: &gtfs.Trip{
 				ID: gtfs.TripID{ID: fmt.Sprintf("trip_%d", i)},
 			},
 		}
 	}
-
-	// Initialize the map
-	manager.realTimeVehicleLookupByTrip = make(map[string]int)
+	manager.feedVehicles["feed-0"] = feedVehicles
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		rebuildRealTimeVehicleLookupByTrip(manager)
+		manager.rebuildMergedRealtimeLocked()
 	}
 }
 
 func BenchmarkRebuildRealTimeVehicleLookupByVehicle(b *testing.B) {
-	// Create a manager with sample data
 	manager := &Manager{
-		realTimeVehicles: make([]gtfs.Vehicle, 1000),
+		realTimeMutex: sync.RWMutex{},
+		feedVehicles:  make(map[string][]gtfs.Vehicle),
 	}
 
-	// Populate with sample vehicles
+	feedVehicles := make([]gtfs.Vehicle, 1000)
 	for i := 0; i < 1000; i++ {
-		manager.realTimeVehicles[i] = gtfs.Vehicle{
+		feedVehicles[i] = gtfs.Vehicle{
 			ID: &gtfs.VehicleID{ID: fmt.Sprintf("vehicle_%d", i)},
 		}
 	}
-
-	// Initialize the map
-	manager.realTimeVehicleLookupByVehicle = make(map[string]int)
+	manager.feedVehicles["feed-0"] = feedVehicles
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		rebuildRealTimeVehicleLookupByVehicle(manager)
+		manager.rebuildMergedRealtimeLocked()
 	}
 }

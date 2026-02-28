@@ -53,12 +53,19 @@ func TestManagerShutdownWithRealtime(t *testing.T) {
 	require.NoError(t, err, "Failed to get test data path")
 
 	config := Config{
-		GtfsURL:             testDataPath,
-		GTFSDataPath:        ":memory:",
-		TripUpdatesURL:      "http://invalid.example.com/trips.pb",
-		VehiclePositionsURL: "http://invalid.example.com/vehicles.pb",
-		Env:                 appconf.Test,
-		Verbose:             false,
+		GtfsURL:      testDataPath,
+		GTFSDataPath: ":memory:",
+		RTFeeds: []RTFeedConfig{
+			{
+				ID:                  "test-feed",
+				TripUpdatesURL:      "http://invalid.example.com/trips.pb",
+				VehiclePositionsURL: "http://invalid.example.com/vehicles.pb",
+				RefreshInterval:     30,
+				Enabled:             true,
+			},
+		},
+		Env:     appconf.Test,
+		Verbose: false,
 	}
 
 	// Initialize manager
