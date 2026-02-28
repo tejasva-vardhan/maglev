@@ -102,7 +102,7 @@ func (api *RestAPI) BuildTripStatus(
 
 		if vehicle != nil && vehicle.Position != nil {
 			closestStopID, closestOffset = findClosestStop(api, ctx, vehicle.Position, stopTimesPtrs)
-			nextStopID, nextOffset = findNextStop(api, stopTimesPtrs, vehicle)
+			nextStopID, nextOffset = findNextStop(stopTimesPtrs, vehicle)
 		} else {
 			currentTimeSeconds := int64(currentTime.Hour()*3600 + currentTime.Minute()*60 + currentTime.Second())
 			closestStopID, closestOffset = findClosestStopByTime(currentTimeSeconds, stopTimesPtrs)
@@ -292,7 +292,6 @@ func (api *RestAPI) GetNextAndPreviousTripIDs(ctx context.Context, trip *gtfsdb.
 }
 
 func findNextStop(
-	api *RestAPI,
 	stopTimes []*gtfsdb.StopTime,
 	vehicle *gtfs.Vehicle,
 ) (stopID string, offset int) {
@@ -305,10 +304,11 @@ func findNextStop(
 
 	for i, st := range stopTimes {
 		if uint32(st.StopSequence) == *vehicleCurrentStopSequence {
-			if len(stopTimes) > 0 {
-				nextIdx := (i + 1) % len(stopTimes)
-				return stopTimes[nextIdx].StopID, 0
+			nextIdx := i + 1
+			if nextIdx >= len(stopTimes) {
+				return "", 0 // Vehicle is at the last stop; no next stop
 			}
+			return stopTimes[nextIdx].StopID, 0
 		}
 	}
 
