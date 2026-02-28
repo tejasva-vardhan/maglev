@@ -266,7 +266,7 @@ func (api *RestAPI) arrivalAndDepartureForStopHandler(w http.ResponseWriter, r *
 		}
 	} else {
 		// If vehicleId is not provided, get the vehicle for the trip
-		vehicle = api.GtfsManager.GetVehicleForTrip(tripID)
+		vehicle = api.GtfsManager.GetVehicleForTrip(ctx, tripID)
 	}
 
 	if vehicle != nil && vehicle.Trip != nil {

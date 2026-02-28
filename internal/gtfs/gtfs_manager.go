@@ -420,8 +420,9 @@ func (manager *Manager) VehiclesForAgencyID(agencyID string) []gtfs.Vehicle {
 // for that trip. Note we depend on getting the vehicle that may not match the trip ID exactly,
 // but is part of the same block.
 // IMPORTANT: Caller must hold manager.RLock() before calling this method.
-func (manager *Manager) GetVehicleForTrip(tripID string) *gtfs.Vehicle {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+func (manager *Manager) GetVehicleForTrip(ctx context.Context, tripID string) *gtfs.Vehicle {
+
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 
 	logger := slog.Default().With(slog.String("component", "gtfs_manager"))
