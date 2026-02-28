@@ -55,6 +55,7 @@ type Manager struct {
 	blockLayoverIndices            map[string][]*BlockLayoverIndex
 	regionBounds                   *RegionBounds
 	isHealthy                      bool
+	systemETag                     string      // systemETag stores the SHA-256 hash of the currently loaded GTFS static dataset.
 	isReady                        atomic.Bool // Tracks whether initial data loading is complete
 
 	feedTrips    map[string][]gtfs.Trip
@@ -103,6 +104,12 @@ func InitGTFSManager(config Config) (*Manager, error) {
 		return nil, fmt.Errorf("error building GTFS database: %w", err)
 	}
 	manager.GtfsDB = gtfsDB
+
+	// Populate systemETag from import metadata
+	metadata, err := gtfsDB.Queries.GetImportMetadata(context.Background())
+	if err == nil && metadata.FileHash != "" {
+		manager.systemETag = fmt.Sprintf(`"%s"`, metadata.FileHash)
+	}
 
 	// Build spatial index for fast stop location queries
 	ctx := context.Background()
@@ -567,6 +574,14 @@ func (manager *Manager) IsServiceActiveOnDate(ctx context.Context, serviceID str
 	default:
 		return 0, nil
 	}
+}
+
+// GetSystemETag retrieves the SystemETag in a thread-safe manner.
+// It acquires the static data read lock to prevent data races during GTFS reloads.
+func (manager *Manager) GetSystemETag() string {
+	manager.staticMutex.RLock()
+	defer manager.staticMutex.RUnlock()
+	return manager.systemETag
 }
 
 // IsHealthy returns true if the GTFS data is loaded and valid.
