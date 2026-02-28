@@ -79,40 +79,55 @@ func main() {
 
 	} else {
 		// Use command-line flags for configuration
-		// Set verbosity flags
+
+		// Pack the CLI flags into a temporary JSONConfig struct
+		// This allows us to run the exact same robust validation logic as the JSON path!
+		cliConfig := appconf.JSONConfig{
+			Port:          cfg.Port,
+			Env:           envFlag,
+			ApiKeys:       ParseAPIKeys(apiKeysFlag),
+			ExemptApiKeys: ParseAPIKeys(exemptApiKeysFlag),
+			RateLimit:     cfg.RateLimit,
+			GtfsStaticFeed: appconf.GtfsStaticFeed{
+				URL:             gtfsCfg.GtfsURL,
+				AuthHeaderName:  gtfsCfg.StaticAuthHeaderKey,
+				AuthHeaderValue: gtfsCfg.StaticAuthHeaderValue,
+			},
+			GtfsRtFeeds: []appconf.GtfsRtFeed{
+				{
+					ID:                      "feed-0",
+					TripUpdatesURL:          cliFeedTripUpdatesURL,
+					VehiclePositionsURL:     cliFeedVehiclePositionsURL,
+					ServiceAlertsURL:        cliFeedServiceAlertsURL,
+					RealTimeAuthHeaderName:  cliFeedAuthHeaderName,
+					RealTimeAuthHeaderValue: cliFeedAuthHeaderValue,
+					RefreshInterval:         30,
+				},
+			},
+			DataPath: gtfsCfg.GTFSDataPath,
+		}
+
+		// Run the shared validation logic
+		if err := cliConfig.Validate(); err != nil {
+			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+			logger.Error("invalid command-line configuration", "error", err)
+			os.Exit(1)
+		}
+
+		// Convert to internal app configs (DRY!)
+		cfg = cliConfig.ToAppConfig()
+
+		gtfsCfgData, err := cliConfig.ToGtfsConfigData()
+		if err != nil {
+			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+			logger.Error("failed to convert command-line config", "error", err)
+			os.Exit(1)
+		}
+		gtfsCfg = gtfsConfigFromData(gtfsCfgData)
+
+		// Set verbosity flags (CLI specific)
 		gtfsCfg.Verbose = true
 		cfg.Verbose = true
-
-		// Parse API keys
-		cfg.ApiKeys = ParseAPIKeys(apiKeysFlag)
-
-		// Parse Exempt API Keys
-		if exemptApiKeysFlag != "" {
-			cfg.ExemptApiKeys = ParseAPIKeys(exemptApiKeysFlag)
-		}
-
-		// Convert environment flag to enum
-		cfg.Env = appconf.EnvFlagToEnvironment(envFlag)
-
-		// Set GTFS config environment
-		gtfsCfg.Env = cfg.Env
-
-		// Build single-feed RTFeeds slice from CLI flags
-		headers := make(map[string]string)
-		if cliFeedAuthHeaderName != "" && cliFeedAuthHeaderValue != "" {
-			headers[cliFeedAuthHeaderName] = cliFeedAuthHeaderValue
-		}
-		gtfsCfg.RTFeeds = []gtfs.RTFeedConfig{
-			{
-				ID:                  "feed-0",
-				TripUpdatesURL:      cliFeedTripUpdatesURL,
-				VehiclePositionsURL: cliFeedVehiclePositionsURL,
-				ServiceAlertsURL:    cliFeedServiceAlertsURL,
-				Headers:             headers,
-				RefreshInterval:     30,
-				Enabled:             true,
-			},
-		}
 	}
 
 	// Handle dump-config flag
