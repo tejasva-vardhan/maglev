@@ -125,6 +125,65 @@ func (api *RestAPI) scheduleForStopHandler(w http.ResponseWriter, r *http.Reques
 	routeRefs := make(map[string]models.Route)
 	tripIDsSet := make(map[string]bool)
 
+	// Pre-process to gather unique IDs for batch fetching
+	uniqueRouteIDsMap := make(map[string]bool)
+	uniqueAgencyIDsMap := make(map[string]bool)
+
+	for _, row := range scheduleRows {
+		uniqueRouteIDsMap[row.RouteID] = true
+		uniqueAgencyIDsMap[row.AgencyID] = true
+	}
+
+	// Batch fetch routes
+	routeIDsToFetch := make([]string, 0, len(uniqueRouteIDsMap))
+	for routeID := range uniqueRouteIDsMap {
+		routeIDsToFetch = append(routeIDsToFetch, routeID)
+	}
+
+	if len(routeIDsToFetch) > 0 {
+		fetchedRoutes, err := api.GtfsManager.GtfsDB.Queries.GetRoutesByIDs(ctx, routeIDsToFetch)
+		if err != nil {
+			api.Logger.Error("Failed to batch fetch routes for schedule stop", "error", err)
+			api.serverErrorResponse(w, r, err)
+			return
+		}
+
+		for _, route := range fetchedRoutes {
+			combinedRouteID := utils.FormCombinedID(agencyID, route.ID)
+			routeRefs[combinedRouteID] = models.NewRoute(
+				combinedRouteID,
+				route.AgencyID,
+				route.ShortName.String,
+				route.LongName.String,
+				route.Desc.String,
+				models.RouteType(route.Type),
+				route.Url.String,
+				route.Color.String,
+				route.TextColor.String)
+		}
+	}
+
+	// Batch fetch agencies using cached manager
+	allAgencies := api.GtfsManager.GetAgencies()
+	for _, a := range allAgencies {
+		if uniqueAgencyIDsMap[a.Id] {
+			if _, exists := agencyRefs[a.Id]; !exists {
+				agencyRefs[a.Id] = models.NewAgencyReference(
+					a.Id,
+					a.Name,
+					a.Url,
+					a.Timezone,
+					a.Language,
+					a.Phone,
+					a.Email,
+					a.FareUrl,
+					"",    // disclaimer
+					false, // privateService
+				)
+			}
+		}
+	}
+
 	// Group schedule data by route
 	routeScheduleMap := make(map[string][]models.ScheduleStopTime)
 	// Track headsign counts to pick the most common one
@@ -163,45 +222,6 @@ func (api *RestAPI) scheduleForStopHandler(w http.ResponseWriter, r *http.Reques
 				routeHeadsignCounts[combinedRouteID] = make(map[string]int)
 			}
 			routeHeadsignCounts[combinedRouteID][row.TripHeadsign.String]++
-		}
-
-		// Add route to references if not already present
-		if _, exists := routeRefs[combinedRouteID]; !exists {
-			route, err := api.GtfsManager.GtfsDB.Queries.GetRoute(ctx, row.RouteID)
-			if err == nil {
-				routeModel := models.NewRoute(
-					combinedRouteID,
-					route.AgencyID,
-					route.ShortName.String,
-					route.LongName.String,
-					route.Desc.String,
-					models.RouteType(route.Type),
-					route.Url.String,
-					route.Color.String,
-					route.TextColor.String)
-
-				routeRefs[combinedRouteID] = routeModel
-			}
-		}
-
-		// Add agency to references if not already present
-		if _, exists := agencyRefs[row.AgencyID]; !exists {
-			agencyOfCurrentRow, err := api.GtfsManager.GtfsDB.Queries.GetAgency(ctx, row.AgencyID)
-			if err == nil {
-				agencyModel := models.NewAgencyReference(
-					agencyOfCurrentRow.ID,
-					agencyOfCurrentRow.Name,
-					agencyOfCurrentRow.Url,
-					agencyOfCurrentRow.Timezone,
-					agencyOfCurrentRow.Lang.String,
-					agencyOfCurrentRow.Phone.String,
-					agencyOfCurrentRow.Email.String,
-					agencyOfCurrentRow.FareUrl.String,
-					"",    // disclaimer
-					false, // privateService
-				)
-				agencyRefs[row.AgencyID] = agencyModel
-			}
 		}
 	}
 
