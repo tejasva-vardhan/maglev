@@ -380,10 +380,7 @@ func (api *RestAPI) buildScheduleForTrip(
 	shapeRows, _ := api.GtfsManager.GtfsDB.Queries.GetShapePointsByTripID(ctx, tripID)
 	var shapePoints []gtfs.ShapePoint
 	if len(shapeRows) > 1 {
-		shapePoints = make([]gtfs.ShapePoint, len(shapeRows))
-		for i, sp := range shapeRows {
-			shapePoints[i] = gtfs.ShapePoint{Latitude: sp.Lat, Longitude: sp.Lon}
-		}
+		shapePoints = shapeRowsToPoints(shapeRows)
 	}
 
 	trip, err := api.GtfsManager.GtfsDB.Queries.GetTrip(ctx, tripID)

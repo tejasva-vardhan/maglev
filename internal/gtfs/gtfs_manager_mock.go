@@ -1,6 +1,8 @@
 package gtfs
 
 import (
+	"time"
+
 	"github.com/OneBusAway/go-gtfs"
 )
 
@@ -29,13 +31,18 @@ func (m *Manager) MockAddRoute(id, agencyID, name string) {
 	})
 }
 func (m *Manager) MockAddVehicle(vehicleID, tripID, routeID string) {
+	m.realTimeMutex.Lock()
+	defer m.realTimeMutex.Unlock()
+
 	for _, v := range m.realTimeVehicles {
 		if v.ID.ID == vehicleID {
 			return
 		}
 	}
+	now := time.Now()
 	m.realTimeVehicles = append(m.realTimeVehicles, gtfs.Vehicle{
-		ID: &gtfs.VehicleID{ID: vehicleID},
+		ID:        &gtfs.VehicleID{ID: vehicleID},
+		Timestamp: &now,
 		Trip: &gtfs.Trip{
 			ID: gtfs.TripID{
 				ID:      tripID,
@@ -44,7 +51,51 @@ func (m *Manager) MockAddVehicle(vehicleID, tripID, routeID string) {
 		},
 	})
 
-	m.realTimeVehicleLookupByVehicle[vehicleID] = len(m.realTimeVehicles) - 1
+	idx := len(m.realTimeVehicles) - 1
+	m.realTimeVehicleLookupByVehicle[vehicleID] = idx
+	if tripID != "" {
+		m.realTimeVehicleLookupByTrip[tripID] = idx
+	}
+}
+
+type MockVehicleOptions struct {
+	Position            *gtfs.Position
+	CurrentStopSequence *uint32
+	StopID              *string
+	CurrentStatus       *gtfs.CurrentStatus
+}
+
+func (m *Manager) MockAddVehicleWithOptions(vehicleID, tripID, routeID string, opts MockVehicleOptions) {
+	m.realTimeMutex.Lock()
+	defer m.realTimeMutex.Unlock()
+
+	for _, v := range m.realTimeVehicles {
+		if v.ID.ID == vehicleID {
+			return
+		}
+	}
+	now := time.Now()
+	v := gtfs.Vehicle{
+		ID:        &gtfs.VehicleID{ID: vehicleID},
+		Timestamp: &now,
+		Trip: &gtfs.Trip{
+			ID: gtfs.TripID{
+				ID:      tripID,
+				RouteID: routeID,
+			},
+		},
+		Position:            opts.Position,
+		CurrentStopSequence: opts.CurrentStopSequence,
+		StopID:              opts.StopID,
+		CurrentStatus:       opts.CurrentStatus,
+	}
+	m.realTimeVehicles = append(m.realTimeVehicles, v)
+
+	idx := len(m.realTimeVehicles) - 1
+	m.realTimeVehicleLookupByVehicle[vehicleID] = idx
+	if tripID != "" {
+		m.realTimeVehicleLookupByTrip[tripID] = idx
+	}
 }
 
 func (m *Manager) MockAddTrip(tripID, agencyID, routeID string) {
@@ -57,4 +108,32 @@ func (m *Manager) MockAddTrip(tripID, agencyID, routeID string) {
 		ID:    tripID,
 		Route: &gtfs.Route{Id: routeID},
 	})
+}
+
+func (m *Manager) MockAddTripUpdate(tripID string, delay *time.Duration, stopTimeUpdates []gtfs.StopTimeUpdate) {
+	m.realTimeMutex.Lock()
+	defer m.realTimeMutex.Unlock()
+
+	trip := gtfs.Trip{
+		ID:              gtfs.TripID{ID: tripID},
+		Delay:           delay,
+		StopTimeUpdates: stopTimeUpdates,
+	}
+	m.realTimeTrips = append(m.realTimeTrips, trip)
+	if m.realTimeTripLookup == nil {
+		m.realTimeTripLookup = make(map[string]int)
+	}
+	m.realTimeTripLookup[tripID] = len(m.realTimeTrips) - 1
+}
+
+// MockResetRealTimeData clears all mock real-time vehicles and trip updates.
+func (m *Manager) MockResetRealTimeData() {
+	m.realTimeMutex.Lock()
+	defer m.realTimeMutex.Unlock()
+
+	m.realTimeVehicles = nil
+	m.realTimeVehicleLookupByVehicle = make(map[string]int)
+	m.realTimeVehicleLookupByTrip = make(map[string]int)
+	m.realTimeTrips = nil
+	m.realTimeTripLookup = make(map[string]int)
 }

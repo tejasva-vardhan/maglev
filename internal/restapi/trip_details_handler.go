@@ -2,6 +2,7 @@ package restapi
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -12,7 +13,9 @@ import (
 	"maglev.onebusaway.org/internal/utils"
 )
 
-type TripDetailsParams struct {
+// TripParams holds the common query parameters for trip-related endpoints
+// (trip-details, trip-for-vehicle, etc.).
+type TripParams struct {
 	ServiceDate     *time.Time
 	IncludeTrip     bool
 	IncludeSchedule bool
@@ -20,11 +23,13 @@ type TripDetailsParams struct {
 	Time            *time.Time
 }
 
-// parseTripIdDetailsParams parses and validates parameters.
-func (api *RestAPI) parseTripIdDetailsParams(r *http.Request) (TripDetailsParams, map[string][]string) {
-	params := TripDetailsParams{
+// parseTripParams parses and validates the common trip query params
+// includeScheduleDefault controls the default value of IncludeSchedule when the
+// parameter is not present in the request (true for trip-details, false for trip-for-vehicle).
+func (api *RestAPI) parseTripParams(r *http.Request, includeScheduleDefault bool) (TripParams, map[string][]string) {
+	params := TripParams{
 		IncludeTrip:     true,
-		IncludeSchedule: true,
+		IncludeSchedule: includeScheduleDefault,
 		IncludeStatus:   true,
 	}
 
@@ -92,7 +97,7 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 	defer api.GtfsManager.RUnlock()
 
 	// Capture parsing errors
-	params, fieldErrors := api.parseTripIdDetailsParams(r)
+	params, fieldErrors := api.parseTripParams(r, true)
 	if len(fieldErrors) > 0 {
 		api.validationErrorResponse(w, r, fieldErrors)
 		return
@@ -125,30 +130,37 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 		currentTime = api.Clock.Now().In(loc)
 	}
 
-	var serviceDate time.Time
-	if params.ServiceDate != nil {
-		serviceDate = *params.ServiceDate
-	} else {
-		// Use time.Date() to get local midnight, not Truncate() which uses UTC
-		y, m, d := currentTime.Date()
-		serviceDate = time.Date(y, m, d, 0, 0, 0, 0, loc)
-	}
-
-	serviceDateMillis := serviceDate.Unix() * 1000
+	serviceDate, serviceDateMillis := utils.ServiceDateMillis(params.ServiceDate, currentTime)
 
 	var schedule *models.Schedule
 	var status *models.TripStatusForTripDetails
 
 	if params.IncludeStatus {
-		status, _ = api.BuildTripStatus(ctx, agencyID, trip.ID, serviceDate, currentTime)
+		var statusErr error
+		status, statusErr = api.BuildTripStatus(ctx, agencyID, trip.ID, serviceDate, currentTime)
+		if statusErr != nil {
+			slog.Warn("BuildTripStatus failed",
+				slog.String("trip_id", trip.ID),
+				slog.String("error", statusErr.Error()))
+			status = nil
+		}
 	}
 
 	if params.IncludeSchedule {
 		schedule, err = api.BuildTripSchedule(ctx, agencyID, serviceDate, &trip, loc)
 		if err != nil {
-			api.serverErrorResponse(w, r, err)
-			return
+			slog.Warn("BuildTripSchedule failed",
+				slog.String("trip_id", trip.ID),
+				slog.String("error", err.Error()))
+			schedule = nil
 		}
+	}
+
+	var situationsIDs []string
+	if status != nil && len(status.SituationIDs) > 0 {
+		situationsIDs = status.SituationIDs
+	} else {
+		situationsIDs = api.GetSituationIDsForTrip(r.Context(), tripID)
 	}
 
 	tripDetails := &models.TripDetails{
@@ -156,10 +168,10 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 		ServiceDate:  serviceDateMillis,
 		Schedule:     schedule,
 		Frequency:    nil,
-		SituationIDs: api.GetSituationIDsForTrip(r.Context(), tripID),
+		SituationIDs: situationsIDs,
 	}
 
-	if status != nil && status.VehicleID != "" {
+	if status != nil {
 		tripDetails.Status = status
 	}
 
@@ -209,6 +221,16 @@ func (api *RestAPI) tripDetailsHandler(w http.ResponseWriter, r *http.Request) {
 		false,
 	)
 	references.Agencies = append(references.Agencies, agencyModel)
+
+	if len(situationsIDs) > 0 {
+		alerts := api.GtfsManager.GetAlertsForTrip(r.Context(), tripID)
+		if len(alerts) > 0 {
+			situations := api.BuildSituationReferences(alerts, agencyID)
+			for _, situation := range situations {
+				references.Situations = append(references.Situations, situation)
+			}
+		}
+	}
 
 	if params.IncludeSchedule && schedule != nil {
 		stops, err := api.buildStopReferences(ctx, calc, agencyID, schedule.StopTimes)

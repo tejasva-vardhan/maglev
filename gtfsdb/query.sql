@@ -629,16 +629,16 @@ ORDER BY
     s.shape_pt_sequence ASC;
 
 -- name: GetStopsWithShapeContextByIDs :many
-SELECT 
-    st.stop_id, 
-    t.shape_id, 
-    s.lat, 
-    s.lon, 
+SELECT
+    st.stop_id,
+    t.shape_id,
+    s.lat,
+    s.lon,
     st.shape_dist_traveled
 FROM stop_times st
 JOIN trips t ON st.trip_id = t.id
 JOIN stops s ON st.stop_id = s.id
-WHERE st.stop_id IN (sqlc.slice('stop_ids'));    
+WHERE st.stop_id IN (sqlc.slice('stop_ids'));
 
 -- name: GetTripsByBlockIDOrdered :many
 SELECT
@@ -984,7 +984,6 @@ WHERE t.block_id IN (sqlc.slice('block_ids'))
   AND t.service_id IN (sqlc.slice('service_ids'))
 GROUP BY t.id
 ORDER BY t.block_id, MIN(st.departure_time), t.id;
-
 -- Problem Report Queries
 
 -- name: CreateProblemReportTrip :exec

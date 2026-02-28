@@ -4,7 +4,19 @@ import (
 	"context"
 
 	"github.com/OneBusAway/go-gtfs"
+	"maglev.onebusaway.org/gtfsdb"
 )
+
+// shapeRowsToPoints converts database shape rows to gtfs.ShapePoint slice.
+// ShapeDistTraveled is intentionally dropped; cumulative distances are recomputed
+// from scratch via preCalculateCumulativeDistances to ensure consistency.
+func shapeRowsToPoints(rows []gtfsdb.Shape) []gtfs.ShapePoint {
+	pts := make([]gtfs.ShapePoint, len(rows))
+	for i, sp := range rows {
+		pts[i] = gtfs.ShapePoint{Latitude: sp.Lat, Longitude: sp.Lon}
+	}
+	return pts
+}
 
 // IMPORTANT: Caller must hold manager.RLock() before calling this method.
 func (api *RestAPI) getStopDistanceAlongShape(ctx context.Context, tripID, stopID string) float64 {
@@ -27,10 +39,7 @@ func (api *RestAPI) getStopDistanceAlongShape(ctx context.Context, tripID, stopI
 		return 0
 	}
 
-	shapePoints := make([]gtfs.ShapePoint, len(shapeRows))
-	for i, sp := range shapeRows {
-		shapePoints[i] = gtfs.ShapePoint{Latitude: sp.Lat, Longitude: sp.Lon}
-	}
+	shapePoints := shapeRowsToPoints(shapeRows)
 
 	return getDistanceAlongShape(stop.Lat, stop.Lon, shapePoints)
 }
@@ -46,10 +55,7 @@ func (api *RestAPI) getVehicleDistanceAlongShapeContextual(ctx context.Context, 
 		return 0
 	}
 
-	shapePoints := make([]gtfs.ShapePoint, len(shapeRows))
-	for i, sp := range shapeRows {
-		shapePoints[i] = gtfs.ShapePoint{Latitude: sp.Lat, Longitude: sp.Lon}
-	}
+	shapePoints := shapeRowsToPoints(shapeRows)
 
 	lat := float64(*vehicle.Position.Latitude)
 	lon := float64(*vehicle.Position.Longitude)

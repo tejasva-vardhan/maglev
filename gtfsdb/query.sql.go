@@ -3250,11 +3250,11 @@ func (q *Queries) GetStopsWithShapeContext(ctx context.Context, id string) ([]Ge
 }
 
 const getStopsWithShapeContextByIDs = `-- name: GetStopsWithShapeContextByIDs :many
-SELECT 
-    st.stop_id, 
-    t.shape_id, 
-    s.lat, 
-    s.lon, 
+SELECT
+    st.stop_id,
+    t.shape_id,
+    s.lat,
+    s.lon,
     st.shape_dist_traveled
 FROM stop_times st
 JOIN trips t ON st.trip_id = t.id

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"strconv"
 	"time"
 
 	"maglev.onebusaway.org/gtfsdb"
@@ -13,75 +12,6 @@ import (
 	"maglev.onebusaway.org/internal/models"
 	"maglev.onebusaway.org/internal/utils"
 )
-
-type TripForVehicleParams struct {
-	ServiceDate     *time.Time
-	IncludeTrip     bool
-	IncludeSchedule bool
-	IncludeStatus   bool
-	Time            *time.Time
-}
-
-// parseTripForVehicleParams parses and validates parameters.
-func (api *RestAPI) parseTripForVehicleParams(r *http.Request) (TripForVehicleParams, map[string][]string) {
-	params := TripForVehicleParams{
-		IncludeTrip:     true,
-		IncludeSchedule: false,
-		IncludeStatus:   true,
-	}
-
-	fieldErrors := make(map[string][]string)
-
-	// Validate serviceDate
-	if serviceDateStr := r.URL.Query().Get("serviceDate"); serviceDateStr != "" {
-		if serviceDateMs, err := strconv.ParseInt(serviceDateStr, 10, 64); err == nil {
-			serviceDate := time.Unix(serviceDateMs/1000, 0)
-			params.ServiceDate = &serviceDate
-		} else {
-			fieldErrors["serviceDate"] = []string{"must be a valid Unix timestamp in milliseconds"}
-		}
-	}
-
-	if includeTripStr := r.URL.Query().Get("includeTrip"); includeTripStr != "" {
-		if val, err := strconv.ParseBool(includeTripStr); err == nil {
-			params.IncludeTrip = val
-		} else {
-			fieldErrors["includeTrip"] = []string{"must be a boolean value (true/false)"}
-		}
-	}
-
-	if includeScheduleStr := r.URL.Query().Get("includeSchedule"); includeScheduleStr != "" {
-		if val, err := strconv.ParseBool(includeScheduleStr); err == nil {
-			params.IncludeSchedule = val
-		} else {
-			fieldErrors["includeSchedule"] = []string{"must be a boolean value (true/false)"}
-		}
-	}
-
-	if includeStatusStr := r.URL.Query().Get("includeStatus"); includeStatusStr != "" {
-		if val, err := strconv.ParseBool(includeStatusStr); err == nil {
-			params.IncludeStatus = val
-		} else {
-			fieldErrors["includeStatus"] = []string{"must be a boolean value (true/false)"}
-		}
-	}
-
-	// Validate time
-	if timeStr := r.URL.Query().Get("time"); timeStr != "" {
-		if timeMs, err := strconv.ParseInt(timeStr, 10, 64); err == nil {
-			timeParam := time.Unix(timeMs/1000, 0)
-			params.Time = &timeParam
-		} else {
-			fieldErrors["time"] = []string{"must be a valid Unix timestamp in milliseconds"}
-		}
-	}
-
-	if len(fieldErrors) > 0 {
-		return params, fieldErrors
-	}
-
-	return params, nil
-}
 
 func (api *RestAPI) tripForVehicleHandler(w http.ResponseWriter, r *http.Request) {
 	parsed, _ := utils.GetParsedIDFromContext(r.Context())
@@ -110,7 +40,7 @@ func (api *RestAPI) tripForVehicleHandler(w http.ResponseWriter, r *http.Request
 	ctx := r.Context()
 
 	// Capture parsing errors
-	params, fieldErrors := api.parseTripForVehicleParams(r)
+	params, fieldErrors := api.parseTripParams(r, false)
 	if len(fieldErrors) > 0 {
 		api.validationErrorResponse(w, r, fieldErrors)
 		return
@@ -133,15 +63,7 @@ func (api *RestAPI) tripForVehicleHandler(w http.ResponseWriter, r *http.Request
 		currentTime = api.Clock.Now().In(loc)
 	}
 
-	var serviceDate time.Time
-	if params.ServiceDate != nil {
-		serviceDate = *params.ServiceDate
-	} else {
-		// Use time.Date() to get local midnight, not Truncate() which uses UTC
-		y, m, d := currentTime.Date()
-		serviceDate = time.Date(y, m, d, 0, 0, 0, 0, loc)
-	}
-	serviceDateMillis := serviceDate.Unix() * 1000
+	serviceDate, serviceDateMillis := utils.ServiceDateMillis(params.ServiceDate, currentTime)
 
 	var status *models.TripStatusForTripDetails
 	if params.IncludeStatus {
@@ -152,7 +74,7 @@ func (api *RestAPI) tripForVehicleHandler(w http.ResponseWriter, r *http.Request
 				"tripID", tripID,
 				"agencyID", agencyID,
 				"error", statusErr)
-			// Proceeding with nil status, as it's an optional field
+			status = nil
 		}
 	}
 
@@ -176,7 +98,7 @@ func (api *RestAPI) tripForVehicleHandler(w http.ResponseWriter, r *http.Request
 	var schedule *models.Schedule
 	if params.IncludeSchedule {
 		var scheduleErr error
-		schedule, scheduleErr = api.BuildTripSchedule(ctx, agencyID, serviceDate, &trip, time.Local)
+		schedule, scheduleErr = api.BuildTripSchedule(ctx, agencyID, serviceDate, &trip, loc)
 		if scheduleErr != nil {
 			api.Logger.Warn("failed to build trip schedule",
 				"tripID", tripID,
@@ -185,19 +107,15 @@ func (api *RestAPI) tripForVehicleHandler(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	situationIDs := []string{}
-
-	if status != nil {
-		alerts := api.GtfsManager.GetAlertsForTrip(r.Context(), vehicle.Trip.ID.ID)
-		for _, alert := range alerts {
-			if alert.ID != "" {
-				situationIDs = append(situationIDs, alert.ID)
-			}
-		}
+	var situationIDs []string
+	if status != nil && len(status.SituationIDs) > 0 {
+		situationIDs = status.SituationIDs
+	} else {
+		situationIDs = api.GetSituationIDsForTrip(r.Context(), tripID)
 	}
 
 	entry := &models.TripDetails{
-		TripID:       tripID,
+		TripID:       utils.FormCombinedID(agencyID, tripID),
 		ServiceDate:  serviceDateMillis,
 		Frequency:    nil,
 		Status:       status,

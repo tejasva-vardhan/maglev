@@ -14,6 +14,42 @@ import (
 	"maglev.onebusaway.org/internal/models"
 )
 
+func CalculateServiceDate(currentTime time.Time) time.Time {
+	year, month, day := currentTime.Date()
+	return time.Date(year, month, day, 0, 0, 0, 0, currentTime.Location())
+}
+
+func ServiceDateMillis(explicitServiceDate *time.Time, currentTime time.Time) (time.Time, int64) {
+	var serviceDate time.Time
+	if explicitServiceDate != nil {
+		serviceDate = *explicitServiceDate
+	} else {
+		serviceDate = CalculateServiceDate(currentTime)
+	}
+	return serviceDate, serviceDate.Unix() * 1000
+}
+
+func CalculateSecondsSinceServiceDate(currentTime time.Time, serviceDate time.Time) int64 {
+	duration := currentTime.Sub(serviceDate)
+	return int64(duration.Seconds())
+}
+
+// Converts a GTFS stop-time value (stored as nanoseconds in db since midnight)
+// to seconds since midnight.
+func NanosToSeconds(nanos int64) int64 {
+	return nanos / 1e9
+}
+
+// EffectiveStopTimeSeconds returns the effective stop time in seconds since midnight,
+// using arrivalTimeNanos with a fallback to departureTimeNanos when arrival is zero.
+// Both inputs are nanoseconds since midnight (the GTFS database storage format).
+func EffectiveStopTimeSeconds(arrivalTimeNanos, departureTimeNanos int64) int64 {
+	if arrivalTimeNanos > 0 {
+		return arrivalTimeNanos / 1e9
+	}
+	return departureTimeNanos / 1e9
+}
+
 // ExtractCodeID extracts the `code_id` from a string in the format `{agency_id}_{code_id}`.
 func ExtractCodeID(combinedID string) (string, error) {
 	parts := strings.SplitN(combinedID, "_", 2)
