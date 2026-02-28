@@ -938,6 +938,8 @@ func configureSQLitePerformance(ctx context.Context, db *sql.DB) error {
 		{"PRAGMA cache_size=-64000", "Set cache size to 64MB"},
 		// Store temp tables and indices in memory for faster operations
 		{"PRAGMA temp_store=MEMORY", "Store temporary data in memory"},
+		// Enable Write-Ahead Logging to allow concurrent readers and a single writer
+		{"PRAGMA journal_mode=WAL", "Enable WAL mode"},
 	}
 
 	logger := slog.Default().With(slog.String("component", "sqlite_performance"))
