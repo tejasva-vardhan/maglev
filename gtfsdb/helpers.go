@@ -583,7 +583,7 @@ func (c *Client) bulkInsertStopTimes(ctx context.Context, stopTimes []CreateStop
 		slog.Int("count", len(stopTimes)))
 
 	// ===== PIPELINE: PARALLEL PREPARATION + SEQUENTIAL EXECUTION =====
-	batchSize := c.config.GetBulkInsertBatchSize()
+	batchSize := c.config.SafeBatchSize(10) // 10 fields per stop_time row
 	const baseQuery = `INSERT INTO stop_times (
 		trip_id, arrival_time, departure_time, stop_id, stop_sequence,
 		stop_headsign, pickup_type, drop_off_type, shape_dist_traveled, timepoint
@@ -753,7 +753,7 @@ func (c *Client) bulkInsertShapes(ctx context.Context, shapes []CreateShapeParam
 		slog.Int("count", len(shapes)))
 
 	// ===== PHASE 1: PARALLEL STATEMENT PREPARATION =====
-	batchSize := c.config.GetBulkInsertBatchSize()
+	batchSize := c.config.SafeBatchSize(5) // 5 fields per shape row
 	const baseQuery = `INSERT INTO shapes (
 		shape_id, lat, lon, shape_pt_sequence, shape_dist_traveled
 	) VALUES `

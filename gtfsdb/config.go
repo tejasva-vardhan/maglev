@@ -3,11 +3,13 @@ package gtfsdb
 import "maglev.onebusaway.org/internal/appconf"
 
 const (
-	// DefaultBulkInsertBatchSize is the default batch size for multi-row INSERTs.
-	// SQLite's default SQLITE_MAX_VARIABLE_NUMBER is 32766 (with SQLITE_ENABLE_COLUMN_METADATA).
-	// We use 3000 records with 10 fields per record = 30,000 variables per batch,
-	// which is well under the limit and provides good performance.
+	// DefaultBulkInsertBatchSize is the fallback batch size used when fieldsPerRow is
+	// unknown or <= 0.
 	DefaultBulkInsertBatchSize = 3000
+
+	// sqliteMaxVariables is the hard upper bound on bound parameters per SQLite
+	// statement (SQLITE_MAX_VARIABLE_NUMBER).
+	sqliteMaxVariables = 32766
 )
 
 // Config holds configuration options for the Client
@@ -18,10 +20,9 @@ type Config struct {
 	verbose bool                // Enable verbose logging
 
 	// Performance tuning
-	// BulkInsertBatchSize controls how many records are inserted per multi-row INSERT statement.
-	// Default is 1000. Larger values can improve performance but may hit SQLite's
-	// SQLITE_MAX_VARIABLE_NUMBER limit (default 999).
-	// Set to 0 to use the default value.
+	// BulkInsertBatchSize is reserved for future use. Batch sizes are now computed
+	// automatically via SafeBatchSize based on SQLITE_MAX_VARIABLE_NUMBER (32766)
+	// and the number of fields bound per row.
 	BulkInsertBatchSize int
 }
 
@@ -34,10 +35,14 @@ func NewConfig(dbPath string, env appconf.Environment, verbose bool) Config {
 	}
 }
 
-// GetBulkInsertBatchSize returns the configured batch size, or the default if not set
-func (c Config) GetBulkInsertBatchSize() int {
-	if c.BulkInsertBatchSize <= 0 {
+// SafeBatchSize returns the maximum safe number of rows per multi-row INSERT given
+// the number of parameters bound per row. SQLite enforces a hard upper bound of
+// SQLITE_MAX_VARIABLE_NUMBER (32766) bound parameters per statement, so the safe
+// maximum is 32766 / fieldsPerRow.
+// If fieldsPerRow is <= 0, DefaultBulkInsertBatchSize is returned as a fallback.
+func (c Config) SafeBatchSize(fieldsPerRow int) int {
+	if fieldsPerRow <= 0 {
 		return DefaultBulkInsertBatchSize
 	}
-	return c.BulkInsertBatchSize
+	return sqliteMaxVariables / fieldsPerRow
 }
