@@ -17,7 +17,7 @@ type TripStopTimes struct {
 }
 
 type StopTripGrouping struct {
-	DirectionID        int64           `json:"directionId"`
+	DirectionID        string          `json:"directionId"`
 	TripHeadsigns      []string        `json:"tripHeadsigns"`
 	StopIDs            []string        `json:"stopIds"`
 	TripIDs            []string        `json:"tripIds"`
@@ -26,7 +26,7 @@ type StopTripGrouping struct {
 
 type ScheduleForRouteEntry struct {
 	RouteID           string             `json:"routeId"`
-	ScheduleDate      string             `json:"scheduleDate"`
+	ScheduleDate      int64              `json:"scheduleDate"`
 	ServiceIDs        []string           `json:"serviceIds"`
 	StopTripGroupings []StopTripGrouping `json:"stopTripGroupings"`
 }

@@ -33,9 +33,18 @@ func (api *RestAPI) scheduleForRouteHandler(w http.ResponseWriter, r *http.Reque
 		api.sendNotFound(w, r)
 		return
 	}
+
+	agency, err := api.GtfsManager.GtfsDB.Queries.GetAgency(ctx, agencyID)
+	if err != nil {
+		api.sendNotFound(w, r)
+		return
+	}
+	loc := utils.LoadLocationWithUTCFallBack(agency.Timezone, agency.ID)
+
 	var targetDate string
+	var scheduleDate int64
 	if dateParam != "" {
-		parsedDate, err := time.Parse("2006-01-02", dateParam)
+		parsedDate, err := time.ParseInLocation("2006-01-02", dateParam, loc)
 		if err != nil {
 			fieldErrors := map[string][]string{
 				"date": {"Invalid date format. Use YYYY-MM-DD"},
@@ -44,9 +53,13 @@ func (api *RestAPI) scheduleForRouteHandler(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		targetDate = parsedDate.Format("20060102")
+		scheduleDate = parsedDate.UnixMilli()
 	} else {
-		now := api.Clock.Now()
-		targetDate = now.Format("20060102")
+		now := api.Clock.Now().In(loc)
+		y, m, d := now.Date()
+		startOfDay := time.Date(y, m, d, 0, 0, 0, 0, loc)
+		targetDate = startOfDay.Format("20060102")
+		scheduleDate = startOfDay.UnixMilli()
 	}
 
 	serviceIDs, err := api.GtfsManager.GtfsDB.Queries.GetActiveServiceIDsForDate(ctx, targetDate)
@@ -60,7 +73,7 @@ func (api *RestAPI) scheduleForRouteHandler(w http.ResponseWriter, r *http.Reque
 	if len(serviceIDs) == 0 {
 		entry := models.ScheduleForRouteEntry{
 			RouteID:           utils.FormCombinedID(agencyID, routeID),
-			ScheduleDate:      targetDate,
+			ScheduleDate:      scheduleDate,
 			ServiceIDs:        []string{},
 			StopTripGroupings: []models.StopTripGrouping{},
 		}
@@ -87,7 +100,7 @@ func (api *RestAPI) scheduleForRouteHandler(w http.ResponseWriter, r *http.Reque
 	if len(trips) == 0 {
 		entry := models.ScheduleForRouteEntry{
 			RouteID:           utils.FormCombinedID(agencyID, routeID),
-			ScheduleDate:      targetDate,
+			ScheduleDate:      scheduleDate,
 			ServiceIDs:        combinedServiceIDs,
 			StopTripGroupings: []models.StopTripGrouping{},
 		}
@@ -111,30 +124,35 @@ func (api *RestAPI) scheduleForRouteHandler(w http.ResponseWriter, r *http.Reque
 
 	routeRefs[utils.FormCombinedID(agencyID, route.ID)] = routeModel
 
-	type tripGroupKey struct {
-		directionID  int64
-		tripHeadsign string
-	}
-	groupings := make(map[tripGroupKey][]gtfsdb.Trip)
+	groupings := make(map[string][]gtfsdb.Trip)
 	for _, trip := range trips {
 		tripIDsSet[trip.ID] = true
-		key := tripGroupKey{directionID: trip.DirectionID.Int64 - 1, tripHeadsign: trip.TripHeadsign.String}
-		groupings[key] = append(groupings[key], trip)
+		// The go-gtfs library encodes direction_id as a 3-value enum:
+		//   0 = Unspecified, 1 = True (GTFS direction_id=1), 2 = False (GTFS direction_id=0)
+		dirID := "0"
+		if trip.DirectionID.Int64 == 1 {
+			dirID = "1"
+		}
+		groupings[dirID] = append(groupings[dirID], trip)
 	}
 	var stopTripGroupings []models.StopTripGrouping
 	globalStopIDSet := make(map[string]struct{})
 	var stopTimesRefs []interface{}
-	for key, groupedTrips := range groupings {
+	for dirID, groupedTrips := range groupings {
 		if ctx.Err() != nil {
 			return
 		}
 
 		stopIDSet := make(map[string]struct{})
+		headsignSet := make(map[string]struct{})
 		tripIDs := make([]string, 0, len(groupedTrips))
 		tripsWithStopTimes := make([]models.TripStopTimes, 0, len(groupedTrips))
 		for _, trip := range groupedTrips {
 			combinedTripID := utils.FormCombinedID(agencyID, trip.ID)
 			tripIDs = append(tripIDs, combinedTripID)
+			if trip.TripHeadsign.String != "" {
+				headsignSet[trip.TripHeadsign.String] = struct{}{}
+			}
 			stopIDs, err := api.GtfsManager.GtfsDB.Queries.GetOrderedStopIDsForTrip(ctx, trip.ID)
 			if err != nil {
 				continue
@@ -172,9 +190,13 @@ func (api *RestAPI) scheduleForRouteHandler(w http.ResponseWriter, r *http.Reque
 		for stopID := range stopIDSet {
 			stopIDsOrdered = append(stopIDsOrdered, utils.FormCombinedID(agencyID, stopID))
 		}
+		headsigns := make([]string, 0, len(headsignSet))
+		for h := range headsignSet {
+			headsigns = append(headsigns, h)
+		}
 		stopTripGroupings = append(stopTripGroupings, models.StopTripGrouping{
-			DirectionID:        key.directionID,
-			TripHeadsigns:      []string{key.tripHeadsign},
+			DirectionID:        dirID,
+			TripHeadsigns:      headsigns,
 			StopIDs:            stopIDsOrdered,
 			TripIDs:            tripIDs,
 			TripsWithStopTimes: tripsWithStopTimes,
@@ -182,22 +204,19 @@ func (api *RestAPI) scheduleForRouteHandler(w http.ResponseWriter, r *http.Reque
 	}
 
 	references := models.NewEmptyReferences()
-	agency, err := api.GtfsManager.GtfsDB.Queries.GetAgency(ctx, agencyID)
-	if err == nil {
-		agencyModel := models.NewAgencyReference(
-			agency.ID,
-			agency.Name,
-			agency.Url,
-			agency.Timezone,
-			agency.Lang.String,
-			agency.Phone.String,
-			agency.Email.String,
-			agency.FareUrl.String,
-			"",
-			false,
-		)
-		references.Agencies = append(references.Agencies, agencyModel)
-	}
+	agencyModel := models.NewAgencyReference(
+		agency.ID,
+		agency.Name,
+		agency.Url,
+		agency.Timezone,
+		agency.Lang.String,
+		agency.Phone.String,
+		agency.Email.String,
+		agency.FareUrl.String,
+		"",
+		false,
+	)
+	references.Agencies = append(references.Agencies, agencyModel)
 
 	for _, r := range routeRefs {
 		references.Routes = append(references.Routes, r)
@@ -261,7 +280,7 @@ func (api *RestAPI) scheduleForRouteHandler(w http.ResponseWriter, r *http.Reque
 
 	entry := models.ScheduleForRouteEntry{
 		RouteID:           utils.FormCombinedID(agencyID, routeID),
-		ScheduleDate:      targetDate,
+		ScheduleDate:      scheduleDate,
 		ServiceIDs:        combinedServiceIDs,
 		StopTripGroupings: stopTripGroupings,
 	}
