@@ -138,8 +138,7 @@ func TestStatisticalFunctions(t *testing.T) {
 		values := []float64{1, 2, 3, 4, 5}
 		m := mean(values)
 		v := variance(values, m)
-		assert.InDelta(t, 2.5, v, 0.001) // Sample variance of 1,2,3,4,5 is 2.5
-
+		assert.InDelta(t, 2.5, v, 0.001)
 		assert.Equal(t, 0.0, variance([]float64{5}, 5.0))
 	})
 
@@ -157,15 +156,15 @@ func TestStatisticalFunctions(t *testing.T) {
 	})
 }
 
-func TestVarianceThreshold(t *testing.T) {
+func TestStandardDeviationThreshold(t *testing.T) {
 	calc := NewAdvancedDirectionCalculator(nil)
 
 	// Test default threshold
-	assert.Equal(t, defaultVarianceThreshold, calc.varianceThreshold)
+	assert.Equal(t, defaultStandardDeviationThreshold, calc.standardDeviationThreshold)
 
 	// Test setting custom threshold
-	calc.SetVarianceThreshold(1.0)
-	assert.Equal(t, 1.0, calc.varianceThreshold)
+	calc.SetStandardDeviationThreshold(1.0)
+	assert.Equal(t, 1.0, calc.standardDeviationThreshold)
 }
 
 func TestCalculateStopDirection_WithShapeData(t *testing.T) {
@@ -218,7 +217,7 @@ func TestComputeFromShapes_SingleOrientation(t *testing.T) {
 	assert.True(t, direction == "" || len(direction) <= 2)
 }
 
-func TestComputeFromShapes_VarianceThreshold(t *testing.T) {
+func TestComputeFromShapes_StandardDeviationThreshold(t *testing.T) {
 	gtfsConfig := Config{
 		GtfsURL:      models.GetFixturePath(t, "raba.zip"),
 		GTFSDataPath: ":memory:",
@@ -229,8 +228,8 @@ func TestComputeFromShapes_VarianceThreshold(t *testing.T) {
 
 	calc := NewAdvancedDirectionCalculator(manager.GtfsDB.Queries)
 
-	// Set a very low variance threshold to trigger variance check
-	calc.SetVarianceThreshold(0.01)
+	// Set a very low standard deviation threshold to trigger variance check
+	calc.SetStandardDeviationThreshold(0.01)
 
 	// Test with a stop that might have multiple trips
 	direction := calc.computeFromShapes(context.Background(), "7000")
