@@ -38,6 +38,13 @@ func TestSQLitePerformancePragmasApplied(t *testing.T) {
 	require.NoError(t, err)
 	// 2 = MEMORY
 	assert.Equal(t, 2, tempStore, "Temp store should be set to MEMORY (2)")
+
+	// Verify journal_mode PRAGMA
+	var journalMode string
+	err = client.DB.QueryRowContext(ctx, "PRAGMA journal_mode").Scan(&journalMode)
+	require.NoError(t, err)
+	// In-memory databases don't support WAL mode, so SQLite automatically uses 'memory'
+	assert.Equal(t, "memory", journalMode, "Journal mode should be memory for :memory: databases")
 }
 
 func TestMemoryDatabaseConnectionPool(t *testing.T) {
@@ -77,6 +84,13 @@ func TestFileDatabaseConnectionPool(t *testing.T) {
 	stats := client.DB.Stats()
 	assert.Equal(t, 25, stats.MaxOpenConnections,
 		"File databases should use MaxOpenConns=25")
+
+	// Verify WAL mode is enabled for file databases
+	var journalMode string
+	err = client.DB.QueryRowContext(context.Background(), "PRAGMA journal_mode").Scan(&journalMode)
+	require.NoError(t, err)
+	// Should be set to 'wal' based on our performance pragmas
+	assert.Equal(t, "wal", journalMode, "File databases should have WAL journal mode enabled")
 }
 
 func TestConnectionPoolBehaviorWithFileDatabase(t *testing.T) {
