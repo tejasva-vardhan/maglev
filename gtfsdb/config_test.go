@@ -89,3 +89,49 @@ func TestNewConfigAllEnvironments(t *testing.T) {
 		})
 	}
 }
+
+func TestSafeBatchSize(t *testing.T) {
+	config := Config{}
+
+	tests := []struct {
+		name         string
+		fieldsPerRow int
+		expected     int
+	}{
+		{
+			name:         "zero fields falls back to default",
+			fieldsPerRow: 0,
+			expected:     DefaultBulkInsertBatchSize,
+		},
+		{
+			name:         "negative fields falls back to default",
+			fieldsPerRow: -1,
+			expected:     DefaultBulkInsertBatchSize,
+		},
+		{
+			name:         "10 fields per row (stop_times)",
+			fieldsPerRow: 10,
+			expected:     3276, // 32766 / 10
+		},
+		{
+			name:         "5 fields per row (shapes)",
+			fieldsPerRow: 5,
+			expected:     6553, // 32766 / 5
+		},
+		{
+			name:         "1 field per row",
+			fieldsPerRow: 1,
+			expected:     32766,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := config.SafeBatchSize(tt.fieldsPerRow)
+			assert.Equal(t, tt.expected, got)
+			// Ensure result never exceeds SQLite's hard limit
+			assert.LessOrEqual(t, got*tt.fieldsPerRow, sqliteMaxVariables,
+				"batch_size * fields_per_row must not exceed SQLITE_MAX_VARIABLE_NUMBER")
+		})
+	}
+}
