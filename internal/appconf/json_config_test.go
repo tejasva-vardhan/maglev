@@ -89,7 +89,7 @@ func TestValidate_InvalidPort(t *testing.T) {
 				ApiKeys:   []string{"test"},
 				RateLimit: 100,
 			}
-			err := config.validate()
+			err := config.Validate()
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), "port must be between")
 		})
@@ -103,7 +103,7 @@ func TestValidate_InvalidEnv(t *testing.T) {
 		ApiKeys:   []string{"test"},
 		RateLimit: 100,
 	}
-	err := config.validate()
+	err := config.Validate()
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "env must be one of")
 }
@@ -115,7 +115,7 @@ func TestValidate_InvalidRateLimit(t *testing.T) {
 		ApiKeys:   []string{"test"},
 		RateLimit: 0,
 	}
-	err := config.validate()
+	err := config.Validate()
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "rate-limit must be at least 1")
 }
@@ -127,7 +127,7 @@ func TestValidate_EmptyApiKeys(t *testing.T) {
 		ApiKeys:   []string{},
 		RateLimit: 100,
 	}
-	err := config.validate()
+	err := config.Validate()
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "api-keys cannot be empty")
 }
@@ -139,7 +139,7 @@ func TestValidate_EmptyApiKeyString(t *testing.T) {
 		ApiKeys:   []string{"key1", "", "key2"},
 		RateLimit: 100,
 	}
-	err := config.validate()
+	err := config.Validate()
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "api-keys cannot contain empty strings")
 }
@@ -151,7 +151,7 @@ func TestValidate_DuplicateApiKeys(t *testing.T) {
 		ApiKeys:   []string{"key1", "key2", "key1"},
 		RateLimit: 100,
 	}
-	err := config.validate()
+	err := config.Validate()
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "duplicate API key found")
 }
@@ -330,7 +330,7 @@ func TestValidate_PathTraversalDataPath(t *testing.T) {
 				RateLimit: 100,
 				DataPath:  tt.dataPath,
 			}
-			err := config.validate()
+			err := config.Validate()
 			if tt.shouldErr {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), "data-path")
@@ -363,7 +363,7 @@ func TestValidate_FileURLNotAllowed(t *testing.T) {
 					URL: tt.gtfsURL,
 				},
 			}
-			err := config.validate()
+			err := config.Validate()
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), "file:// URLs are not allowed")
 		})
@@ -398,7 +398,7 @@ func TestValidate_PathTraversalGtfsURL(t *testing.T) {
 					URL: tt.gtfsURL,
 				},
 			}
-			err := config.validate()
+			err := config.Validate()
 			if tt.shouldErr {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), "gtfs-static-feed")
@@ -432,7 +432,7 @@ func TestValidate_ValidAbsolutePaths(t *testing.T) {
 				},
 				DataPath: "./gtfs.db",
 			}
-			err := config.validate()
+			err := config.Validate()
 			if tt.valid {
 				assert.NoError(t, err)
 			} else {
@@ -469,7 +469,7 @@ func TestValidate_PartialAuthHeaders(t *testing.T) {
 				},
 				DataPath: "./gtfs.db",
 			}
-			err := config.validate()
+			err := config.Validate()
 			if tt.shouldError {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), "both auth-header-name and auth-header-value must be provided together")

@@ -77,7 +77,7 @@ func (j *JSONConfig) setDefaults() {
 }
 
 // validate checks that the configuration is valid
-func (j *JSONConfig) validate() error {
+func (j *JSONConfig) Validate() error {
 	if j.Port < 1 || j.Port > 65535 {
 		return fmt.Errorf("port must be between 1 and 65535, got %d", j.Port)
 	}
@@ -358,7 +358,7 @@ func LoadFromFile(path string) (*JSONConfig, error) {
 	}
 
 	// Validate
-	if err := config.validate(); err != nil {
+	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
